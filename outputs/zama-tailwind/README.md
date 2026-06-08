@@ -50,15 +50,23 @@ dados de uma versao para outra, use os botoes `Exportar dados` e `Importar dados
 Para acessar os mesmos dados no computador, celular e qualquer navegador, o
 projeto precisa sair do `localStorage` e usar um banco de dados online.
 
-O caminho recomendado para este projeto e:
+Este projeto ja esta preparado para usar Supabase com login.
 
-1. Criar um projeto no Supabase.
-2. Criar login para proteger o sistema.
-3. Criar uma tabela para guardar o estado do sistema.
-4. Trocar `loadState()` e `persist()` em `assets/js/core.js` para ler/salvar no Supabase.
-5. Colocar as chaves publicas do Supabase nas Environment Variables da Vercel.
+Passos no Supabase:
 
-Enquanto isso nao for feito, cada navegador tera seus proprios dados locais.
+1. Abra o projeto Supabase.
+2. Va em `SQL Editor`.
+3. Execute o arquivo `supabase-setup.sql`, que fica na raiz do projeto.
+4. Va em `Authentication > Users`.
+5. Crie apenas o seu usuario de acesso.
+6. Em `Authentication`, desative cadastro publico se estiver habilitado.
+
+Depois disso, ao abrir o sistema, faca login com seu e-mail e senha. Os dados
+passam a ser salvos na tabela `app_state` e ficam disponiveis em qualquer
+navegador ou celular.
+
+Importante: a chave `sb_secret_...` nunca deve ir no codigo. Se ela foi exposta,
+gere uma nova no Supabase. O sistema usa somente a chave anon/public.
 
 ## Logica principal
 

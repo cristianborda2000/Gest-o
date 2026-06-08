@@ -5,6 +5,12 @@
 */
 
     const storageKey = "admin-simples-v1";
+    const cloudStateTable = "app_state";
+    const supabaseUrl = "https://rtiwoctipvlsejxcptks.supabase.co";
+    const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0aXdvY3RpcHZsc2VqeGNwdGtzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4ODg1MjEsImV4cCI6MjA5NjQ2NDUyMX0.AtxF8jqXz895Hn3wAyootMtR3UBc5HwkBATmQvTts-k";
+    const supabaseClient = window.supabase
+      ? window.supabase.createClient(supabaseUrl, supabaseAnonKey)
+      : null;
     const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
     // Cada chave em modules representa uma aba do menu lateral.

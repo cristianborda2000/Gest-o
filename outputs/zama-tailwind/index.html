@@ -8,8 +8,29 @@
 </head>
 <body>
 
+  <!-- Tela de login: so aparece quando nao existe sessao ativa no Supabase. -->
+  <section class="auth-screen" id="authScreen" hidden>
+    <form class="auth-card" id="loginForm">
+      <img class="auth-logo" src="zama-logo.png" alt="ZAMA">
+      <div>
+        <h1>ZAMA</h1>
+        <p>Acesse seu painel administrativo.</p>
+      </div>
+      <label>
+        E-mail
+        <input id="loginEmail" type="email" autocomplete="email" required>
+      </label>
+      <label>
+        Senha
+        <input id="loginPassword" type="password" autocomplete="current-password" required>
+      </label>
+      <button class="button primary" type="submit">Entrar</button>
+      <p class="auth-error" id="authError" aria-live="polite"></p>
+    </form>
+  </section>
+
   <!-- Estrutura principal do sistema: menu lateral + area de trabalho. -->
-  <div class="app">
+  <div class="app" hidden>
     <aside class="sidebar">
       <!-- Marca e navegacao fixa entre os modulos do sistema. -->
       <div class="brand">
@@ -37,9 +58,11 @@
           <p id="moduleSubtitle">Visão geral de projetos, clientes, equipe e dinheiro em caixa.</p>
         </div>
         <div class="actions">
+          <span class="user-pill" id="userEmail"></span>
           <button class="button" type="button" id="importBtn">Importar dados</button>
           <input id="importInput" type="file" accept="application/json,.json" hidden>
           <button class="button" type="button" id="exportBtn">Exportar dados</button>
+          <button class="button" type="button" id="logoutBtn">Sair</button>
           <button class="button danger" type="button" id="resetBtn">Limpar tudo</button>
         </div>
       </header>
@@ -83,6 +106,7 @@
       </section>
     </main>
   </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/config.js"></script>
   <script src="assets/js/core.js"></script>
   <script src="assets/js/forms.js"></script>

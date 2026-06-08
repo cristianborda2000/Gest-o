@@ -1,47 +1,101 @@
 /*
   core.js
-  Cuida do estado geral: carregar/salvar dados no localStorage,
+  Cuida do estado geral: carregar/salvar dados no Supabase ou localStorage,
   trocar de modulo, renderizar a tela atual e atualizar os indicadores do topo.
 */
 
-    function loadState() {
+    function prepareState(savedState) {
+      Object.keys(modules).forEach((key) => {
+        if (!savedState[key]) savedState[key] = [];
+      });
+      normalizeFinanceRows(savedState);
+      normalizeFixedExpenseRows(savedState);
+      normalizeAgendaRows(savedState);
+      normalizeMonthlyPlans(savedState);
+      savedState.projetos.forEach((project) => syncProjectFinance(project, savedState));
+      savedState.clientes.forEach((client) => syncClientMonthly(client, savedState));
+      savedState.mensalidades.forEach((monthly) => syncMonthlyFinance(monthly, savedState));
+      return savedState;
+    }
+
+    function createInitialState() {
+      const initialState = Object.fromEntries(Object.entries(modules).map(([key, module]) => [
+        key,
+        (module.rows || []).map((row) => ({ id: createId(), ...row }))
+      ]));
+
+      return prepareState(initialState);
+    }
+
+    async function getCurrentUser() {
+      if (!supabaseClient) return null;
+      const { data } = await supabaseClient.auth.getSession();
+      return data.session?.user || null;
+    }
+
+    async function loadCloudState() {
+      const user = await getCurrentUser();
+      if (!supabaseClient || !user) return null;
+
+      const { data, error } = await supabaseClient
+        .from(cloudStateTable)
+        .select("data")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.warn("Nao foi possivel carregar dados do Supabase.", error);
+        return null;
+      }
+
+      return data?.data ? prepareState(data.data) : null;
+    }
+
+    async function saveCloudState() {
+      const user = await getCurrentUser();
+      if (!supabaseClient || !user || !state) return;
+
+      const { error } = await supabaseClient
+        .from(cloudStateTable)
+        .upsert({
+          user_id: user.id,
+          data: state,
+          updated_at: new Date().toISOString()
+        }, { onConflict: "user_id" });
+
+      if (error) {
+        console.warn("Nao foi possivel salvar dados no Supabase.", error);
+      }
+    }
+
+    async function loadState() {
+      const cloudState = await loadCloudState();
+      if (cloudState) {
+        localStorage.setItem(storageKey, JSON.stringify(cloudState));
+        return cloudState;
+      }
+
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         try {
-          const savedState = JSON.parse(saved);
-          Object.keys(modules).forEach((key) => {
-            if (!savedState[key]) savedState[key] = [];
-          });
-          normalizeFinanceRows(savedState);
-          normalizeFixedExpenseRows(savedState);
-          normalizeAgendaRows(savedState);
-          normalizeMonthlyPlans(savedState);
-          savedState.projetos.forEach((project) => syncProjectFinance(project, savedState));
-          savedState.clientes.forEach((client) => syncClientMonthly(client, savedState));
-          savedState.mensalidades.forEach((monthly) => syncMonthlyFinance(monthly, savedState));
+          const savedState = prepareState(JSON.parse(saved));
+          state = savedState;
+          await saveCloudState();
           return savedState;
         } catch (error) {
           localStorage.removeItem(storageKey);
         }
       }
 
-      const initialState = Object.fromEntries(Object.entries(modules).map(([key, module]) => [
-        key,
-        (module.rows || []).map((row) => ({ id: createId(), ...row }))
-      ]));
-
-      normalizeFinanceRows(initialState);
-      normalizeFixedExpenseRows(initialState);
-      normalizeAgendaRows(initialState);
-      normalizeMonthlyPlans(initialState);
-      initialState.projetos.forEach((project) => syncProjectFinance(project, initialState));
-      initialState.clientes.forEach((client) => syncClientMonthly(client, initialState));
-      initialState.mensalidades.forEach((monthly) => syncMonthlyFinance(monthly, initialState));
+      const initialState = createInitialState();
+      state = initialState;
+      await saveCloudState();
       return initialState;
     }
 
-    function persist() {
+    async function persist() {
       localStorage.setItem(storageKey, JSON.stringify(state));
+      await saveCloudState();
     }
 
     // Troca de aba no menu lateral e permite abrir sub-abas como financeiro/fixos.

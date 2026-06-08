@@ -4,13 +4,19 @@
   Captura elementos da tela, liga eventos dos botoes e chama render() pela primeira vez.
 */
 
-    let state = loadState();
+    let state = null;
     let activeModule = "dashboard";
     let financeView = "movimentacoes";
     let agendaView = "lista";
     let calendarMonth = todayIso().slice(0, 7);
     let editingId = null;
 
+    const appShell = document.querySelector(".app");
+    const authScreen = document.getElementById("authScreen");
+    const loginForm = document.getElementById("loginForm");
+    const loginEmail = document.getElementById("loginEmail");
+    const loginPassword = document.getElementById("loginPassword");
+    const authError = document.getElementById("authError");
     const navButtons = document.querySelectorAll("[data-module]");
     const moduleTitle = document.getElementById("moduleTitle");
     const moduleSubtitle = document.getElementById("moduleSubtitle");
@@ -23,6 +29,55 @@
     const formPanel = document.getElementById("formPanel");
     const importBtn = document.getElementById("importBtn");
     const importInput = document.getElementById("importInput");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const userEmail = document.getElementById("userEmail");
+
+    function showAuth(message = "") {
+      authError.textContent = message;
+      authScreen.hidden = false;
+      appShell.hidden = true;
+      loginPassword.value = "";
+    }
+
+    async function showApp(session) {
+      authScreen.hidden = true;
+      appShell.hidden = false;
+      userEmail.textContent = session?.user?.email || "";
+      state = await loadState();
+      editingId = null;
+      render();
+    }
+
+    async function initializeAuth() {
+      if (!supabaseClient) {
+        showAuth("Nao foi possivel carregar o Supabase. Verifique sua conexao.");
+        return;
+      }
+
+      const { data } = await supabaseClient.auth.getSession();
+      if (data.session) {
+        await showApp(data.session);
+      } else {
+        showAuth();
+      }
+    }
+
+    loginForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      authError.textContent = "";
+
+      const { data, error } = await supabaseClient.auth.signInWithPassword({
+        email: loginEmail.value.trim(),
+        password: loginPassword.value
+      });
+
+      if (error) {
+        showAuth("E-mail ou senha invalidos.");
+        return;
+      }
+
+      await showApp(data.session);
+    });
 
     navButtons.forEach((button) => {
       button.addEventListener("click", () => {
@@ -30,10 +85,11 @@
       });
     });
 
-    document.getElementById("resetBtn").addEventListener("click", () => {
+    document.getElementById("resetBtn").addEventListener("click", async () => {
       if (confirm("Deseja apagar todos os dados e voltar ao exemplo inicial?")) {
         localStorage.removeItem(storageKey);
-        state = loadState();
+        state = createInitialState();
+        await persist();
         editingId = null;
         render();
       }
@@ -70,7 +126,7 @@
         importedState.clientes.forEach((client) => syncClientMonthly(client, importedState));
         importedState.mensalidades.forEach((monthly) => syncMonthlyFinance(monthly, importedState));
         state = importedState;
-        persist();
+        await persist();
         editingId = null;
         render();
         alert("Dados importados com sucesso.");
@@ -81,7 +137,13 @@
       }
     });
 
+    logoutBtn.addEventListener("click", async () => {
+      await supabaseClient.auth.signOut();
+      state = null;
+      showAuth();
+    });
+
     searchInput.addEventListener("input", renderTable);
     recordForm.addEventListener("submit", saveRecord);
 
-    render();
+    initializeAuth();

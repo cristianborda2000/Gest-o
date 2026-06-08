@@ -29,6 +29,10 @@
       box-sizing: border-box;
     }
 
+    [hidden] {
+      display: none !important;
+    }
+
     body {
       margin: 0;
       min-height: 100vh;
@@ -45,7 +49,66 @@
       font: inherit;
     }
 
-/* Layout geral: menu lateral fixo e conteudo principal. */
+    .auth-screen {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: var(--bg);
+    }
+
+    .auth-card {
+      width: min(420px, 100%);
+      display: grid;
+      gap: 16px;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: var(--shadow);
+    }
+
+    .auth-logo {
+      width: 180px;
+      height: auto;
+    }
+
+    .auth-card h1 {
+      margin: 0 0 4px;
+      font-size: 26px;
+      line-height: 1.15;
+      color: var(--ink);
+    }
+
+    .auth-card p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .auth-card label {
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .auth-card input {
+      width: 100%;
+      min-height: 42px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      color: var(--text);
+      background: #fff;
+    }
+
+    .auth-error {
+      min-height: 20px;
+      color: var(--red) !important;
+      font-size: 13px;
+    }
+
+    /* Layout geral: menu lateral fixo e conteudo principal. */
     .app {
       display: grid;
       grid-template-columns: 260px 1fr;
@@ -159,6 +222,22 @@
       gap: 10px;
       flex-wrap: wrap;
       justify-content: flex-end;
+    }
+
+    .user-pill {
+      min-height: 40px;
+      display: inline-flex;
+      align-items: center;
+      max-width: 220px;
+      padding: 8px 11px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff7ed;
+      color: var(--muted);
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .button {
@@ -701,6 +780,12 @@
         display: grid;
         grid-template-columns: 1fr;
         justify-content: stretch;
+      }
+
+      .user-pill {
+        width: 100%;
+        max-width: none;
+        justify-content: center;
       }
 
       .button {
