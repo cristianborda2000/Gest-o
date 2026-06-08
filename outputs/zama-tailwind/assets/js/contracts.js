@@ -67,152 +67,158 @@
           <meta charset="utf-8">
           <title>Contrato - ${c(client.nome)}</title>
           <style>
-            @page { size: A4; margin: 16mm; }
+            @page { size: A4; margin: 3cm 2cm 2cm 3cm; }
             * { box-sizing: border-box; }
-            body { margin: 0; color: #111827; font-family: Arial, Helvetica, sans-serif; line-height: 1.48; font-size: 12.5px; }
-            .document { max-width: 780px; margin: 0 auto; }
-            .header { display: grid; grid-template-columns: 220px 1fr; align-items: center; gap: 24px; border-bottom: 4px solid #ff6b00; padding-bottom: 14px; margin-bottom: 18px; }
-            .header img { width: 210px; height: auto; }
-            .header-info { text-align: right; font-size: 12px; color: #7a4b22; }
-            .header-info strong { display: block; color: #111827; font-size: 18px; letter-spacing: 0; margin-bottom: 4px; }
-            .contract-number { display: inline-block; margin-top: 6px; padding: 5px 8px; border-radius: 6px; background: #fff1dc; color: #9a3412; font-weight: 700; }
-            .title { text-align: center; margin: 18px 0 20px; }
-            .title h1 { font-size: 20px; margin: 0 0 6px; text-transform: uppercase; letter-spacing: 0; }
-            .title p { color: #7a4b22; margin: 0; }
-            h2 { font-size: 13px; margin: 18px 0 8px; color: #9a3412; text-transform: uppercase; border-bottom: 1px solid #ffc078; padding-bottom: 5px; }
-            p { margin: 0 0 9px; }
-            ul { margin: 8px 0 12px 18px; padding: 0; }
-            li { margin: 4px 0; }
-            .box { border: 1px solid #ffc078; border-radius: 8px; padding: 12px; background: #fff8f0; margin: 10px 0 14px; }
-            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; }
-            .payment-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 10px 0 14px; }
-            .payment-card { border: 1px solid #ffc078; border-radius: 8px; padding: 11px; background: #fff8f0; }
-            .payment-card span { display: block; color: #7a4b22; font-size: 11px; text-transform: uppercase; margin-bottom: 6px; }
-            .payment-card strong { display: block; color: #111827; font-size: 16px; }
+            html, body { margin: 0; padding: 0; background: #ffffff; color: #000000; }
+            body { font-family: "Times New Roman", Times, serif; font-size: 12pt; line-height: 1.5; }
+            .document { width: 100%; margin: 0; }
+            .print-action { position: fixed; right: 16px; top: 16px; z-index: 10; padding: 10px 14px; border: 0; border-radius: 6px; background: #ff6b00; color: #ffffff; cursor: pointer; font-family: Arial, Helvetica, sans-serif; font-size: 13px; }
+            .brand-header { display: grid; grid-template-columns: 4cm 1fr; gap: 14pt; align-items: center; margin-bottom: 18pt; padding-bottom: 10pt; border-bottom: 1px solid #000000; }
+            .logo { width: 4cm; max-height: 2.2cm; object-fit: contain; }
+            .company-info { text-align: right; font-size: 10pt; line-height: 1.25; }
+            .company-info strong { display: block; font-size: 12pt; margin-bottom: 2pt; text-transform: uppercase; }
+            .contract-number { margin: 0 0 12pt; text-align: right; text-indent: 0; font-size: 10pt; }
+            .title { text-align: center; margin: 0 0 22pt; }
+            .title h1 { margin: 0; font-size: 12pt; font-weight: 700; text-transform: uppercase; line-height: 1.5; }
+            .title p { margin: 6pt 0 0; font-size: 10pt; line-height: 1.2; text-align: center; text-indent: 0; }
+            h2 { margin: 12pt 0 6pt; font-size: 12pt; font-weight: 700; text-transform: uppercase; line-height: 1.5; break-after: avoid; }
+            p { margin: 0 0 6pt; text-align: justify; text-indent: 1.25cm; }
+            ul { margin: 0 0 6pt 1.25cm; padding: 0; }
+            li { margin: 0 0 4pt; text-align: justify; }
+            table { width: 100%; border-collapse: collapse; margin: 6pt 0 12pt; font-size: 11pt; line-height: 1.3; }
+            th, td { border: 1px solid #000000; padding: 5pt 6pt; vertical-align: top; text-align: left; }
+            th { width: 34%; font-weight: 700; background: #f2f2f2; }
+            .payment-table th { width: auto; }
+            .qualification p, .no-indent { text-indent: 0; }
             .clause { break-inside: avoid; }
-            .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; margin-top: 58px; }
-            .signature { text-align: center; border-top: 1px solid #111827; padding-top: 8px; min-height: 60px; }
-            .small { font-size: 11px; color: #555; }
-            @media print { .no-print { display: none; } }
+            .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5cm; margin-top: 48pt; break-inside: avoid; }
+            .signature { text-align: center; border-top: 1px solid #000000; padding-top: 6pt; min-height: 42pt; }
+            .signature p { margin: 0; text-align: center; text-indent: 0; line-height: 1.3; }
+            .small { font-size: 10pt; }
+            @media print { .no-print { display: none; } body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
           </style>
         </head>
         <body>
-          <button class="no-print" onclick="window.print()" style="position:fixed;right:16px;top:16px;padding:10px 14px;border:0;border-radius:8px;background:#ff6b00;color:#fff;cursor:pointer;">Imprimir / Salvar PDF</button>
+          <button class="no-print print-action" onclick="window.print()">Imprimir / Salvar PDF</button>
           <main class="document">
-            <div class="header">
-              <img src="${logoUrl}" alt="${c(companyName)}">
-              <div class="header-info">
+            <header class="brand-header">
+              <img class="logo" src="${logoUrl}" alt="${c(companyName)}">
+              <div class="company-info">
                 <strong>${c(companyName)}</strong>
-                Prestação de serviços digitais<br>
-                ${company.telefone ? `${c(company.telefone)}<br>` : ""}
-                ${company.email ? `${c(company.email)}<br>` : ""}
+                ${company.documento ? `CPF/CNPJ: ${c(company.documento)}<br>` : ""}
                 ${company.endereco ? `${c(company.endereco)}<br>` : ""}
                 ${company.cidade ? `${c(company.cidade)}<br>` : ""}
-                ${company.documento ? `CNPJ/CPF: ${c(company.documento)}<br>` : ""}
-                Contrato gerado em ${contractDate}
-                <span class="contract-number">Contrato ${c(contractRecord.numero)}</span>
+                ${company.telefone ? `Telefone: ${c(company.telefone)}<br>` : ""}
+                ${company.email ? `E-mail: ${c(company.email)}` : ""}
               </div>
-            </div>
+            </header>
+
+            <p class="contract-number"><strong>Contrato n. ${c(contractRecord.numero)}</strong></p>
 
             <div class="title">
-              <h1>Contrato de Prestação de Serviços de Catálogo Digital</h1>
+              <h1>Instrumento Particular de Contrato de Prestação de Serviços de Catálogo Digital</h1>
               <p>Criação, implantação, configuração e personalização de catálogo digital/loja digital.</p>
             </div>
 
-            <section class="clause">
-              <h2>Contratante</h2>
-              <div class="box grid">
-                <p><strong>Cliente/Empresa:</strong> ${c(client.nome)}</p>
-                <p><strong>CPF/CNPJ:</strong> ${c(client.documento)}</p>
-                <p><strong>Responsável:</strong> ${c(client.responsavel)}</p>
-                <p><strong>E-mail:</strong> ${c(client.email)}</p>
-                <p><strong>Telefone:</strong> ${c(client.telefone)}</p>
-                <p><strong>Cidade/UF:</strong> ${c(client.cidade)}</p>
-                <p style="grid-column:1 / -1;"><strong>Endereço:</strong> ${c(client.endereco)}</p>
-              </div>
+            <section class="qualification">
+              <h2>Das partes</h2>
+              <p><strong>CONTRATANTE:</strong> ${c(client.nome)}, inscrito(a) no CPF/CNPJ sob n. ${c(client.documento)}, neste ato representado(a) por ${c(client.responsavel)}, com endereço em ${c(client.endereco)}, ${c(client.cidade)}, telefone ${c(client.telefone)} e e-mail ${c(client.email)}.</p>
+              <p><strong>CONTRATADA:</strong> ${c(companyName)}, ${company.documento ? `inscrita no CPF/CNPJ sob n. ${c(company.documento)}, ` : ""}com endereço em ${c(company.endereco)}, ${c(company.cidade)}, telefone ${c(company.telefone)} e e-mail ${c(company.email)}, responsável pela prestação dos serviços descritos neste instrumento.</p>
             </section>
 
             <section class="clause">
-              <h2>Contratada</h2>
-              <p><strong>ZAMA</strong>, responsável pela prestação dos serviços digitais descritos neste contrato.</p>
-            </section>
-
-            <section class="clause">
-              <h2>1. Objeto</h2>
-              <p>O presente contrato tem como objeto a prestação de serviços de criação, implantação, configuração e personalização de catálogo digital/loja digital para o CONTRATANTE.</p>
-              <p>Os serviços poderão incluir, conforme o plano contratado e as necessidades do CONTRATANTE:</p>
+              <h2>Cláusula 1 - Do objeto</h2>
+              <p>O presente contrato tem por objeto a prestação de serviços de criação, implantação, configuração e personalização de catálogo digital/loja digital para o CONTRATANTE, conforme plano contratado e informações fornecidas pelas partes.</p>
+              <p>Os serviços poderão compreender, conforme a necessidade do projeto:</p>
               <ul>
                 <li>criação e configuração inicial do catálogo digital;</li>
                 <li>cadastro e organização de produtos, categorias, descrições, preços e imagens;</li>
-                <li>upload e ajuste de banners fornecidos pelo CONTRATANTE;</li>
+                <li>upload, ajuste e aplicação de banners fornecidos pelo CONTRATANTE;</li>
                 <li>configuração visual da loja, incluindo cores, identidade visual, layout e apresentação dos produtos;</li>
                 <li>ajustes de design visual para adequação à marca do CONTRATANTE;</li>
                 <li>configuração de impressoras compatíveis com o sistema utilizado pelo CONTRATANTE, quando aplicável;</li>
-                <li>orientações básicas de uso da plataforma;</li>
-                <li>suporte inicial para funcionamento do catálogo digital;</li>
-                <li>ajustes necessários até a entrega final, conforme escopo combinado entre as partes.</li>
+                <li>orientações básicas de uso da plataforma; e</li>
+                <li>suporte inicial para funcionamento do catálogo digital até a entrega final.</li>
               </ul>
             </section>
 
             <section class="clause">
-              <h2>2. Plano, prazo e mensalidade</h2>
-              <div class="box grid">
-                <p><strong>Plano contratado:</strong> ${c(client.plano)}</p>
-                <p><strong>Tempo pretendido:</strong> ${c(client.tempo)}</p>
-                <p><strong>Valor mensal:</strong> ${money(monthlyValue)}</p>
-                <p><strong>Vencimento mensal:</strong> dia ${c(dueDay)}</p>
-              </div>
+              <h2>Cláusula 2 - Do plano, prazo e mensalidade</h2>
+              <table>
+                <tbody>
+                  <tr><th>Plano contratado</th><td>${c(client.plano)}</td></tr>
+                  <tr><th>Tempo pretendido</th><td>${c(client.tempo)}</td></tr>
+                  <tr><th>Valor mensal</th><td>${money(monthlyValue)}</td></tr>
+                  <tr><th>Vencimento mensal</th><td>Dia ${c(dueDay)}</td></tr>
+                </tbody>
+              </table>
+              <p>A mensalidade refere-se ao controle/continuidade do serviço contratado, conforme combinado entre as partes, sem prejuízo de cobranças realizadas em sistema externo utilizado pelo CONTRATANTE ou pela CONTRATADA.</p>
             </section>
 
             <section class="clause">
-              <h2>3. Valor de implantação e forma de pagamento</h2>
+              <h2>Cláusula 3 - Do valor de implantação e da forma de pagamento</h2>
               <p>Pela implantação, configuração e personalização inicial do catálogo digital/loja digital, o CONTRATANTE pagará à CONTRATADA o valor total de <strong>${money(installationValue)}</strong>.</p>
-              <div class="payment-grid">
-                <div class="payment-card"><span>Valor total</span><strong>${money(installationValue)}</strong></div>
-                <div class="payment-card"><span>50% antes do início</span><strong>${money(firstPayment)}</strong></div>
-                <div class="payment-card"><span>50% na conclusão</span><strong>${money(finalPayment)}</strong></div>
-              </div>
-              <p>O início dos serviços fica condicionado ao pagamento da primeira parcela. A entrega final, liberação completa ou encerramento da implantação poderá ficar condicionada ao pagamento da segunda parcela.</p>
+              <table class="payment-table">
+                <thead>
+                  <tr><th>Descrição</th><th>Condição</th><th>Valor</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>Primeira parcela</td><td>50% antes do início dos serviços</td><td>${money(firstPayment)}</td></tr>
+                  <tr><td>Segunda parcela</td><td>50% na conclusão da implantação</td><td>${money(finalPayment)}</td></tr>
+                  <tr><td><strong>Valor total de implantação</strong></td><td>Implantação completa</td><td><strong>${money(installationValue)}</strong></td></tr>
+                </tbody>
+              </table>
+              <p>O início dos serviços fica condicionado ao pagamento da primeira parcela. A entrega final, a liberação completa ou o encerramento da implantação poderá ficar condicionado ao pagamento da segunda parcela.</p>
             </section>
 
             <section class="clause">
-              <h2>4. Responsabilidades do contratante</h2>
-              <p>O CONTRATANTE deverá fornecer informações corretas, imagens, banners, descrições, preços, links, dados de produtos, dados de impressoras e demais informações necessárias para a montagem e configuração do catálogo digital.</p>
+              <h2>Cláusula 4 - Das obrigações da contratada</h2>
+              <p>A CONTRATADA compromete-se a executar os serviços contratados com zelo técnico, organizar as informações recebidas, configurar o catálogo digital de acordo com o plano contratado e realizar os ajustes necessários dentro do escopo combinado.</p>
             </section>
 
             <section class="clause">
-              <h2>5. Atraso, suspensão e cancelamento</h2>
-              <p>Em caso de atraso no pagamento de valores de implantação ou mensalidade, a CONTRATADA poderá suspender temporariamente a manutenção, atualização, suporte ou entrega final do catálogo digital até a regularização.</p>
-              <p>O cancelamento poderá ser solicitado por qualquer uma das partes mediante aviso prévio, respeitando valores pendentes até a data do encerramento.</p>
+              <h2>Cláusula 5 - Das obrigações do contratante</h2>
+              <p>O CONTRATANTE deverá fornecer informações corretas, imagens, banners, descrições, preços, links, dados de produtos, dados de impressoras, dados de acesso e demais materiais necessários para a montagem e configuração do catálogo digital.</p>
+              <p>O atraso no envio de informações, materiais ou aprovações poderá impactar o prazo de entrega, sem responsabilidade da CONTRATADA.</p>
             </section>
 
             <section class="clause">
-              <h2>6. Dados, imagens e conteúdos</h2>
-              <p>O CONTRATANTE declara ser responsável pelos dados, imagens, marcas, textos, preços, produtos e informações enviados para uso no catálogo digital.</p>
+              <h2>Cláusula 6 - Da suspensão, atraso e cancelamento</h2>
+              <p>Em caso de atraso no pagamento de valores de implantação ou mensalidade, a CONTRATADA poderá suspender temporariamente a manutenção, atualização, suporte ou entrega final do catálogo digital até a regularização dos valores pendentes.</p>
+              <p>O cancelamento poderá ser solicitado por qualquer uma das partes mediante aviso prévio, respeitados os valores pendentes e os serviços já executados até a data do encerramento.</p>
             </section>
 
             <section class="clause">
-              <h2>7. Proteção de dados</h2>
-              <p>As partes deverão observar a legislação aplicável de proteção de dados pessoais, especialmente a LGPD, quando houver tratamento de dados pessoais.</p>
+              <h2>Cláusula 7 - Dos dados, imagens e conteúdos</h2>
+              <p>O CONTRATANTE declara ser responsável pela veracidade, autorização de uso e regularidade dos dados, imagens, marcas, textos, preços, produtos e demais informações enviados para utilização no catálogo digital.</p>
             </section>
 
             <section class="clause">
-              <h2>8. Observações específicas</h2>
-              <div class="box">
-                <p>${c(client.observacoes)}</p>
-              </div>
+              <h2>Cláusula 8 - Da proteção de dados</h2>
+              <p>As partes deverão observar a legislação aplicável de proteção de dados pessoais, especialmente a Lei Geral de Proteção de Dados Pessoais (LGPD), quando houver tratamento de dados pessoais durante a execução dos serviços.</p>
             </section>
 
-            <p><strong>Local e data:</strong> ${c(client.cidade)}, ${contractDate}</p>
+            <section class="clause">
+              <h2>Cláusula 9 - Das observações específicas</h2>
+              <p>${c(client.observacoes)}</p>
+            </section>
+
+            <section class="clause">
+              <h2>Cláusula 10 - Do foro</h2>
+              <p>As partes elegem o foro da comarca de ${c(client.cidade)} para dirimir eventuais dúvidas ou controvérsias decorrentes deste contrato, salvo acordo escrito em sentido diverso.</p>
+            </section>
+
+            <p class="no-indent">E, por estarem justas e contratadas, as partes firmam o presente instrumento para que produza seus efeitos legais.</p>
+            <p class="no-indent"><strong>Local e data:</strong> ${c(client.cidade)}, ${contractDate}.</p>
 
             <div class="signatures">
               <div class="signature">
-                ${c(client.nome)}<br>
-                <span class="small">CONTRATANTE</span>
+                <p>${c(client.nome)}</p>
+                <p class="small">CONTRATANTE</p>
               </div>
               <div class="signature">
-                ${c(companySignature)}<br>
-                <span class="small">CONTRATADA</span>
+                <p>${c(companySignature)}</p>
+                <p class="small">CONTRATADA</p>
               </div>
             </div>
           </main>
