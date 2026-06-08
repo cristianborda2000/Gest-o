@@ -4,8 +4,8 @@
   "description": "Sistema administrativo ZAMA com dashboard, clientes, agenda, financeiro, contratos e Tailwind.",
   "private": true,
   "scripts": {
-    "build:css": "tailwindcss -i ./outputs/zama-tailwind/assets/styles.input.css -o ./outputs/zama-tailwind/assets/styles.css --minify",
-    "dev:css": "tailwindcss -i ./outputs/zama-tailwind/assets/styles.input.css -o ./outputs/zama-tailwind/assets/styles.css --watch",
+    "build:css": "node ./node_modules/tailwindcss/lib/cli.js -i ./outputs/zama-tailwind/assets/styles.input.css -o ./outputs/zama-tailwind/assets/styles.css --minify",
+    "dev:css": "node ./node_modules/tailwindcss/lib/cli.js -i ./outputs/zama-tailwind/assets/styles.input.css -o ./outputs/zama-tailwind/assets/styles.css --watch",
     "serve": "vite --host 127.0.0.1 --port 5173 ./outputs/zama-tailwind"
   },
   "devDependencies": {
