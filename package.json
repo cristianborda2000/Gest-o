@@ -1,0 +1,17 @@
+{
+  "name": "zama-admin",
+  "version": "1.0.0",
+  "description": "Sistema administrativo ZAMA com dashboard, clientes, agenda, financeiro, contratos e Tailwind.",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i ./outputs/zama-tailwind/assets/styles.input.css -o ./outputs/zama-tailwind/assets/styles.css --minify",
+    "dev:css": "tailwindcss -i ./outputs/zama-tailwind/assets/styles.input.css -o ./outputs/zama-tailwind/assets/styles.css --watch",
+    "serve": "vite --host 127.0.0.1 --port 5173 ./outputs/zama-tailwind"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "vite": "^6.0.7"
+  }
+}

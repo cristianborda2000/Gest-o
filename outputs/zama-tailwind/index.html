@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZAMA</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+
+  <!-- Estrutura principal do sistema: menu lateral + area de trabalho. -->
+  <div class="app">
+    <aside class="sidebar">
+      <!-- Marca e navegacao fixa entre os modulos do sistema. -->
+      <div class="brand">
+        <img class="brand-logo" src="zama-logo.png" alt="ZAMA">
+        <strong>ZAMA</strong>
+        <span>Controle geral da empresa</span>
+      </div>
+      <nav class="nav" aria-label="Módulos">
+        <button class="active" type="button" data-module="dashboard"><span class="dot dashboard"></span>Dashboard</button>
+        <button type="button" data-module="projetos"><span class="dot"></span>Projetos</button>
+        <button type="button" data-module="marketing"><span class="dot marketing"></span>Marketing</button>
+        <button type="button" data-module="clientes"><span class="dot clientes"></span>Clientes</button>
+        <button type="button" data-module="mensalidades"><span class="dot mensalidades"></span>Mensalidades</button>
+        <button type="button" data-module="agenda"><span class="dot agenda"></span>Agenda</button>
+        <button type="button" data-module="rh"><span class="dot rh"></span>RH</button>
+        <button type="button" data-module="financeiro"><span class="dot financeiro"></span>Gestão financeira</button>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <!-- Topo dinamico: o JavaScript troca titulo/subtitulo conforme o modulo ativo. -->
+      <header class="topbar">
+        <div>
+          <h1 id="moduleTitle">ZAMA</h1>
+          <p id="moduleSubtitle">Visão geral de projetos, clientes, equipe e dinheiro em caixa.</p>
+        </div>
+        <div class="actions">
+          <button class="button" type="button" id="importBtn">Importar dados</button>
+          <input id="importInput" type="file" accept="application/json,.json" hidden>
+          <button class="button" type="button" id="exportBtn">Exportar dados</button>
+          <button class="button danger" type="button" id="resetBtn">Limpar tudo</button>
+        </div>
+      </header>
+
+      <!-- Indicadores superiores, preenchidos em core.js pela funcao renderStats(). -->
+      <section class="stats" aria-label="Indicadores">
+        <div class="stat">
+          <span>Total no módulo</span>
+          <strong id="totalStat">0</strong>
+        </div>
+        <div class="stat">
+          <span>Em andamento</span>
+          <strong id="progressStat">0</strong>
+        </div>
+        <div class="stat">
+          <span>Concluídos / pagos</span>
+          <strong id="doneStat">0</strong>
+        </div>
+        <div class="stat">
+          <span>Valor financeiro</span>
+          <strong id="moneyStat">R$ 0</strong>
+        </div>
+      </section>
+
+      <!-- Area central: lista/tabela do modulo e formulario lateral de cadastro. -->
+      <section class="workspace" id="workspace">
+        <div class="panel">
+          <div class="panel-head">
+            <h2 id="listTitle">Lista de projetos</h2>
+            <input class="search" id="searchInput" type="search" placeholder="Buscar">
+          </div>
+          <div class="table-wrap" id="tableArea"></div>
+        </div>
+
+        <aside class="panel" id="formPanel">
+          <div class="panel-head">
+            <h2 id="formTitle">Novo registro</h2>
+          </div>
+          <form class="form" id="recordForm"></form>
+        </aside>
+      </section>
+    </main>
+  </div>
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/core.js"></script>
+  <script src="assets/js/forms.js"></script>
+  <script src="assets/js/dashboard.js"></script>
+  <script src="assets/js/contracts.js"></script>
+  <script src="assets/js/table.js"></script>
+  <script src="assets/js/records.js"></script>
+  <script src="assets/js/boot.js"></script>
+</body>
+</html>
