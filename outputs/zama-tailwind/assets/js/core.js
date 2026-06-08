@@ -57,21 +57,56 @@
 
       setCloudStatus("Salvando...", "saving");
 
-      const { error } = await supabaseClient
+      const { data: existing, error: lookupError } = await supabaseClient
         .from(cloudStateTable)
-        .upsert({
-          user_id: user.id,
-          data: state,
-          updated_at: new Date().toISOString()
-        }, { onConflict: "user_id" });
+        .select("user_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (lookupError) {
+        console.warn("Nao foi possivel verificar registro no Supabase.", lookupError);
+        setCloudStatus(`Erro: ${lookupError.message}`, "error");
+        return false;
+      }
+
+      const payload = {
+        user_id: user.id,
+        data: state,
+        updated_at: new Date().toISOString()
+      };
+
+      const query = existing
+        ? supabaseClient.from(cloudStateTable).update(payload).eq("user_id", user.id)
+        : supabaseClient.from(cloudStateTable).insert(payload);
+
+      const { error } = await query;
 
       if (error) {
         console.warn("Nao foi possivel salvar dados no Supabase.", error);
-        setCloudStatus("Erro na nuvem", "error");
+        setCloudStatus(`Erro: ${error.message}`, "error");
         return false;
       }
 
       setCloudStatus("Nuvem salva", "");
+      return true;
+    }
+
+    async function resetCloudState() {
+      const user = await getCurrentUser();
+      if (!supabaseClient || !user) return false;
+
+      const { error } = await supabaseClient
+        .from(cloudStateTable)
+        .delete()
+        .eq("user_id", user.id);
+
+      if (error) {
+        console.warn("Nao foi possivel apagar dados no Supabase.", error);
+        setCloudStatus(`Erro: ${error.message}`, "error");
+        return false;
+      }
+
+      setCloudStatus("Nuvem limpa", "");
       return true;
     }
 

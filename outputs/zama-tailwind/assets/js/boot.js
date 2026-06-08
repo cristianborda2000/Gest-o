@@ -89,6 +89,7 @@
     document.getElementById("resetBtn").addEventListener("click", async () => {
       if (confirm("Deseja apagar todos os dados e voltar ao exemplo inicial?")) {
         localStorage.removeItem(storageKey);
+        await resetCloudState();
         state = createInitialState();
         await persist();
         editingId = null;
