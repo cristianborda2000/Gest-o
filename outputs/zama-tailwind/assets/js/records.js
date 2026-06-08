@@ -6,7 +6,7 @@
 */
 
     // Salva o formulario atual. Depois aplica sincronizacoes conforme o modulo.
-    function saveRecord(event) {
+    async function saveRecord(event) {
       event.preventDefault();
       const data = Object.fromEntries(new FormData(recordForm).entries());
       data.valor = Number(data.valor || 0);
@@ -55,7 +55,7 @@
       }
 
       editingId = null;
-      persist();
+      await persist();
       recordForm.reset();
       render();
     }

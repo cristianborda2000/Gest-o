@@ -81,7 +81,7 @@
       `;
 
       tableArea.querySelectorAll("[data-edit]").forEach((button) => {
-        button.addEventListener("click", () => {
+        button.addEventListener("click", async () => {
           editingId = button.dataset.edit;
           render();
         });
@@ -98,33 +98,33 @@
       attachAgendaTabEvents();
 
       tableArea.querySelectorAll("[data-paid]").forEach((button) => {
-        button.addEventListener("click", () => {
+        button.addEventListener("click", async () => {
           state.financeiro = state.financeiro.map((row) => row.id === button.dataset.paid ? { ...row, status: "Pago", pagoEm: todayIso() } : row);
-          persist();
+          await persist();
           render();
         });
       });
 
       tableArea.querySelectorAll("[data-monthly-paid]").forEach((button) => {
-        button.addEventListener("click", () => {
+        button.addEventListener("click", async () => {
           state.mensalidades = state.mensalidades.map((row) => row.id === button.dataset.monthlyPaid ? { ...row, status: "Pago", pagoEm: todayIso() } : row);
           const monthly = state.mensalidades.find((row) => row.id === button.dataset.monthlyPaid);
           syncMonthlyFinance(monthly, state);
-          persist();
+          await persist();
           render();
         });
       });
 
       tableArea.querySelectorAll("[data-done]").forEach((button) => {
-        button.addEventListener("click", () => {
+        button.addEventListener("click", async () => {
           state.agenda = state.agenda.map((row) => row.id === button.dataset.done ? { ...row, status: "Concluído" } : row);
-          persist();
+          await persist();
           render();
         });
       });
 
       tableArea.querySelectorAll("[data-delete]").forEach((button) => {
-        button.addEventListener("click", () => {
+        button.addEventListener("click", async () => {
           if (activeModule === "projetos") {
             removeProjectFinance(button.dataset.delete);
           }
@@ -136,7 +136,7 @@
           }
           const rowsKey = getCurrentRowsKey();
           state[rowsKey] = state[rowsKey].filter((row) => row.id !== button.dataset.delete);
-          persist();
+          await persist();
           render();
         });
       });

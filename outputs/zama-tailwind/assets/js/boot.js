@@ -31,6 +31,7 @@
     const importInput = document.getElementById("importInput");
     const logoutBtn = document.getElementById("logoutBtn");
     const userEmail = document.getElementById("userEmail");
+    const cloudStatus = document.getElementById("cloudStatus");
 
     function showAuth(message = "") {
       authError.textContent = message;

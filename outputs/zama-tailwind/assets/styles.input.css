@@ -240,6 +240,32 @@
       white-space: nowrap;
     }
 
+    .cloud-status {
+      min-height: 40px;
+      display: inline-flex;
+      align-items: center;
+      max-width: 180px;
+      padding: 8px 11px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #ecfdf5;
+      color: #047857;
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .cloud-status.saving {
+      background: #fff7ed;
+      color: #9a3412;
+    }
+
+    .cloud-status.error {
+      background: #fde2e2;
+      color: #9b1c1c;
+    }
+
     .button {
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -783,6 +809,12 @@
       }
 
       .user-pill {
+        width: 100%;
+        max-width: none;
+        justify-content: center;
+      }
+
+      .cloud-status {
         width: 100%;
         max-width: none;
         justify-content: center;

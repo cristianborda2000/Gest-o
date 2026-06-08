@@ -53,7 +53,9 @@
 
     async function saveCloudState() {
       const user = await getCurrentUser();
-      if (!supabaseClient || !user || !state) return;
+      if (!supabaseClient || !user || !state) return false;
+
+      setCloudStatus("Salvando...", "saving");
 
       const { error } = await supabaseClient
         .from(cloudStateTable)
@@ -65,7 +67,12 @@
 
       if (error) {
         console.warn("Nao foi possivel salvar dados no Supabase.", error);
+        setCloudStatus("Erro na nuvem", "error");
+        return false;
       }
+
+      setCloudStatus("Nuvem salva", "");
+      return true;
     }
 
     async function loadState() {
@@ -95,7 +102,14 @@
 
     async function persist() {
       localStorage.setItem(storageKey, JSON.stringify(state));
-      await saveCloudState();
+      return saveCloudState();
+    }
+
+    function setCloudStatus(text, statusClass = "") {
+      if (!cloudStatus) return;
+      cloudStatus.textContent = text;
+      cloudStatus.classList.toggle("saving", statusClass === "saving");
+      cloudStatus.classList.toggle("error", statusClass === "error");
     }
 
     // Troca de aba no menu lateral e permite abrir sub-abas como financeiro/fixos.
