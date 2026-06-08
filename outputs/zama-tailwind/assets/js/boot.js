@@ -9,7 +9,12 @@
     let financeView = "movimentacoes";
     let agendaView = "lista";
     let calendarMonth = todayIso().slice(0, 7);
+    let financeMonth = todayIso().slice(0, 7);
+    let statusFilter = "Todos";
+    let listViewMode = window.matchMedia("(max-width: 640px)").matches ? "cards" : "table";
     let editingId = null;
+    let formPanelOpen = false;
+    let cloudChangesChannel = null;
 
     const appShell = document.querySelector(".app");
     const authScreen = document.getElementById("authScreen");
@@ -25,8 +30,26 @@
     const tableArea = document.getElementById("tableArea");
     const recordForm = document.getElementById("recordForm");
     const searchInput = document.getElementById("searchInput");
+    const statusFilterInput = document.getElementById("statusFilter");
+    const financeMonthFilter = document.getElementById("financeMonthFilter");
+    const viewToggleBtn = document.getElementById("viewToggleBtn");
     const workspace = document.getElementById("workspace");
     const formPanel = document.getElementById("formPanel");
+    const formToggleBtn = document.getElementById("formToggleBtn");
+    const quickAddBtn = document.getElementById("quickAddBtn");
+    const mobileMoreBtn = document.getElementById("mobileMoreBtn");
+    const detailBackdrop = document.getElementById("detailBackdrop");
+    const detailPanel = document.getElementById("detailPanel");
+    const detailCloseBtn = document.getElementById("detailCloseBtn");
+    const detailEyebrow = document.getElementById("detailEyebrow");
+    const detailTitle = document.getElementById("detailTitle");
+    const detailContent = document.getElementById("detailContent");
+    const onboardingBackdrop = document.getElementById("onboardingBackdrop");
+    const onboardingPanel = document.getElementById("onboardingPanel");
+    const onboardingForm = document.getElementById("onboardingForm");
+    const skipOnboardingBtn = document.getElementById("skipOnboardingBtn");
+    const companyForm = document.getElementById("companyForm");
+    const monthlyBackupBtn = document.getElementById("monthlyBackupBtn");
     const importBtn = document.getElementById("importBtn");
     const importInput = document.getElementById("importInput");
     const logoutBtn = document.getElementById("logoutBtn");
@@ -38,6 +61,7 @@
     const settingsCloseBtn = document.getElementById("settingsCloseBtn");
 
     function openSettings() {
+      fillCompanyForm();
       settingsPanel.hidden = false;
       settingsBackdrop.hidden = false;
     }
@@ -59,8 +83,11 @@
       appShell.hidden = false;
       userEmail.textContent = session?.user?.email || "";
       state = await loadState();
+      await subscribeToCloudChanges(session?.user);
       editingId = null;
+      fillCompanyForm();
       render();
+      maybeShowOnboarding();
     }
 
     async function initializeAuth() {
@@ -103,8 +130,55 @@
     settingsBtn.addEventListener("click", openSettings);
     settingsCloseBtn.addEventListener("click", closeSettings);
     settingsBackdrop.addEventListener("click", closeSettings);
+    formToggleBtn.addEventListener("click", () => {
+      formPanelOpen = !formPanelOpen;
+      if (!formPanelOpen) editingId = null;
+      render();
+    });
+    quickAddBtn.addEventListener("click", () => {
+      if (activeModule === "dashboard") {
+        activeModule = "agenda";
+        agendaView = "lista";
+        navButtons.forEach((item) => item.classList.toggle("active", item.dataset.module === "agenda"));
+      }
+
+      editingId = null;
+      formPanelOpen = true;
+      render();
+      formPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    mobileMoreBtn.addEventListener("click", () => {
+      document.querySelector(".nav").classList.toggle("expanded");
+    });
+    viewToggleBtn.addEventListener("click", () => {
+      listViewMode = listViewMode === "table" ? "cards" : "table";
+      renderTable();
+      renderListControls();
+    });
+    detailCloseBtn.addEventListener("click", closeDetailPanel);
+    detailBackdrop.addEventListener("click", closeDetailPanel);
+    onboardingForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      state.companyProfile = {
+        ...state.companyProfile,
+        ...Object.fromEntries(new FormData(onboardingForm).entries())
+      };
+      state.setupDone = true;
+      await persist();
+      fillCompanyForm();
+      hideOnboarding();
+      render();
+    });
+    skipOnboardingBtn.addEventListener("click", async () => {
+      state.setupDone = true;
+      await persist();
+      hideOnboarding();
+    });
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") closeSettings();
+      if (event.key === "Escape") {
+        closeSettings();
+        closeDetailPanel();
+      }
     });
 
     document.getElementById("resetBtn").addEventListener("click", async () => {
@@ -119,13 +193,43 @@
     });
 
     document.getElementById("exportBtn").addEventListener("click", () => {
-      const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+      downloadStateBackup("dados-zama-completo.json", state);
+    });
+
+    monthlyBackupBtn.addEventListener("click", () => {
+      const monthKey = financeMonth || todayIso().slice(0, 7);
+      const backup = {
+        geradoEm: new Date().toISOString(),
+        mes: monthKey,
+        empresa: state.companyProfile,
+        financeiro: state.financeiro.filter((row) => rowMatchesMonth(row, monthKey)),
+        gastosFixos: getActiveFixedExpenses(),
+        mensalidades: state.mensalidades.filter((row) => rowMatchesMonth(row, monthKey)),
+        totais: getFinancialTotalsForMonth(monthKey)
+      };
+      downloadStateBackup(`backup-zama-${monthKey}.json`, backup);
+    });
+
+    function downloadStateBackup(filename, data) {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = "dados-admin-simples.json";
+      link.download = filename;
       link.click();
       URL.revokeObjectURL(url);
+    }
+
+    companyForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      state.companyProfile = {
+        ...state.companyProfile,
+        ...Object.fromEntries(new FormData(companyForm).entries())
+      };
+      await persist();
+      fillCompanyForm();
+      render();
+      alert("Dados da empresa salvos.");
     });
 
     importBtn.addEventListener("click", () => {
@@ -141,6 +245,7 @@
         Object.keys(modules).forEach((key) => {
           if (!Array.isArray(importedState[key])) importedState[key] = [];
         });
+        normalizeUtilityState(importedState);
         normalizeFinanceRows(importedState);
         normalizeFixedExpenseRows(importedState);
         normalizeAgendaRows(importedState);
@@ -161,6 +266,7 @@
     });
 
     logoutBtn.addEventListener("click", async () => {
+      await unsubscribeFromCloudChanges();
       await supabaseClient.auth.signOut();
       state = null;
       closeSettings();
@@ -168,6 +274,14 @@
     });
 
     searchInput.addEventListener("input", renderTable);
+    statusFilterInput.addEventListener("change", () => {
+      statusFilter = statusFilterInput.value;
+      renderTable();
+    });
+    financeMonthFilter.addEventListener("change", () => {
+      financeMonth = financeMonthFilter.value || todayIso().slice(0, 7);
+      render();
+    });
     recordForm.addEventListener("submit", saveRecord);
 
     initializeAuth();

@@ -44,8 +44,7 @@
       });
 
       recordForm.innerHTML = `
-        <div class="form-grid">${fields.slice(0, 4).join("")}</div>
-        ${fields.slice(4).join("")}
+        ${renderFormGroups(fields)}
         <button class="button primary" type="submit">${editingId ? "Salvar alterações" : "Adicionar"}</button>
         ${editingId ? '<button class="button" type="button" id="cancelEditBtn">Cancelar edição</button>' : ""}
       `;
@@ -57,6 +56,30 @@
           render();
         });
       }
+    }
+
+    function renderFormGroups(fields) {
+      const labels = activeModule === "clientes"
+        ? ["Dados do cliente", "Contato", "Plano e contrato", "Observações"]
+        : activeModule === "financeiro"
+          ? ["Lançamento", "Valores e vencimento", "Observações"]
+          : activeModule === "agenda"
+            ? ["Compromisso", "Quando acontece", "Anotações"]
+            : ["Dados principais", "Prazos e valores", "Observações"];
+
+      const groups = [
+        fields.slice(0, 4),
+        fields.slice(4, 8),
+        fields.slice(8, 13),
+        fields.slice(13)
+      ].filter((group) => group.length);
+
+      return groups.map((group, index) => `
+        <fieldset class="form-section">
+          <legend>${labels[index] || "Detalhes"}</legend>
+          <div class="form-grid">${group.join("")}</div>
+        </fieldset>
+      `).join("");
     }
 
     function renderFinanceTabs() {

@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ZAMA</title>
-  <link rel="stylesheet" href="assets/styles.css">
+  <link rel="stylesheet" href="assets/styles.css?v=20260608-8">
 </head>
 <body>
 
@@ -38,15 +38,16 @@
         <strong>ZAMA</strong>
         <span>Controle geral da empresa</span>
       </div>
-      <nav class="nav" aria-label="Módulos">
-        <button class="active" type="button" data-module="dashboard"><span class="dot dashboard"></span>Dashboard</button>
-        <button type="button" data-module="projetos"><span class="dot"></span>Projetos</button>
-        <button type="button" data-module="marketing"><span class="dot marketing"></span>Marketing</button>
-        <button type="button" data-module="clientes"><span class="dot clientes"></span>Clientes</button>
-        <button type="button" data-module="mensalidades"><span class="dot mensalidades"></span>Mensalidades</button>
-        <button type="button" data-module="agenda"><span class="dot agenda"></span>Agenda</button>
-        <button type="button" data-module="rh"><span class="dot rh"></span>RH</button>
-        <button type="button" data-module="financeiro"><span class="dot financeiro"></span>Gestão financeira</button>
+      <nav class="nav" aria-label="MÃ³dulos">
+        <button class="active" type="button" data-module="dashboard"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 13h8V3H3v10Zm10 8h8V3h-8v18ZM3 21h8v-6H3v6Z"></path></svg>Dashboard</button>
+        <button type="button" data-module="projetos"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"></path></svg>Projetos</button>
+        <button type="button" data-module="marketing"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 13V8l10-4v13L4 13Zm0 0 2 7h3l-2-6m10-8a4 4 0 0 1 0 8"></path></svg>Marketing</button>
+        <button type="button" data-module="clientes"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M16 11a4 4 0 1 0-8 0m8 0a4 4 0 1 1-8 0m8 0h1a3 3 0 0 0 0-6m-10 6H6a3 3 0 0 1 0-6m12 15a6 6 0 0 0-12 0"></path></svg>Clientes</button>
+        <button type="button" data-module="mensalidades"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 7h18v12H3V7Zm0 4h18M7 15h4"></path></svg>Mensalidades</button>
+        <button type="button" data-module="agenda"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M7 3v4m10-4v4M4 9h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Zm4 9h3m-3 4h6"></path></svg>Agenda</button>
+        <button type="button" data-module="rh"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 9a7 7 0 0 1 14 0m-4-3 2 2 4-5"></path></svg>RH</button>
+        <button type="button" data-module="financeiro"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 7h18v12H3V7Zm3 4h4m7 0h1m-3 4h3M7 15h5"></path></svg>GestÃ£o financeira</button>
+        <button class="mobile-more" type="button" id="mobileMoreBtn"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01"></path></svg>Mais</button>
       </nav>
     </aside>
 
@@ -55,10 +56,10 @@
       <header class="topbar">
         <div>
           <h1 id="moduleTitle">ZAMA</h1>
-          <p id="moduleSubtitle">Visão geral de projetos, clientes, equipe e dinheiro em caixa.</p>
+          <p id="moduleSubtitle">VisÃ£o geral de projetos, clientes, equipe e dinheiro em caixa.</p>
         </div>
         <div class="actions">
-          <button class="settings-button" type="button" id="settingsBtn" aria-label="Abrir configurações">
+          <button class="settings-button" type="button" id="settingsBtn" aria-label="Abrir configuraÃ§Ãµes">
             <svg aria-hidden="true" viewBox="0 0 24 24">
               <path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"></path>
               <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.04.04a2 2 0 0 1-2.83 2.83l-.04-.04A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6l-.03.04a2 2 0 0 1-3.94 0L10 20a1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.88.34l-.04.04a2 2 0 0 1-2.83-2.83l.04-.04A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1l-.04-.03a2 2 0 0 1 0-3.94L4 10a1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.34-1.88l-.04-.04a2 2 0 0 1 2.83-2.83l.04.04A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6l.03-.04a2 2 0 0 1 3.94 0L14 4a1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.88-.34l.04-.04a2 2 0 0 1 2.83 2.83l-.04.04A1.7 1.7 0 0 0 19.4 9c.14.37.36.7.66.97l.04.03a2 2 0 0 1 0 3.94l-.04.03a1.7 1.7 0 0 0-.66 1.03Z"></path>
@@ -68,27 +69,44 @@
       </header>
 
       <div class="settings-backdrop" id="settingsBackdrop" hidden></div>
-      <aside class="settings-panel" id="settingsPanel" aria-label="Configurações da conta" hidden>
+      <aside class="settings-panel" id="settingsPanel" aria-label="ConfiguraÃ§Ãµes da conta" hidden>
         <div class="settings-head">
           <div>
-            <h2>Configurações</h2>
+            <h2>ConfiguraÃ§Ãµes</h2>
             <p>Conta e dados do sistema</p>
           </div>
-          <button class="icon-button" type="button" id="settingsCloseBtn" aria-label="Fechar configurações">×</button>
+          <button class="icon-button" type="button" id="settingsCloseBtn" aria-label="Fechar configuraÃ§Ãµes">Ã—</button>
         </div>
         <div class="settings-content">
+          <form class="company-form" id="companyForm">
+            <section class="settings-section">
+              <span class="settings-label">Dados da empresa</span>
+              <div class="settings-grid">
+                <label>Nome da empresa<input id="companyName" name="nome" type="text" autocomplete="organization"></label>
+                <label>CNPJ<input id="companyDocument" name="documento" type="text"></label>
+                <label>E-mail<input id="companyEmail" name="email" type="email"></label>
+                <label>Telefone<input id="companyPhone" name="telefone" type="text"></label>
+                <label>Cidade/UF<input id="companyCity" name="cidade" type="text"></label>
+                <label>Assinatura no contrato<input id="companySignature" name="assinatura" type="text"></label>
+                <label class="settings-wide">EndereÃ§o<input id="companyAddress" name="endereco" type="text"></label>
+                <label class="settings-wide">Logo para contrato<input id="companyLogoUrl" name="logoUrl" type="text" placeholder="zama-logo.png ou URL da imagem"></label>
+              </div>
+              <button class="button primary" type="submit">Salvar dados da empresa</button>
+            </section>
+          </form>
           <section class="settings-section">
             <span class="settings-label">Conta conectada</span>
             <strong id="userEmail"></strong>
           </section>
           <section class="settings-section">
-            <span class="settings-label">Sincronização</span>
+            <span class="settings-label">SincronizaÃ§Ã£o</span>
             <strong class="cloud-status" id="cloudStatus">Nuvem aguardando</strong>
           </section>
           <div class="settings-actions">
             <button class="button" type="button" id="importBtn">Importar dados</button>
             <input id="importInput" type="file" accept="application/json,.json" hidden>
             <button class="button" type="button" id="exportBtn">Exportar dados</button>
+            <button class="button" type="button" id="monthlyBackupBtn">Backup do mÃªs</button>
             <button class="button" type="button" id="logoutBtn">Sair da conta</button>
             <button class="button danger" type="button" id="resetBtn">Limpar tudo</button>
           </div>
@@ -98,7 +116,7 @@
       <!-- Indicadores superiores, preenchidos em core.js pela funcao renderStats(). -->
       <section class="stats" aria-label="Indicadores">
         <div class="stat">
-          <span>Total no módulo</span>
+          <span>Total no mÃ³dulo</span>
           <strong id="totalStat">0</strong>
         </div>
         <div class="stat">
@@ -106,7 +124,7 @@
           <strong id="progressStat">0</strong>
         </div>
         <div class="stat">
-          <span>Concluídos / pagos</span>
+          <span>ConcluÃ­dos / pagos</span>
           <strong id="doneStat">0</strong>
         </div>
         <div class="stat">
@@ -120,7 +138,12 @@
         <div class="panel">
           <div class="panel-head">
             <h2 id="listTitle">Lista de projetos</h2>
-            <input class="search" id="searchInput" type="search" placeholder="Buscar">
+            <div class="list-controls">
+              <select class="filter-select" id="statusFilter" aria-label="Filtrar por status"></select>
+              <input class="month-filter" id="financeMonthFilter" type="month" aria-label="Filtrar mÃªs financeiro">
+              <button class="view-toggle" type="button" id="viewToggleBtn" aria-label="Alternar visualizaÃ§Ã£o">Cards</button>
+              <input class="search" id="searchInput" type="search" placeholder="Buscar">
+            </div>
           </div>
           <div class="table-wrap" id="tableArea"></div>
         </div>
@@ -128,11 +151,41 @@
         <aside class="panel" id="formPanel">
           <div class="panel-head">
             <h2 id="formTitle">Novo registro</h2>
+            <button class="form-toggle" type="button" id="formToggleBtn" aria-expanded="true">Recolher</button>
           </div>
           <form class="form" id="recordForm"></form>
         </aside>
       </section>
     </main>
+    <div class="detail-backdrop" id="detailBackdrop" hidden></div>
+    <aside class="detail-panel" id="detailPanel" aria-label="Detalhes do registro" hidden>
+      <div class="detail-head">
+        <div>
+          <span id="detailEyebrow">Detalhes</span>
+          <h2 id="detailTitle">Registro</h2>
+        </div>
+        <button class="icon-button" type="button" id="detailCloseBtn" aria-label="Fechar detalhes">Ã—</button>
+      </div>
+      <div class="detail-content" id="detailContent"></div>
+    </aside>
+    <div class="onboarding-backdrop" id="onboardingBackdrop" hidden></div>
+    <section class="onboarding-panel" id="onboardingPanel" aria-label="ConfiguraÃ§Ã£o inicial" hidden>
+      <div>
+        <span class="settings-label">Primeiro acesso</span>
+        <h2>Configure a ZAMA</h2>
+        <p>Preencha os dados principais da empresa para deixar contratos e documentos prontos.</p>
+      </div>
+      <form class="onboarding-form" id="onboardingForm">
+        <label>Nome da empresa<input name="nome" type="text" value="ZAMA" required></label>
+        <label>CNPJ<input name="documento" type="text"></label>
+        <label>Telefone<input name="telefone" type="text"></label>
+        <label>Cidade/UF<input name="cidade" type="text"></label>
+        <label class="settings-wide">EndereÃ§o<input name="endereco" type="text"></label>
+        <button class="button primary" type="submit">Salvar e comeÃ§ar</button>
+        <button class="button" type="button" id="skipOnboardingBtn">Preencher depois</button>
+      </form>
+    </section>
+    <button class="quick-add" type="button" id="quickAddBtn" aria-label="Adicionar registro">+</button>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/config.js"></script>
@@ -145,3 +198,4 @@
   <script src="assets/js/boot.js"></script>
 </body>
 </html>
+

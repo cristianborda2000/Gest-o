@@ -14,6 +14,9 @@
         .reduce((sum, row) => sum + Math.abs(Number(row.valor || 0)), 0);
       const openProjects = state.projetos.filter((row) => !/conclu/i.test(row.status || ""));
       const todayAgenda = getTodayAgenda();
+      const upcomingMonthly = getUpcomingMonthlyDue(7);
+      const upcomingFixed = getUpcomingFixedExpenses(7);
+      const finalProjectPayments = getPendingProjectFinalPayments();
       const recentPaid = state.financeiro
         .filter((row) => row.status === "Pago")
         .slice(-5)
@@ -25,8 +28,16 @@
       const monthlyPaidCount = state.mensalidades.filter((row) => row.status === "Pago").length;
       const monthlyTotal = Math.max(state.mensalidades.filter((row) => row.status !== "Cancelado").length, 1);
       const monthlyPaidPercent = Math.round((monthlyPaidCount / monthlyTotal) * 100);
+      const monthTotals = getFinancialTotalsForMonth(todayIso().slice(0, 7));
 
       tableArea.innerHTML = `
+        <div class="metric-row">
+          ${metricCard("Receita do mês", currency.format(monthTotals.entradas), "↗", "green", "financeiro")}
+          ${metricCard("Despesas do mês", currency.format(monthTotals.saidas), "↘", "red", "financeiro")}
+          ${metricCard("Lucro do mês", currency.format(monthTotals.lucro), "=", monthTotals.lucro >= 0 ? "green" : "red", "financeiro")}
+          ${metricCard("Tarefas hoje", todayAgenda.length, "✓", "orange", "agenda")}
+          ${metricCard("Clientes ativos", state.clientes.filter((row) => row.status === "Ativo").length, "◎", "blue", "clientes")}
+        </div>
         <div class="dashboard-grid">
           <div class="dashboard-block dashboard-link" data-go="financeiro">
             <h3>ZAMA</h3>
@@ -47,6 +58,15 @@
               <li data-go="financeiro"><span>Pago em saídas</span><strong class="money-negative">${currency.format(totals.paidOutcome)}</strong></li>
               <li data-go="financeiro"><span>A receber</span><strong>${currency.format(pendingReceivables)}</strong></li>
               <li data-go="mensalidades"><span>Mensalidades recebidas</span><strong class="money-positive">${currency.format(paidMonthly)}</strong></li>
+            </ul>
+          </div>
+          <div class="dashboard-block alert-card">
+            <h3>Alertas importantes</h3>
+            <ul class="summary-list">
+              <li data-go="mensalidades"><span>Mensalidades vencendo em 7 dias</span><strong>${upcomingMonthly.length}</strong></li>
+              <li data-go="agenda"><span>Tarefas e reuniões de hoje</span><strong>${todayAgenda.length}</strong></li>
+              <li data-go="financeiro"><span>Pagamentos finais de projetos</span><strong>${finalProjectPayments.length}</strong></li>
+              <li data-go="financeiro" data-finance-target="fixos"><span>Gastos fixos vencendo</span><strong>${upcomingFixed.length}</strong></li>
             </ul>
           </div>
           <div class="dashboard-block chart-card dashboard-link" data-go="financeiro">
@@ -115,5 +135,15 @@
           <div class="chart-track"><div class="chart-fill ${colorClass}" style="--w: ${width}%;"></div></div>
           <strong>${currency.format(Math.abs(value))}</strong>
         </div>
+      `;
+    }
+
+    function metricCard(label, value, icon, colorClass, module) {
+      return `
+        <button class="metric-card ${colorClass}" type="button" data-go="${module}">
+          <span>${icon}</span>
+          <small>${escapeHtml(label)}</small>
+          <strong>${value}</strong>
+        </button>
       `;
     }

@@ -26,7 +26,12 @@
       if (editingId) {
         state[rowsKey] = state[rowsKey].map((row) => row.id === editingId ? { ...row, ...data } : row);
       } else {
-        state[rowsKey].push({ id: createId(), ...data });
+        const newRecord = { id: createId(), createdAt: new Date().toISOString(), ...data };
+        if (rowsKey === "clientes" || rowsKey === "agenda") {
+          state[rowsKey].unshift(newRecord);
+        } else {
+          state[rowsKey].push(newRecord);
+        }
       }
 
       if (activeModule === "projetos") {
@@ -46,7 +51,7 @@
       if (activeModule === "clientes") {
         const savedClient = editingId
           ? state.clientes.find((row) => row.id === editingId)
-          : state.clientes[state.clientes.length - 1];
+          : state.clientes[0];
         syncClientMonthly(savedClient, state);
       }
 
@@ -57,6 +62,7 @@
       editingId = null;
       await persist();
       recordForm.reset();
+      formPanelOpen = false;
       render();
     }
 
@@ -65,6 +71,40 @@
       const [year, month, day] = value.split("-");
       if (!year || !month || !day) return value;
       return `${day}/${month}/${year}`;
+    }
+
+    function formatFieldLabel(key) {
+      const labels = {
+        nome: "Nome",
+        responsavel: "Responsável",
+        email: "E-mail",
+        telefone: "Telefone",
+        documento: "Documento",
+        endereco: "Endereço",
+        cidade: "Cidade/UF",
+        plano: "Plano",
+        tempo: "Tempo",
+        implantacao: "Implantação",
+        inicio: "Início",
+        prazo: "Data",
+        hora: "Hora",
+        status: "Status",
+        valor: "Valor",
+        observacoes: "Observações",
+        canal: "Canal",
+        tipo: "Tipo",
+        dia: "Dia de vencimento",
+        pagoEm: "Pago em",
+        createdAt: "Criado em"
+      };
+      return labels[key] || key;
+    }
+
+    function formatDetailValue(key, value) {
+      if (key === "valor" || key === "implantacao") return currency.format(Number(value || 0));
+      if (key === "prazo" || key === "inicio" || key === "pagoEm") return formatDate(String(value).slice(0, 10));
+      if (key === "createdAt") return new Date(value).toLocaleString("pt-BR");
+      return escapeHtml(value);
     }
 
     function statusClass(status = "") {
@@ -278,7 +318,7 @@
     function normalizeAgendaRow(row) {
       const fallbackDate = row.prazo || row.data || row.date || "";
       row.prazo = String(fallbackDate).slice(0, 10);
-      row.tipo = row.tipo || "ReuniÃ£o";
+      row.tipo = row.tipo || "Reunião";
       row.status = row.status || "Pendente";
       row.hora = row.hora || "";
       row.valor = Number(row.valor || 0);
@@ -355,6 +395,124 @@
       return date.slice(0, 7) === todayIso().slice(0, 7);
     }
 
+    function rowMatchesMonth(row, monthKey = todayIso().slice(0, 7)) {
+      const date = row.pagoEm || row.prazo || "";
+      return String(date).slice(0, 7) === monthKey;
+    }
+
+    function getStatusFilterOptions() {
+      const rowsKey = getCurrentRowsKey();
+      const commonStatuses = ["Pendente", "Pago", "Concluído", "Atrasado"];
+      const statuses = (state[rowsKey] || [])
+        .map((row) => row.status)
+        .filter(Boolean);
+      return ["Todos", ...Array.from(new Set([...commonStatuses, ...statuses]))];
+    }
+
+    function passesStatusFilter(row) {
+      return statusFilter === "Todos" || row.status === statusFilter;
+    }
+
+    function daysUntil(dateKey) {
+      const today = new Date(`${todayIso()}T00:00:00`);
+      const target = new Date(`${dateKey}T00:00:00`);
+      return Math.round((target - today) / 86400000);
+    }
+
+    function isWithinNextDays(dateKey, amount) {
+      const diff = daysUntil(dateKey);
+      return diff >= 0 && diff <= amount;
+    }
+
+    function getFinancialTotalsForMonth(monthKey = todayIso().slice(0, 7)) {
+      const monthRows = state.financeiro.filter((row) => rowMatchesMonth(row, monthKey));
+      const paid = monthRows.filter((row) => row.status === "Pago");
+      const entradas = paid
+        .filter(isIncome)
+        .reduce((sum, row) => sum + Math.abs(Number(row.valor || 0)), 0);
+      const saidas = paid
+        .filter(isOutcome)
+        .reduce((sum, row) => sum + Math.abs(Number(row.valor || 0)), 0);
+      const entradasPendentes = monthRows
+        .filter((row) => isIncome(row) && row.status !== "Pago" && row.status !== "Cancelado")
+        .reduce((sum, row) => sum + Math.abs(Number(row.valor || 0)), 0);
+      const saidasPendentes = monthRows
+        .filter((row) => isOutcome(row) && row.status !== "Pago" && row.status !== "Cancelado")
+        .reduce((sum, row) => sum + Math.abs(Number(row.valor || 0)), 0);
+      const gastosFixosVencendo = getFixedExpensesForMonth(monthKey)
+        .filter((row) => row.status !== "Cancelado")
+        .reduce((sum, row) => sum + Math.abs(Number(row.valor || 0)), 0);
+
+      return {
+        entradas,
+        saidas,
+        lucro: entradas - saidas,
+        entradasPendentes,
+        saidasPendentes,
+        gastosFixosVencendo,
+        lancamentos: monthRows.length
+      };
+    }
+
+    function getFixedExpensesForMonth(monthKey = todayIso().slice(0, 7)) {
+      return getActiveFixedExpenses().map((row) => ({
+        ...row,
+        prazo: fixedExpenseDate(row, monthKey)
+      }));
+    }
+
+    function getUpcomingMonthlyDue(days = 7) {
+      return state.mensalidades.filter((row) => (
+        row.status !== "Pago" &&
+        row.status !== "Cancelado" &&
+        row.prazo &&
+        isWithinNextDays(row.prazo, days)
+      ));
+    }
+
+    function getUpcomingFixedExpenses(days = 7) {
+      const monthKey = todayIso().slice(0, 7);
+      return getFixedExpensesForMonth(monthKey).filter((row) => (
+        row.prazo &&
+        isWithinNextDays(row.prazo, days)
+      ));
+    }
+
+    function getPendingProjectFinalPayments() {
+      return state.financeiro.filter((row) => (
+        row.source === "projeto" &&
+        row.installment === "final" &&
+        row.status !== "Pago" &&
+        row.status !== "Cancelado"
+      ));
+    }
+
+    function fillCompanyForm() {
+      if (!companyForm || !state?.companyProfile) return;
+      Object.entries(state.companyProfile).forEach(([key, value]) => {
+        const input = companyForm.elements[key];
+        if (input) input.value = value || "";
+      });
+    }
+
+    function maybeShowOnboarding() {
+      if (!state || state.setupDone || !onboardingPanel || !onboardingBackdrop) return;
+      onboardingPanel.hidden = false;
+      onboardingBackdrop.hidden = false;
+    }
+
+    function hideOnboarding() {
+      onboardingPanel.hidden = true;
+      onboardingBackdrop.hidden = true;
+    }
+
+    function closeDetailPanel() {
+      if (!detailPanel || !detailBackdrop) return;
+      detailPanel.hidden = true;
+      detailBackdrop.hidden = true;
+      detailContent.innerHTML = "";
+    }
+
     function getFinancialTotals() {
       const paid = state.financeiro.filter((row) => row.status === "Pago");
       const paidIncome = paid
@@ -403,5 +561,3 @@
 
       return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     }
-
-    render();

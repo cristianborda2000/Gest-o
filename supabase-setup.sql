@@ -15,6 +15,15 @@ alter table public.app_state enable row level security;
 grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on public.app_state to authenticated;
 
+-- Libera a tabela para sincronizacao em tempo real entre navegadores e celular.
+do $$
+begin
+  alter publication supabase_realtime add table public.app_state;
+exception
+  when duplicate_object then null;
+  when undefined_object then null;
+end $$;
+
 create policy "Ler meus dados"
 on public.app_state
 for select

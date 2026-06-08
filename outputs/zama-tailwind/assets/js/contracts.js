@@ -4,7 +4,7 @@
   a partir dos dados cadastrados em Clientes.
 */
 
-    function printClientContract(client) {
+    async function printClientContract(client) {
       if (!client) return;
 
       const win = window.open("", "_blank");
@@ -13,20 +13,50 @@
         return;
       }
 
-      win.document.write(buildClientContractHtml(client));
+      const contractRecord = registerContractHistory(client);
+      await persist();
+      render();
+
+      win.document.write(buildClientContractHtml(client, contractRecord));
       win.document.close();
       win.focus();
       setTimeout(() => win.print(), 300);
     }
 
-    function buildClientContractHtml(client) {
+    function registerContractHistory(client) {
+      const year = new Date().getFullYear();
+      const sequence = String((state.contractHistory || []).length + 1).padStart(4, "0");
+      const record = {
+        id: createId(),
+        numero: `ZAMA-${year}-${sequence}`,
+        clienteId: client.id,
+        cliente: client.nome,
+        plano: client.plano,
+        valor: Number(client.valor || 0),
+        implantacao: Number(client.implantacao || 0),
+        data: new Date().toISOString()
+      };
+
+      state.contractHistory.unshift(record);
+      return record;
+    }
+
+    function buildClientContractHtml(client, contractRecord = {}) {
       const installationValue = Number(client.implantacao || 0);
       const firstPayment = installationValue / 2;
       const finalPayment = installationValue / 2;
       const monthlyValue = Number(client.valor || 0);
       const dueDay = client.prazo ? client.prazo.split("-")[2] : "";
       const contractDate = new Date().toLocaleDateString("pt-BR");
-      const logoUrl = new URL("zama-logo.png", window.location.href).href;
+      const company = {
+        ...defaultCompanyProfile,
+        ...(state.companyProfile || {})
+      };
+      const logoUrl = /^https?:|^data:/.test(company.logoUrl || "")
+        ? company.logoUrl
+        : new URL(company.logoUrl || "zama-logo.png", window.location.href).href;
+      const companyName = company.nome || "ZAMA";
+      const companySignature = company.assinatura || companyName;
 
       const c = (value) => escapeHtml(value || "____________________________");
       const money = (value) => currency.format(Number(value || 0));
@@ -45,6 +75,7 @@
             .header img { width: 210px; height: auto; }
             .header-info { text-align: right; font-size: 12px; color: #7a4b22; }
             .header-info strong { display: block; color: #111827; font-size: 18px; letter-spacing: 0; margin-bottom: 4px; }
+            .contract-number { display: inline-block; margin-top: 6px; padding: 5px 8px; border-radius: 6px; background: #fff1dc; color: #9a3412; font-weight: 700; }
             .title { text-align: center; margin: 18px 0 20px; }
             .title h1 { font-size: 20px; margin: 0 0 6px; text-transform: uppercase; letter-spacing: 0; }
             .title p { color: #7a4b22; margin: 0; }
@@ -69,11 +100,17 @@
           <button class="no-print" onclick="window.print()" style="position:fixed;right:16px;top:16px;padding:10px 14px;border:0;border-radius:8px;background:#ff6b00;color:#fff;cursor:pointer;">Imprimir / Salvar PDF</button>
           <main class="document">
             <div class="header">
-              <img src="${logoUrl}" alt="ZAMA">
+              <img src="${logoUrl}" alt="${c(companyName)}">
               <div class="header-info">
-                <strong>ZAMA</strong>
+                <strong>${c(companyName)}</strong>
                 Prestação de serviços digitais<br>
+                ${company.telefone ? `${c(company.telefone)}<br>` : ""}
+                ${company.email ? `${c(company.email)}<br>` : ""}
+                ${company.endereco ? `${c(company.endereco)}<br>` : ""}
+                ${company.cidade ? `${c(company.cidade)}<br>` : ""}
+                ${company.documento ? `CNPJ/CPF: ${c(company.documento)}<br>` : ""}
                 Contrato gerado em ${contractDate}
+                <span class="contract-number">Contrato ${c(contractRecord.numero)}</span>
               </div>
             </div>
 
@@ -174,7 +211,7 @@
                 <span class="small">CONTRATANTE</span>
               </div>
               <div class="signature">
-                ZAMA<br>
+                ${c(companySignature)}<br>
                 <span class="small">CONTRATADA</span>
               </div>
             </div>

@@ -12,6 +12,16 @@
       ? window.supabase.createClient(supabaseUrl, supabaseAnonKey)
       : null;
     const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+    const defaultCompanyProfile = {
+      nome: "ZAMA",
+      documento: "",
+      email: "",
+      telefone: "",
+      endereco: "",
+      cidade: "",
+      assinatura: "",
+      logoUrl: "zama-logo.png"
+    };
 
     // Cada chave em modules representa uma aba do menu lateral.
     // fields controla o formulario; rows serve como dados de exemplo iniciais.

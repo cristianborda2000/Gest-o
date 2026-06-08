@@ -8,6 +8,7 @@
       Object.keys(modules).forEach((key) => {
         if (!savedState[key]) savedState[key] = [];
       });
+      normalizeUtilityState(savedState);
       normalizeFinanceRows(savedState);
       normalizeFixedExpenseRows(savedState);
       normalizeAgendaRows(savedState);
@@ -16,6 +17,23 @@
       savedState.clientes.forEach((client) => syncClientMonthly(client, savedState));
       savedState.mensalidades.forEach((monthly) => syncMonthlyFinance(monthly, savedState));
       return savedState;
+    }
+
+    function normalizeUtilityState(targetState) {
+      targetState.companyProfile = {
+        ...defaultCompanyProfile,
+        ...(targetState.companyProfile || {})
+      };
+      if (!Array.isArray(targetState.contractHistory)) {
+        targetState.contractHistory = [];
+      }
+      targetState.backups = targetState.backups || {};
+      targetState.setupDone = Boolean(
+        targetState.setupDone ||
+        targetState.companyProfile.documento ||
+        targetState.companyProfile.telefone ||
+        targetState.companyProfile.endereco
+      );
     }
 
     function createInitialState() {
@@ -110,6 +128,45 @@
       return true;
     }
 
+    async function subscribeToCloudChanges(user) {
+      if (!supabaseClient || !user) return;
+
+      await unsubscribeFromCloudChanges();
+      cloudChangesChannel = supabaseClient
+        .channel(`app-state-${user.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: cloudStateTable,
+            filter: `user_id=eq.${user.id}`
+          },
+          (payload) => {
+            if (payload.eventType === "DELETE") {
+              state = createInitialState();
+            } else if (payload.new?.data) {
+              state = prepareState(payload.new.data);
+            } else {
+              return;
+            }
+
+            localStorage.setItem(storageKey, JSON.stringify(state));
+            setCloudStatus("Atualizado", "");
+            render();
+          }
+        )
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") setCloudStatus("Sincronizado", "");
+        });
+    }
+
+    async function unsubscribeFromCloudChanges() {
+      if (!supabaseClient || !cloudChangesChannel) return;
+      await supabaseClient.removeChannel(cloudChangesChannel);
+      cloudChangesChannel = null;
+    }
+
     async function loadState() {
       const cloudState = await loadCloudState();
       if (cloudState) {
@@ -147,14 +204,37 @@
       cloudStatus.classList.toggle("error", statusClass === "error");
     }
 
+    function shouldCollapseFormByDefault(module) {
+      return module !== "dashboard";
+    }
+
+    function getFormToggleLabel() {
+      if (formPanelOpen) return editingId ? "Cancelar" : "Recolher";
+
+      const labels = {
+        projetos: "Adicionar projeto",
+        marketing: "Adicionar campanha",
+        clientes: "Adicionar cliente",
+        mensalidades: "Adicionar mensalidade",
+        agenda: "Adicionar tarefa",
+        rh: "Adicionar colaborador",
+        financeiro: financeView === "fixos" ? "Adicionar gasto" : "Adicionar lançamento"
+      };
+
+      return labels[activeModule] || "Adicionar";
+    }
+
     // Troca de aba no menu lateral e permite abrir sub-abas como financeiro/fixos.
     function goToModule(module, options = {}) {
       activeModule = module;
       if (options.financeView) financeView = options.financeView;
       if (options.agendaView) agendaView = options.agendaView;
       editingId = null;
+      formPanelOpen = !shouldCollapseFormByDefault(module);
       searchInput.value = "";
       navButtons.forEach((item) => item.classList.toggle("active", item.dataset.module === module));
+      document.querySelector(".nav").classList.remove("expanded");
+      closeDetailPanel();
       render();
     }
 
@@ -166,8 +246,14 @@
       listTitle.textContent = currentModule.listTitle;
       formTitle.textContent = editingId ? "Editar registro" : currentModule.formTitle;
       workspace.classList.toggle("dashboard-mode", activeModule === "dashboard");
+      workspace.classList.toggle("form-collapsed", activeModule !== "dashboard" && !formPanelOpen);
       formPanel.style.display = activeModule === "dashboard" ? "none" : "";
+      formPanel.classList.toggle("collapsed", activeModule !== "dashboard" && !formPanelOpen);
+      recordForm.hidden = activeModule !== "dashboard" && !formPanelOpen;
+      formToggleBtn.textContent = getFormToggleLabel();
+      formToggleBtn.setAttribute("aria-expanded", String(formPanelOpen));
       searchInput.style.display = activeModule === "dashboard" ? "none" : "";
+      renderListControls();
 
       renderStats();
       if (activeModule === "dashboard") {
@@ -179,7 +265,36 @@
       renderTable();
     }
 
+    function renderListControls() {
+      const isDashboard = activeModule === "dashboard";
+      statusFilterInput.hidden = isDashboard;
+      financeMonthFilter.hidden = activeModule !== "financeiro";
+      viewToggleBtn.hidden = isDashboard;
+      viewToggleBtn.textContent = listViewMode === "table" ? "Cards" : "Tabela";
+      financeMonthFilter.value = financeMonth;
+
+      if (isDashboard) return;
+
+      const options = getStatusFilterOptions();
+      if (!options.includes(statusFilter)) statusFilter = "Todos";
+      statusFilterInput.innerHTML = options
+        .map((option) => `<option value="${escapeHtml(option)}" ${option === statusFilter ? "selected" : ""}>${escapeHtml(option)}</option>`)
+        .join("");
+    }
+
     function renderStats() {
+      if (activeModule === "financeiro") {
+        const totals = getFinancialTotals();
+        const monthTotals = getFinancialTotalsForMonth(financeMonth);
+        if (financeView === "fixos") {
+          setStat("Gastos fixos ativos", getActiveFixedExpenses().length, "Total mensal fixo", currency.format(totals.fixedMonthlyExpenses), "Vencem no mês", currency.format(monthTotals.gastosFixosVencendo), "Saídas pagas", currency.format(monthTotals.saidas));
+          return;
+        }
+
+        setStat("Entradas do mês", currency.format(monthTotals.entradas), "Saídas do mês", currency.format(monthTotals.saidas), "Lucro do mês", currency.format(monthTotals.lucro), "Pendências", currency.format(monthTotals.entradasPendentes + monthTotals.saidasPendentes));
+        return;
+      }
+
       if (activeModule === "dashboard") {
         const totals = getFinancialTotals();
         const openProjects = state.projetos.filter((row) => !/conclu/i.test(row.status || "")).length;
