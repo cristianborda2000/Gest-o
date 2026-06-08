@@ -647,6 +647,24 @@
         position: sticky;
         top: 0;
         z-index: 5;
+        padding: 12px;
+        gap: 12px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 0 12px;
+      }
+
+      .brand-logo {
+        width: 96px;
+        margin: 0;
+      }
+
+      .brand strong {
+        margin-bottom: 2px;
       }
 
       .nav {
@@ -670,7 +688,7 @@
 
     @media (max-width: 640px) {
       .main {
-        padding: 18px;
+        padding: 14px;
       }
 
       .topbar,
@@ -680,15 +698,160 @@
       }
 
       .actions {
-        justify-content: flex-start;
+        display: grid;
+        grid-template-columns: 1fr;
+        justify-content: stretch;
+      }
+
+      .button {
+        justify-content: center;
+        width: 100%;
       }
 
       .stats {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .stat {
+        min-height: 84px;
+        padding: 12px;
+      }
+
+      .stat strong {
+        font-size: 19px;
+        line-height: 1.2;
+        overflow-wrap: anywhere;
       }
 
       .form-grid {
         grid-template-columns: 1fr;
+      }
+
+      .dashboard-grid {
+        padding: 12px;
+        gap: 12px;
+      }
+
+      .dashboard-block {
+        min-height: auto;
+        padding: 12px;
+      }
+
+      .chart-row {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+
+      .donut-wrap {
+        align-items: flex-start;
+      }
+
+      .donut {
+        width: 104px;
+        height: 104px;
+      }
+
+      .donut:after {
+        width: 64px;
+        height: 64px;
+      }
+
+      .calendar-toolbar {
+        align-items: stretch;
+      }
+
+      .calendar-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+        width: 100%;
+      }
+
+      .calendar-grid {
+        grid-template-columns: repeat(7, minmax(42px, 1fr));
+        min-width: 0;
+        padding: 12px;
+      }
+
+      .calendar-weekday {
+        min-height: 30px;
+        font-size: 10px;
+      }
+
+      .calendar-day {
+        min-height: 92px;
+        padding: 5px;
+        gap: 4px;
+      }
+
+      .calendar-date {
+        font-size: 11px;
+      }
+
+      .calendar-item {
+        border-radius: 6px;
+        padding: 4px;
+        font-size: 10px;
+      }
+
+      table,
+      thead,
+      tbody,
+      tr,
+      td {
+        display: block;
+        width: 100%;
+        min-width: 0;
+      }
+
+      table {
+        min-width: 0;
+        border-collapse: separate;
+        border-spacing: 0 12px;
+        padding: 0 12px 12px;
+      }
+
+      thead {
+        display: none;
+      }
+
+      tr {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        overflow: hidden;
+      }
+
+      td {
+        display: grid;
+        grid-template-columns: 104px minmax(0, 1fr);
+        gap: 10px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--line);
+        overflow-wrap: anywhere;
+      }
+
+      td:last-child {
+        border-bottom: 0;
+      }
+
+      td::before {
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      td:nth-child(1)::before { content: "Nome"; }
+      td:nth-child(2)::before { content: "Detalhes"; }
+      td:nth-child(3)::before { content: "Status"; }
+      td:nth-child(4)::before { content: "Data"; }
+      td:nth-child(5)::before { content: "Valor"; }
+      td:nth-child(6)::before { content: "Acoes"; }
+
+      .row-actions {
+        justify-content: flex-start;
+        flex-wrap: wrap;
       }
     }
 

@@ -45,6 +45,21 @@ const storageKey = "admin-simples-v1";
 Isso significa que os dados nao ficam dentro dos arquivos do projeto. Para levar
 dados de uma versao para outra, use os botoes `Exportar dados` e `Importar dados`.
 
+## Dados em todos os navegadores
+
+Para acessar os mesmos dados no computador, celular e qualquer navegador, o
+projeto precisa sair do `localStorage` e usar um banco de dados online.
+
+O caminho recomendado para este projeto e:
+
+1. Criar um projeto no Supabase.
+2. Criar login para proteger o sistema.
+3. Criar uma tabela para guardar o estado do sistema.
+4. Trocar `loadState()` e `persist()` em `assets/js/core.js` para ler/salvar no Supabase.
+5. Colocar as chaves publicas do Supabase nas Environment Variables da Vercel.
+
+Enquanto isso nao for feito, cada navegador tera seus proprios dados locais.
+
 ## Logica principal
 
 - Projetos geram duas entradas financeiras automaticamente: 50% no inicio e 50% na conclusao.
