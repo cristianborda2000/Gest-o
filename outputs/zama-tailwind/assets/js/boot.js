@@ -32,6 +32,20 @@
     const logoutBtn = document.getElementById("logoutBtn");
     const userEmail = document.getElementById("userEmail");
     const cloudStatus = document.getElementById("cloudStatus");
+    const settingsBtn = document.getElementById("settingsBtn");
+    const settingsPanel = document.getElementById("settingsPanel");
+    const settingsBackdrop = document.getElementById("settingsBackdrop");
+    const settingsCloseBtn = document.getElementById("settingsCloseBtn");
+
+    function openSettings() {
+      settingsPanel.hidden = false;
+      settingsBackdrop.hidden = false;
+    }
+
+    function closeSettings() {
+      settingsPanel.hidden = true;
+      settingsBackdrop.hidden = true;
+    }
 
     function showAuth(message = "") {
       authError.textContent = message;
@@ -84,6 +98,13 @@
       button.addEventListener("click", () => {
         goToModule(button.dataset.module);
       });
+    });
+
+    settingsBtn.addEventListener("click", openSettings);
+    settingsCloseBtn.addEventListener("click", closeSettings);
+    settingsBackdrop.addEventListener("click", closeSettings);
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeSettings();
     });
 
     document.getElementById("resetBtn").addEventListener("click", async () => {
@@ -142,6 +163,7 @@
     logoutBtn.addEventListener("click", async () => {
       await supabaseClient.auth.signOut();
       state = null;
+      closeSettings();
       showAuth();
     });
 

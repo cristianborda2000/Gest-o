@@ -224,21 +224,119 @@
       justify-content: flex-end;
     }
 
-    .user-pill {
-      display: none !important;
+    .settings-button {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      background: #fff;
+      color: #ff6b00;
+      cursor: pointer;
+      box-shadow: 0 8px 22px rgba(255, 107, 0, .12);
+    }
+
+    .settings-button:hover {
+      border-color: #ff6b00;
+      background: #fff7ed;
+    }
+
+    .settings-button svg {
+      width: 22px;
+      height: 22px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .settings-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      background: rgba(17, 24, 39, .22);
+    }
+
+    .settings-panel {
+      position: fixed;
+      top: 18px;
+      right: 18px;
+      z-index: 31;
+      width: min(380px, calc(100vw - 28px));
+      max-height: calc(100vh - 36px);
+      overflow-y: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 24px 60px rgba(31, 41, 55, .22);
+    }
+
+    .settings-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+      background: #fff7ed;
+    }
+
+    .settings-head h2 {
+      margin: 0 0 4px;
+      font-size: 18px;
+      color: var(--ink);
+    }
+
+    .settings-head p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .settings-content {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+    }
+
+    .settings-section {
+      display: grid;
+      gap: 5px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fffaf5;
+    }
+
+    .settings-label {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    .settings-section strong {
+      color: var(--text);
+      overflow-wrap: anywhere;
+      font-size: 14px;
+    }
+
+    .settings-actions {
+      display: grid;
+      gap: 10px;
     }
 
     .cloud-status {
-      display: none !important;
+      color: #047857;
     }
 
     .cloud-status.saving {
-      background: #fff7ed;
       color: #9a3412;
     }
 
     .cloud-status.error {
-      background: #fde2e2;
       color: #9b1c1c;
     }
 
@@ -783,7 +881,7 @@
         height: 100vh;
         padding: 14px 8px;
         gap: 16px;
-        background: linear-gradient(180deg, #5d8df7 0%, #3d63d8 100%);
+        background: linear-gradient(180deg, #ff7a00 0%, #f05a00 100%);
         overflow-y: auto;
       }
 
@@ -844,7 +942,7 @@
         height: 22px;
         display: grid;
         place-items: center;
-        background: rgba(255, 255, 255, .28) !important;
+        background: rgba(255, 255, 255, .30) !important;
       }
 
       .main {
@@ -873,25 +971,24 @@
       }
 
       .actions {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 8px;
-        justify-content: stretch;
+        justify-content: flex-end;
       }
 
-      .user-pill {
-        width: 100%;
-        max-width: none;
-        justify-content: center;
+      .settings-button {
+        width: 42px;
+        height: 42px;
       }
 
-      .cloud-status {
-        width: 100%;
-        max-width: none;
-        justify-content: center;
+      .settings-panel {
+        top: auto;
+        right: 10px;
+        bottom: 10px;
+        left: 106px;
+        width: auto;
+        max-height: calc(100vh - 20px);
       }
 
-      .button {
+      .settings-actions .button {
         justify-content: center;
         width: 100%;
         min-height: 38px;
