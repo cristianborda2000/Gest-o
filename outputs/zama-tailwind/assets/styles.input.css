@@ -2947,3 +2947,649 @@ tbody tr td:last-child {
     border-radius: 0;
   }
 }
+
+/* REFERENCIA APP ZAMA 2026
+   Primeiro passo visual: base clara, sidebar de escritorio no desktop
+   e navegacao inferior mais limpa no mobile. */
+:root {
+  --ref-bg: #f6f7f9;
+  --ref-sidebar: #ffffff;
+  --ref-text: #0f172a;
+  --ref-muted: #8b9bb2;
+  --ref-line: #e8edf3;
+  --ref-orange: #f97316;
+  --ref-orange-soft: #fff3e8;
+  --ref-shadow: 0 10px 24px rgba(15, 23, 42, .07);
+}
+
+body {
+  background: var(--ref-bg) !important;
+  color: var(--ref-text) !important;
+}
+
+.app {
+  grid-template-columns: 288px minmax(0, 1fr) !important;
+}
+
+.sidebar {
+  background: var(--ref-sidebar) !important;
+  color: #344762 !important;
+  border-right: 1px solid var(--ref-line) !important;
+  box-shadow: none !important;
+  padding: 28px 18px !important;
+}
+
+.brand {
+  border-bottom: 0 !important;
+  padding: 8px 18px 28px !important;
+}
+
+.brand-logo {
+  width: 150px !important;
+  filter: none !important;
+}
+
+.brand strong {
+  color: var(--ref-text) !important;
+  font-size: 18px !important;
+  letter-spacing: 0 !important;
+}
+
+.brand span {
+  color: var(--ref-muted) !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  letter-spacing: .08em !important;
+  text-transform: uppercase;
+}
+
+.nav {
+  gap: 10px !important;
+}
+
+.nav button {
+  min-height: 50px !important;
+  border-radius: 8px !important;
+  padding: 12px 18px !important;
+  color: #526681 !important;
+  background: transparent !important;
+  font-weight: 700 !important;
+  box-shadow: none !important;
+}
+
+.nav button:hover {
+  background: #fff7ed !important;
+  color: #9a3412 !important;
+  transform: none !important;
+}
+
+.nav button.active,
+.nav button[data-module="dashboard"].active {
+  background: #fff1e7 !important;
+  color: #d94b00 !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.nav button.active::before {
+  inset: 10px auto 10px 0 !important;
+  width: 4px !important;
+  background: var(--ref-orange) !important;
+}
+
+.nav button.active .nav-icon,
+.nav button[data-module="dashboard"].active .nav-icon {
+  color: #d94b00 !important;
+  stroke: #d94b00 !important;
+}
+
+.main {
+  padding: 30px 36px 42px !important;
+}
+
+.topbar {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin-bottom: 34px !important;
+}
+
+.topbar h1 {
+  font-size: 28px !important;
+  font-weight: 850 !important;
+}
+
+.topbar p {
+  color: var(--ref-muted) !important;
+  font-weight: 700 !important;
+}
+
+.settings-button {
+  border-color: var(--ref-line) !important;
+  background: #ffffff !important;
+  color: #8aa0bb !important;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, .05) !important;
+}
+
+.settings-button:hover {
+  border-color: #fdba74 !important;
+  color: #ea580c !important;
+  background: #fff7ed !important;
+}
+
+.stats {
+  gap: 18px !important;
+  margin-bottom: 26px !important;
+}
+
+.stat {
+  min-height: 158px !important;
+  border: 1px solid var(--ref-line) !important;
+  border-bottom: 3px solid var(--ref-orange) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  box-shadow: var(--ref-shadow) !important;
+}
+
+.stat::after {
+  display: none !important;
+}
+
+.stat span {
+  color: #8394ad !important;
+  font-size: 12px !important;
+  font-weight: 850 !important;
+  letter-spacing: .04em !important;
+  text-transform: uppercase;
+}
+
+.stat strong {
+  color: #101827 !important;
+  font-size: clamp(26px, 2.4vw, 34px) !important;
+  font-weight: 900 !important;
+}
+
+.planner-hero,
+.metric-card,
+.dashboard-block,
+.panel,
+.record-card,
+.hero-balance {
+  border: 1px solid var(--ref-line) !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  box-shadow: var(--ref-shadow) !important;
+}
+
+.planner-hero {
+  border-bottom: 3px solid var(--ref-orange) !important;
+  min-height: 278px !important;
+}
+
+.hero-kicker,
+.dashboard-block h3,
+.panel-head h2,
+.metric-card small {
+  color: #8a9bb3 !important;
+  letter-spacing: .04em !important;
+  text-transform: uppercase;
+}
+
+.planner-hero h2 {
+  color: #0f172a !important;
+  font-weight: 900 !important;
+}
+
+.planner-hero p {
+  color: #55657a !important;
+}
+
+.hero-chip,
+.button.primary {
+  background: linear-gradient(135deg, #ff9f1c 0%, #f97316 58%, #ea580c 100%) !important;
+  border-color: #f97316 !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 22px rgba(249, 115, 22, .22) !important;
+}
+
+.hero-chip:hover,
+.button.primary:hover {
+  background: linear-gradient(135deg, #fb923c 0%, #ea580c 58%, #c2410c 100%) !important;
+  border-color: var(--ref-orange) !important;
+}
+
+.metric-row {
+  gap: 18px !important;
+}
+
+.metric-card {
+  border-bottom: 3px solid var(--ref-orange) !important;
+}
+
+.metric-card span {
+  border-radius: 8px !important;
+}
+
+.dashboard-grid {
+  gap: 18px !important;
+}
+
+.dashboard-block,
+.record-card {
+  min-height: 190px !important;
+}
+
+.summary-list li {
+  border-bottom-color: var(--ref-line) !important;
+}
+
+.summary-list li[data-go]:hover {
+  background: #fff7ed !important;
+}
+
+.panel-head {
+  background: #ffffff !important;
+  border-bottom-color: var(--ref-line) !important;
+}
+
+.search,
+.filter-select,
+.month-filter,
+.form input,
+.form select,
+.form textarea {
+  border-color: var(--ref-line) !important;
+  box-shadow: none !important;
+}
+
+.search:focus,
+.filter-select:focus,
+.month-filter:focus,
+.form input:focus,
+.form select:focus,
+.form textarea:focus {
+  border-color: #fdba74 !important;
+  outline: 3px solid rgba(249, 115, 22, .14) !important;
+}
+
+@media (max-width: 980px) {
+  .app {
+    grid-template-columns: 1fr !important;
+  }
+
+  .sidebar {
+    padding: 14px !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--ref-line) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  body {
+    background: #f6f7f9 !important;
+  }
+
+  .sidebar {
+    height: 76px !important;
+    padding: 7px 10px 9px !important;
+    border-top: 1px solid var(--ref-line) !important;
+    border-bottom: 0 !important;
+    box-shadow: 0 -10px 24px rgba(15, 23, 42, .08) !important;
+  }
+
+  .nav {
+    display: grid !important;
+    grid-auto-flow: column;
+    grid-auto-columns: 72px;
+    gap: 8px !important;
+    overflow-x: auto !important;
+  }
+
+  .nav button {
+    width: 72px !important;
+    min-height: 60px !important;
+    padding: 7px 3px !important;
+    border-radius: 8px !important;
+    color: #8aa0bb !important;
+    background: #ffffff !important;
+    font-size: 10px !important;
+  }
+
+  .nav button:hover {
+    background: #fff7ed !important;
+    color: #ea580c !important;
+  }
+
+  .nav button.active,
+  .nav button[data-module="dashboard"].active {
+    background: #fff1e7 !important;
+    color: #ea580c !important;
+    box-shadow: inset 0 -3px 0 #f97316 !important;
+  }
+
+  .nav button.active::before {
+    display: none !important;
+  }
+
+  .nav button.active .nav-icon,
+  .nav button[data-module="dashboard"].active .nav-icon {
+    color: #ea580c !important;
+    stroke: #ea580c !important;
+  }
+
+  .main {
+    padding: 22px 18px 98px !important;
+  }
+
+  .topbar {
+    min-height: auto !important;
+    margin-bottom: 24px !important;
+  }
+
+  .topbar h1 {
+    color: #0f172a !important;
+    font-size: 24px !important;
+  }
+
+  .topbar p {
+    color: #8a9bb3 !important;
+  }
+
+  .actions {
+    top: 0 !important;
+    right: 0 !important;
+  }
+
+  .settings-button {
+    width: 40px !important;
+    height: 40px !important;
+    color: #ea580c !important;
+  }
+
+  .stats {
+    margin-top: 0 !important;
+    gap: 14px !important;
+  }
+
+  .stat {
+    min-height: 112px !important;
+  }
+
+  .planner-hero {
+    min-height: 0 !important;
+  }
+
+  .metric-card,
+  .dashboard-block,
+  .panel,
+  .record-card {
+    box-shadow: 0 8px 18px rgba(15, 23, 42, .06) !important;
+  }
+}
+
+/* REFERENCIA EM TONS LARANJA
+   Ajuste fino da paleta: a interface segue a referencia enviada,
+   mas troca azuis/rosas de destaque por variacoes da identidade ZAMA. */
+:root {
+  --zama-paper: #f7f8fb;
+  --zama-card: #ffffff;
+  --zama-ink: #0f172a;
+  --zama-muted: #8797ad;
+  --zama-line: #e8edf3;
+  --zama-orange-1: #fff7ed;
+  --zama-orange-2: #ffedd5;
+  --zama-orange-3: #fdba74;
+  --zama-orange-4: #fb923c;
+  --zama-orange-5: #f97316;
+  --zama-orange-6: #ea580c;
+  --zama-orange-7: #c2410c;
+  --zama-soft-shadow: 0 8px 22px rgba(15, 23, 42, .06);
+}
+
+body {
+  background: var(--zama-paper) !important;
+}
+
+.sidebar {
+  background: #ffffff !important;
+}
+
+.brand strong {
+  color: var(--zama-ink) !important;
+}
+
+.brand span,
+.hero-kicker,
+.metric-card small,
+.dashboard-block h3,
+.panel-head h2,
+thead th {
+  color: var(--zama-muted) !important;
+}
+
+.nav-icon {
+  color: currentColor !important;
+}
+
+.nav button {
+  color: #667991 !important;
+}
+
+.nav button:hover {
+  background: var(--zama-orange-1) !important;
+  color: var(--zama-orange-7) !important;
+}
+
+.nav button.active,
+.nav button[data-module="dashboard"].active {
+  background: linear-gradient(90deg, #fff1e7 0%, #fff7ed 100%) !important;
+  color: var(--zama-orange-6) !important;
+}
+
+.nav button.active::before {
+  background: linear-gradient(180deg, var(--zama-orange-4), var(--zama-orange-6)) !important;
+}
+
+.topbar h1,
+.planner-hero h2,
+.stat strong,
+.metric-card strong,
+.dashboard-block strong,
+.panel-head strong {
+  color: var(--zama-ink) !important;
+}
+
+.topbar p,
+.planner-hero p,
+.summary-list span,
+.empty {
+  color: #728198 !important;
+}
+
+.stats {
+  grid-template-columns: repeat(4, minmax(180px, 1fr)) !important;
+}
+
+.stat,
+.metric-card,
+.dashboard-block,
+.panel,
+.record-card,
+.hero-balance,
+.planner-hero {
+  border-color: var(--zama-line) !important;
+  background: var(--zama-card) !important;
+  box-shadow: var(--zama-soft-shadow) !important;
+}
+
+.stat:hover,
+.metric-card:hover,
+.dashboard-block:hover,
+.record-card:hover {
+  box-shadow: 0 14px 30px rgba(194, 65, 12, .10) !important;
+}
+
+.stat {
+  border-bottom-color: var(--zama-orange-5) !important;
+}
+
+.stat:nth-child(1),
+.metric-card.green {
+  border-bottom-color: #10b981 !important;
+}
+
+.stat:nth-child(2),
+.metric-card.orange {
+  border-bottom-color: var(--zama-orange-5) !important;
+}
+
+.stat:nth-child(3),
+.metric-card.red {
+  border-bottom-color: #ef4444 !important;
+}
+
+.stat:nth-child(4),
+.metric-card.blue {
+  border-bottom-color: var(--zama-orange-3) !important;
+}
+
+.metric-card.green span {
+  background: linear-gradient(135deg, #ecfdf5, #d1fae5) !important;
+  color: #059669 !important;
+}
+
+.metric-card.red span {
+  background: linear-gradient(135deg, #fff1f2, #fee2e2) !important;
+  color: #dc2626 !important;
+}
+
+.metric-card.orange span,
+.metric-card.blue span {
+  background: linear-gradient(135deg, var(--zama-orange-1), var(--zama-orange-2)) !important;
+  color: var(--zama-orange-7) !important;
+}
+
+.planner-hero {
+  background:
+    linear-gradient(135deg, rgba(255, 247, 237, .72), rgba(255, 255, 255, .98) 42%),
+    #ffffff !important;
+  border-bottom-color: var(--zama-orange-5) !important;
+}
+
+.hero-balance {
+  border-top: 3px solid var(--zama-orange-5) !important;
+}
+
+.hero-chip,
+.button.primary,
+.quick-add {
+  background: linear-gradient(135deg, var(--zama-orange-4), var(--zama-orange-5) 58%, var(--zama-orange-6)) !important;
+  border-color: var(--zama-orange-5) !important;
+  color: #ffffff !important;
+}
+
+.hero-chip:hover,
+.button.primary:hover,
+.quick-add:hover {
+  background: linear-gradient(135deg, var(--zama-orange-5), var(--zama-orange-6) 58%, var(--zama-orange-7)) !important;
+}
+
+.settings-button,
+.icon-button,
+.view-toggle,
+.filter-select,
+.month-filter,
+.search {
+  border-color: var(--zama-line) !important;
+  background: #ffffff !important;
+}
+
+.settings-button,
+.icon-button,
+.view-toggle {
+  color: var(--zama-orange-6) !important;
+}
+
+.dashboard-block h3,
+.panel-head h2 {
+  font-size: 13px !important;
+  font-weight: 900 !important;
+}
+
+.summary-list strong {
+  font-weight: 900 !important;
+}
+
+.chart-track {
+  background: #f3f5f8 !important;
+}
+
+.chart-fill,
+.chart-fill.green,
+.chart-fill.red {
+  background: linear-gradient(90deg, var(--zama-orange-3), var(--zama-orange-5)) !important;
+}
+
+.donut {
+  background:
+    conic-gradient(var(--zama-orange-5) var(--p), #f1f5f9 0) !important;
+}
+
+.badge.blue {
+  background: var(--zama-orange-1) !important;
+  color: var(--zama-orange-7) !important;
+}
+
+.badge.yellow {
+  background: var(--zama-orange-2) !important;
+  color: var(--zama-orange-7) !important;
+}
+
+.panel-head {
+  background: #ffffff !important;
+}
+
+tbody tr {
+  box-shadow: 0 6px 16px rgba(15, 23, 42, .045) !important;
+}
+
+tbody tr:hover {
+  background: #fffaf5 !important;
+}
+
+.mascot-bubble {
+  border-color: var(--zama-orange-3) !important;
+  color: var(--zama-orange-7) !important;
+}
+
+@media (max-width: 980px) {
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .stat {
+    min-height: 118px !important;
+  }
+
+  .stat span {
+    font-size: 10px !important;
+  }
+
+  .nav button {
+    background: #ffffff !important;
+    color: #8a9bb3 !important;
+  }
+
+  .nav button.active,
+  .nav button[data-module="dashboard"].active {
+    background: var(--zama-orange-1) !important;
+    color: var(--zama-orange-6) !important;
+  }
+}
