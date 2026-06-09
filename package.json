@@ -6,7 +6,7 @@
   "scripts": {
     "build:css": "node ./node_modules/tailwindcss/lib/cli.js -i ./outputs/zama-tailwind/assets/styles.input.css -o ./outputs/zama-tailwind/assets/styles.css --minify",
     "dev:css": "node ./node_modules/tailwindcss/lib/cli.js -i ./outputs/zama-tailwind/assets/styles.input.css -o ./outputs/zama-tailwind/assets/styles.css --watch",
-    "serve": "vite --host 127.0.0.1 --port 5173 ./outputs/zama-tailwind"
+    "serve": "vite --host 127.0.0.1 --port 5174 ./outputs/zama-tailwind"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.20",

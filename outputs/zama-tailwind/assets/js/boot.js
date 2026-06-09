@@ -9,6 +9,7 @@
     let financeView = "movimentacoes";
     let agendaView = "lista";
     let calendarMonth = todayIso().slice(0, 7);
+    let selectedCalendarDate = todayIso();
     let financeMonth = todayIso().slice(0, 7);
     let statusFilter = "Todos";
     let listViewMode = window.matchMedia("(max-width: 640px)").matches ? "cards" : "table";
@@ -124,6 +125,9 @@
     navButtons.forEach((button) => {
       button.addEventListener("click", () => {
         goToModule(button.dataset.module);
+        if (window.matchMedia("(max-width: 640px)").matches) {
+          document.querySelector(".nav").classList.remove("expanded");
+        }
       });
     });
 
@@ -140,6 +144,9 @@
         activeModule = "agenda";
         agendaView = "lista";
         navButtons.forEach((item) => item.classList.toggle("active", item.dataset.module === "agenda"));
+      }
+      if (activeModule === "agenda" && agendaView === "calendario") {
+        agendaView = "lista";
       }
 
       editingId = null;

@@ -247,13 +247,18 @@
       const currentModule = getCurrentModuleConfig();
       listTitle.textContent = currentModule.listTitle;
       formTitle.textContent = editingId ? "Editar registro" : currentModule.formTitle;
+      const calendarOnlyMode = activeModule === "agenda" && agendaView === "calendario";
       workspace.classList.toggle("dashboard-mode", activeModule === "dashboard");
+      workspace.classList.toggle("agenda-calendar-mode", calendarOnlyMode);
       workspace.classList.toggle("form-collapsed", activeModule !== "dashboard" && !formPanelOpen);
-      formPanel.style.display = activeModule === "dashboard" ? "none" : "";
+      formPanel.style.display = activeModule === "dashboard" || calendarOnlyMode ? "none" : "";
       formPanel.classList.toggle("collapsed", activeModule !== "dashboard" && !formPanelOpen);
-      recordForm.hidden = activeModule !== "dashboard" && !formPanelOpen;
+      recordForm.hidden = calendarOnlyMode || (activeModule !== "dashboard" && !formPanelOpen);
       formToggleBtn.textContent = getFormToggleLabel();
       formToggleBtn.setAttribute("aria-expanded", String(formPanelOpen));
+      quickAddBtn.title = activeModule === "agenda" ? "Nova tarefa" : "Adicionar registro";
+      quickAddBtn.setAttribute("aria-label", quickAddBtn.title);
+      quickAddBtn.classList.toggle("agenda-context", activeModule === "agenda");
       searchInput.style.display = activeModule === "dashboard" ? "none" : "";
       renderListControls();
 

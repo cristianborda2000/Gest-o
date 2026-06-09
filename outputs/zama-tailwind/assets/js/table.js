@@ -284,15 +284,43 @@
     function renderCalendar() {
       const [year, month] = calendarMonth.split("-").map(Number);
       const firstDay = new Date(year, month - 1, 1);
-      const start = new Date(firstDay);
-      start.setDate(firstDay.getDate() - firstDay.getDay());
       const monthLabel = firstDay.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
       const weekdays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-      const days = Array.from({ length: 42 }, (_, index) => {
-        const date = new Date(start);
-        date.setDate(start.getDate() + index);
-        return date;
-      });
+      const daysInMonth = new Date(year, month, 0).getDate();
+      const leadingBlanks = firstDay.getDay();
+      const monthDates = Array.from({ length: daysInMonth }, (_, index) => new Date(year, month - 1, index + 1));
+      const trailingBlanks = (7 - ((leadingBlanks + daysInMonth) % 7)) % 7;
+      const days = [
+        ...Array.from({ length: leadingBlanks }, () => null),
+        ...monthDates,
+        ...Array.from({ length: trailingBlanks }, () => null)
+      ];
+      if (!selectedCalendarDate || !selectedCalendarDate.startsWith(calendarMonth)) {
+        selectedCalendarDate = todayIso().startsWith(calendarMonth) ? todayIso() : `${calendarMonth}-01`;
+      }
+      const monthDays = days
+        .filter(Boolean)
+        .map((date) => {
+          const dateKey = toIsoDate(date);
+          return {
+            date,
+            dateKey,
+            items: getAgendaForDate(dateKey, calendarMonth)
+          };
+        })
+        .filter((day) => day.items.length);
+      const monthItems = monthDays.flatMap((day) => day.items);
+      const agendaSummary = {
+        total: monthItems.length,
+        pending: monthItems.filter((item) => ["yellow", "blue"].includes(statusClass(item.status))).length,
+        done: monthItems.filter((item) => statusClass(item.status) === "green").length,
+        canceled: monthItems.filter((item) => item.generatedType === "expense" || statusClass(item.status) === "red").length
+      };
+      const selectedDate = new Date(`${selectedCalendarDate}T00:00:00`);
+      const selectedItems = getAgendaForDate(selectedCalendarDate, calendarMonth);
+      const upcomingDays = monthDays
+        .filter((day) => day.dateKey !== selectedCalendarDate && day.dateKey >= selectedCalendarDate)
+        .slice(0, 6);
 
       tableArea.innerHTML = `
         ${renderAgendaTabs()}
@@ -304,20 +332,32 @@
             <button class="button" type="button" data-calendar-action="next">Próximo mês</button>
           </div>
         </div>
+        <div class="calendar-summary">
+          <div class="calendar-summary-card orange"><span>Tarefas no mes</span><strong>${agendaSummary.total}</strong></div>
+          <div class="calendar-summary-card orange"><span>Pendentes</span><strong>${agendaSummary.pending}</strong></div>
+          <div class="calendar-summary-card green"><span>Concluidas</span><strong>${agendaSummary.done}</strong></div>
+          <div class="calendar-summary-card red"><span>Canceladas / vencimentos</span><strong>${agendaSummary.canceled}</strong></div>
+        </div>
+        <div class="calendar-legend" aria-label="Legenda da agenda">
+          <span><i class="orange"></i>Pendente</span>
+          <span><i class="green"></i>Concluido</span>
+          <span><i class="red"></i>Cancelado / vencimento</span>
+        </div>
         <div class="table-wrap">
           <div class="calendar-grid">
             ${weekdays.map((day) => `<div class="calendar-weekday">${day}</div>`).join("")}
             ${days.map((date) => {
+              if (!date) return '<div class="calendar-day empty" aria-hidden="true"></div>';
               const dateKey = toIsoDate(date);
               const items = getAgendaForDate(dateKey, calendarMonth);
               const classes = [
                 "calendar-day",
-                date.getMonth() + 1 === month ? "" : "muted",
-                dateKey === todayIso() ? "today" : ""
+                dateKey === todayIso() ? "today" : "",
+                dateKey === selectedCalendarDate ? "selected" : ""
               ].filter(Boolean).join(" ");
 
               return `
-                <div class="${classes}">
+                <div class="${classes}" role="button" tabindex="0" data-calendar-date="${dateKey}">
                   <div class="calendar-date">${date.getDate()}</div>
                   ${items.map((item) => `
                     <div class="calendar-item ${item.generatedType === "expense" ? "expense" : statusClass(item.status)}">
@@ -331,6 +371,46 @@
             }).join("")}
           </div>
         </div>
+        <div class="calendar-mobile-list" aria-label="Tarefas do mês">
+          <h3>${selectedDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "long" })}</h3>
+          <section class="calendar-mobile-day selected">
+            <div class="calendar-mobile-date">
+              <strong>${selectedDate.getDate()}</strong>
+              <span>${selectedDate.toLocaleDateString("pt-BR", { weekday: "short" })}</span>
+            </div>
+            <div class="calendar-mobile-items">
+              ${selectedItems.length ? selectedItems.map((item) => `
+                <div class="calendar-mobile-item ${item.generatedType === "expense" ? "expense" : statusClass(item.status)}">
+                  <div>
+                    <strong>${escapeHtml(item.nome || "-")}</strong>
+                    <span>${escapeHtml(item.hora || "--:--")} - ${escapeHtml(item.tipo || "Agenda")}</span>
+                  </div>
+                  <small>${escapeHtml(item.status || "Pendente")}</small>
+                </div>
+              `).join("") : '<div class="empty">Nenhuma tarefa neste dia.</div>'}
+            </div>
+          </section>
+          ${upcomingDays.length ? "<h3>Próximos dias</h3>" : ""}
+          ${upcomingDays.length ? upcomingDays.map((day) => `
+            <section class="calendar-mobile-day">
+              <div class="calendar-mobile-date">
+                <strong>${day.date.getDate()}</strong>
+                <span>${day.date.toLocaleDateString("pt-BR", { weekday: "short" })}</span>
+              </div>
+              <div class="calendar-mobile-items">
+                ${day.items.map((item) => `
+                  <div class="calendar-mobile-item ${item.generatedType === "expense" ? "expense" : statusClass(item.status)}">
+                    <div>
+                      <strong>${escapeHtml(item.nome || "-")}</strong>
+                      <span>${escapeHtml(item.hora || "--:--")} - ${escapeHtml(item.tipo || "Agenda")}</span>
+                    </div>
+                    <small>${escapeHtml(item.status || "Pendente")}</small>
+                  </div>
+                `).join("")}
+              </div>
+            </section>
+          `).join("") : ""}
+        </div>
       `;
 
       attachAgendaTabEvents();
@@ -338,10 +418,25 @@
         button.addEventListener("click", () => {
           if (button.dataset.calendarAction === "today") {
             calendarMonth = todayIso().slice(0, 7);
+            selectedCalendarDate = todayIso();
           } else {
             calendarMonth = shiftMonth(calendarMonth, button.dataset.calendarAction === "next" ? 1 : -1);
+            selectedCalendarDate = `${calendarMonth}-01`;
           }
           render();
+        });
+      });
+      tableArea.querySelectorAll("[data-calendar-date]").forEach((day) => {
+        day.addEventListener("click", () => {
+          selectedCalendarDate = day.dataset.calendarDate;
+          render();
+        });
+        day.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            selectedCalendarDate = day.dataset.calendarDate;
+            render();
+          }
         });
       });
     }
