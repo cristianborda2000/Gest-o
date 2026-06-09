@@ -67,32 +67,43 @@
           <meta charset="utf-8">
           <title>Contrato - ${c(client.nome)}</title>
           <style>
-            @page { size: A4; margin: 3cm 2cm 2cm 3cm; }
+            @page {
+              size: A4;
+              margin-top: 3cm;
+              margin-right: 2cm;
+              margin-bottom: 2cm;
+              margin-left: 3cm;
+            }
             * { box-sizing: border-box; }
+            :root {
+              --zama-orange: #ff6b00;
+              --zama-orange-dark: #c2410c;
+              --zama-orange-soft: #fff3e4;
+            }
             html, body { margin: 0; padding: 0; background: #ffffff; color: #000000; }
             body { font-family: "Times New Roman", Times, serif; font-size: 12pt; line-height: 1.5; }
             .document { width: 100%; margin: 0; }
-            .print-action { position: fixed; right: 16px; top: 16px; z-index: 10; padding: 10px 14px; border: 0; border-radius: 6px; background: #ff6b00; color: #ffffff; cursor: pointer; font-family: Arial, Helvetica, sans-serif; font-size: 13px; }
-            .brand-header { display: grid; grid-template-columns: 4cm 1fr; gap: 14pt; align-items: center; margin-bottom: 18pt; padding-bottom: 10pt; border-bottom: 1px solid #000000; }
+            .print-action { position: fixed; right: 16px; top: 16px; z-index: 10; padding: 10px 14px; border: 0; border-radius: 6px; background: var(--zama-orange); color: #ffffff; cursor: pointer; font-family: Arial, Helvetica, sans-serif; font-size: 13px; }
+            .brand-header { display: grid; grid-template-columns: 4cm 1fr; gap: 14pt; align-items: center; margin-bottom: 18pt; padding-bottom: 10pt; border-bottom: 2px solid var(--zama-orange); }
             .logo { width: 4cm; max-height: 2.2cm; object-fit: contain; }
             .company-info { text-align: right; font-size: 10pt; line-height: 1.25; }
-            .company-info strong { display: block; font-size: 12pt; margin-bottom: 2pt; text-transform: uppercase; }
-            .contract-number { margin: 0 0 12pt; text-align: right; text-indent: 0; font-size: 10pt; }
+            .company-info strong { display: block; font-size: 12pt; margin-bottom: 2pt; text-transform: uppercase; color: var(--zama-orange-dark); }
+            .contract-number { margin: 0 0 12pt; text-align: right; text-indent: 0; font-size: 10pt; color: var(--zama-orange-dark); }
             .title { text-align: center; margin: 0 0 22pt; }
-            .title h1 { margin: 0; font-size: 12pt; font-weight: 700; text-transform: uppercase; line-height: 1.5; }
+            .title h1 { margin: 0; font-size: 12pt; font-weight: 700; text-transform: uppercase; line-height: 1.5; color: var(--zama-orange-dark); }
             .title p { margin: 6pt 0 0; font-size: 10pt; line-height: 1.2; text-align: center; text-indent: 0; }
-            h2 { margin: 12pt 0 6pt; font-size: 12pt; font-weight: 700; text-transform: uppercase; line-height: 1.5; break-after: avoid; }
+            h2 { margin: 12pt 0 6pt; font-size: 12pt; font-weight: 700; text-transform: uppercase; line-height: 1.5; break-after: avoid; color: var(--zama-orange-dark); border-bottom: 1px solid var(--zama-orange); padding-bottom: 2pt; }
             p { margin: 0 0 6pt; text-align: justify; text-indent: 1.25cm; }
             ul { margin: 0 0 6pt 1.25cm; padding: 0; }
             li { margin: 0 0 4pt; text-align: justify; }
             table { width: 100%; border-collapse: collapse; margin: 6pt 0 12pt; font-size: 11pt; line-height: 1.3; }
             th, td { border: 1px solid #000000; padding: 5pt 6pt; vertical-align: top; text-align: left; }
-            th { width: 34%; font-weight: 700; background: #f2f2f2; }
+            th { width: 34%; font-weight: 700; background: var(--zama-orange-soft); color: var(--zama-orange-dark); }
             .payment-table th { width: auto; }
             .qualification p, .no-indent { text-indent: 0; }
             .clause { break-inside: avoid; }
             .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5cm; margin-top: 48pt; break-inside: avoid; }
-            .signature { text-align: center; border-top: 1px solid #000000; padding-top: 6pt; min-height: 42pt; }
+            .signature { text-align: center; border-top: 1px solid var(--zama-orange-dark); padding-top: 6pt; min-height: 42pt; }
             .signature p { margin: 0; text-align: center; text-indent: 0; line-height: 1.3; }
             .small { font-size: 10pt; }
             @media print { .no-print { display: none; } body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }

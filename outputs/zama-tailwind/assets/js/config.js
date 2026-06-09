@@ -23,8 +23,10 @@
       logoUrl: "zama-logo.png"
     };
 
-    // Cada chave em modules representa uma aba do menu lateral.
+    // Arquitetura dos modulos:
+    // cada chave em modules representa uma aba do menu lateral.
     // fields controla o formulario; rows serve como dados de exemplo iniciais.
+    // Para criar um modulo/campo novo, comece por este objeto.
     const modules = {
       dashboard: {
         title: "ZAMA",

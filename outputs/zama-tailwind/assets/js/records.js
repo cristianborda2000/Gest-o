@@ -109,7 +109,7 @@
 
     function statusClass(status = "") {
       if (/conclu|pago|ativo/i.test(status)) return "green";
-      if (/atras|paus|afast|deslig/i.test(status)) return "red";
+      if (/cancel|atras|paus|afast|deslig/i.test(status)) return "red";
       if (/andamento|agend/i.test(status)) return "blue";
       return "yellow";
     }
@@ -337,7 +337,7 @@
 
     function getAgendaForDate(dateKey, monthKey) {
       const agendaItems = state.agenda
-        .filter((row) => row.prazo === dateKey && row.status !== "Cancelado");
+        .filter((row) => row.prazo === dateKey);
       const expenseItems = getExpenseDueItemsForDate(dateKey, monthKey);
 
       return [...agendaItems, ...expenseItems]

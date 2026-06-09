@@ -10,6 +10,7 @@ manutencao futura.
 ```text
 outputs/zama-tailwind/
   index.html                  Tela principal e estrutura base
+  ARQUITETURA.md              Explicacao completa dos fluxos e arquivos
   zama-logo.png               Logo usado no sistema e no contrato
   assets/styles.input.css     CSS de origem, edite este arquivo
   assets/styles.css           CSS compilado pelo Tailwind
@@ -22,6 +23,8 @@ outputs/zama-tailwind/
   assets/js/records.js        Regras de negocio, financeiro, agenda e utilitarios
   assets/js/boot.js           Inicializacao e eventos globais
 ```
+
+Para entender a arquitetura inteira, leia primeiro `ARQUITETURA.md`.
 
 ## Onde mexer
 
@@ -86,6 +89,13 @@ config.js -> core.js -> forms.js -> dashboard.js -> contracts.js -> table.js -> 
 
 Essa ordem e importante porque os arquivos compartilham funcoes e variaveis
 globais. Se criar um arquivo novo, coloque-o antes de `boot.js`.
+
+## Regra de manutencao
+
+- Edite `assets/styles.input.css`, nunca `assets/styles.css` diretamente.
+- Depois de mexer no visual, rode `npm.cmd run build:css`.
+- Depois de mexer em JavaScript, rode `node --check` no arquivo alterado.
+- Antes de mudar regras automaticas, leia `ARQUITETURA.md`.
 
 ## Instalar dependencias
 

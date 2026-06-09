@@ -29,8 +29,33 @@
       const monthlyTotal = Math.max(state.mensalidades.filter((row) => row.status !== "Cancelado").length, 1);
       const monthlyPaidPercent = Math.round((monthlyPaidCount / monthlyTotal) * 100);
       const monthTotals = getFinancialTotalsForMonth(todayIso().slice(0, 7));
+      const mascotMood = monthTotals.lucro >= 0 ? "positive" : "attention";
+      const mascotMessage = monthTotals.lucro >= 0
+        ? "Seu mês está no verde. Quer conferir os recebimentos?"
+        : "Atenção nas saídas deste mês. Vamos revisar as pendências?";
 
       tableArea.innerHTML = `
+        <section class="planner-hero dashboard-link" data-go="financeiro">
+          <div class="planner-hero-copy">
+            <span class="hero-kicker">Controle financeiro ZAMA</span>
+            <h2>Visão geral do seu negócio</h2>
+            <p>${escapeHtml(mascotMessage)}</p>
+            <div class="hero-actions">
+              <button class="hero-chip" type="button" data-go="financeiro">Ver financeiro</button>
+              <button class="hero-chip" type="button" data-go="agenda">Ver agenda</button>
+              <button class="hero-chip" type="button" data-go="mensalidades">Mensalidades</button>
+            </div>
+          </div>
+          <div class="mascot-stage ${mascotMood}" role="button" tabindex="0" aria-label="Mascote ZAMA">
+            <div class="mascot-bubble" id="mascotBubble">${escapeHtml(mascotMessage)}</div>
+            ${renderChromaMascot()}
+          </div>
+          <div class="hero-balance">
+            <span>Saldo em caixa</span>
+            <strong class="${totals.balance >= 0 ? "money-positive" : "money-negative"}">${currency.format(totals.balance)}</strong>
+            <small>${todayAgenda.length} tarefa(s) hoje</small>
+          </div>
+        </section>
         <div class="metric-row">
           ${metricCard("Receita do mês", currency.format(monthTotals.entradas), "↗", "green", "financeiro")}
           ${metricCard("Despesas do mês", currency.format(monthTotals.saidas), "↘", "red", "financeiro")}
@@ -39,17 +64,6 @@
           ${metricCard("Clientes ativos", state.clientes.filter((row) => row.status === "Ativo").length, "◎", "blue", "clientes")}
         </div>
         <div class="dashboard-grid">
-          <div class="dashboard-block dashboard-link" data-go="financeiro">
-            <h3>ZAMA</h3>
-            <div class="donut-wrap">
-              <img src="zama-logo.png" alt="ZAMA" style="width: min(260px, 100%); height: auto;">
-              <div class="donut-info">
-                <span>Painel administrativo integrado</span>
-                <strong>${currency.format(totals.balance)}</strong>
-                <span>Saldo em caixa confirmado</span>
-              </div>
-            </div>
-          </div>
           <div class="dashboard-block dashboard-link" data-go="financeiro">
             <h3>Financeiro</h3>
             <ul class="summary-list">
@@ -125,6 +139,150 @@
       `;
 
       attachDashboardLinks();
+      setupChromaMascots();
+      attachMascotInteraction({
+        balance: totals.balance,
+        profit: monthTotals.lucro,
+        tasks: todayAgenda.length,
+        monthlyDue: upcomingMonthly.length
+      });
+    }
+
+    function renderChromaMascot() {
+      return `
+        <div class="chroma-mascot" data-video-src="assets/gato-zama-green.mov?v=20260609-2">
+          <canvas class="dashboard-mascot chroma-canvas" width="480" height="480" aria-label="Mascote ZAMA" hidden></canvas>
+        </div>
+      `;
+    }
+
+    // O video original tem fundo verde. Ele nao entra no HTML visivel:
+    // criamos um video em memoria, removemos o verde frame a frame e exibimos so o canvas.
+    function setupChromaMascots() {
+      tableArea.querySelectorAll(".chroma-mascot").forEach((wrap) => {
+        const canvas = wrap.querySelector(".chroma-canvas");
+        const source = wrap.dataset.videoSrc;
+        if (!source || !canvas || !canvas.getContext) return;
+
+        const video = document.createElement("video");
+        video.src = source;
+        video.muted = true;
+        video.loop = true;
+        video.autoplay = true;
+        video.playsInline = true;
+        video.preload = "auto";
+
+        const ctx = canvas.getContext("2d");
+        const buffer = document.createElement("canvas");
+        buffer.width = canvas.width;
+        buffer.height = canvas.height;
+        const bufferCtx = buffer.getContext("2d");
+        bufferCtx.imageSmoothingEnabled = true;
+        bufferCtx.imageSmoothingQuality = "high";
+        let active = true;
+        let lastDraw = 0;
+
+        const drawVideoContain = () => {
+          const canvasRatio = buffer.width / buffer.height;
+          const videoRatio = video.videoWidth / video.videoHeight;
+          let width = buffer.width;
+          let height = buffer.height;
+          let x = 0;
+          let y = 0;
+
+          if (videoRatio > canvasRatio) {
+            height = buffer.width / videoRatio;
+            y = (buffer.height - height) / 2;
+          } else {
+            width = buffer.height * videoRatio;
+            x = (buffer.width - width) / 2;
+          }
+
+          bufferCtx.clearRect(0, 0, buffer.width, buffer.height);
+          bufferCtx.drawImage(video, x, y, width, height);
+        };
+
+        const draw = (time = 0) => {
+          if (!active) return;
+          if (time - lastDraw < 50) {
+            requestAnimationFrame(draw);
+            return;
+          }
+          lastDraw = time;
+
+          if (video.readyState >= 2 && video.videoWidth && video.videoHeight) {
+            canvas.hidden = false;
+            drawVideoContain();
+            const frame = bufferCtx.getImageData(0, 0, buffer.width, buffer.height);
+            const data = frame.data;
+
+            for (let i = 0; i < data.length; i += 4) {
+              const r = data[i];
+              const g = data[i + 1];
+              const b = data[i + 2];
+              const greenDominance = g - Math.max(r, b);
+
+              if (g > 62 && greenDominance > 16 && g > r * 1.08 && g > b * 1.08) {
+                data[i + 3] = 0;
+              } else if (g > 48 && greenDominance > 8) {
+                data[i + 3] = Math.max(0, 255 - greenDominance * 14);
+                data[i + 1] = Math.max(Math.max(r, b), g - greenDominance * 1.8);
+              } else if (g > r && g > b) {
+                data[i + 1] = Math.max(Math.max(r, b), g - Math.max(0, greenDominance * .42));
+              }
+            }
+
+            ctx.putImageData(frame, 0, 0);
+          }
+
+          requestAnimationFrame(draw);
+        };
+
+        video.addEventListener("canplay", () => {
+          canvas.hidden = false;
+        });
+        video.addEventListener("error", () => {
+          active = false;
+          canvas.hidden = true;
+        });
+        video.play().catch(() => {
+          canvas.hidden = true;
+        });
+        draw();
+      });
+    }
+
+    function attachMascotInteraction(context) {
+      const stage = tableArea.querySelector(".mascot-stage");
+      const bubble = tableArea.querySelector("#mascotBubble");
+      if (!stage || !bubble) return;
+
+      const messages = [
+        context.profit >= 0 ? "Lucro positivo no mês. Bom sinal." : "O lucro está negativo. Vale revisar despesas.",
+        context.balance >= 0 ? "Saldo em caixa confirmado." : "Caixa no vermelho. Hora de priorizar recebimentos.",
+        context.tasks ? `Você tem ${context.tasks} tarefa(s) para hoje.` : "Agenda tranquila hoje.",
+        context.monthlyDue ? `${context.monthlyDue} mensalidade(s) vencendo em breve.` : "Nenhuma mensalidade urgente nos próximos dias."
+      ];
+      let index = 0;
+
+      const talk = () => {
+        index = (index + 1) % messages.length;
+        bubble.textContent = messages[index];
+        stage.classList.remove("is-talking");
+        stage.offsetHeight;
+        stage.classList.add("is-talking");
+      };
+
+      stage.addEventListener("click", (event) => {
+        event.stopPropagation();
+        talk();
+      });
+      stage.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          talk();
+        }
+      });
     }
 
     function chartRow(label, value, maxValue, colorClass) {

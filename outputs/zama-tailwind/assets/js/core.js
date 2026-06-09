@@ -193,6 +193,7 @@
     }
 
     async function persist() {
+      // Salvamento central: primeiro grava no navegador, depois tenta sincronizar com Supabase.
       localStorage.setItem(storageKey, JSON.stringify(state));
       return saveCloudState();
     }
@@ -239,6 +240,7 @@
     }
 
     function render() {
+      // Renderizacao central: sempre que dados/modulo mudam, esta funcao redesenha a tela.
       const module = modules[activeModule];
       moduleTitle.textContent = module.title;
       moduleSubtitle.textContent = module.subtitle;

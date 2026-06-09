@@ -320,8 +320,9 @@
                 <div class="${classes}">
                   <div class="calendar-date">${date.getDate()}</div>
                   ${items.map((item) => `
-                    <div class="calendar-item ${item.generatedType === "expense" ? "expense" : item.status === "Concluído" ? "completed" : ""}">
+                    <div class="calendar-item ${item.generatedType === "expense" ? "expense" : statusClass(item.status)}">
                       <strong>${escapeHtml(item.hora || "--:--")} ${escapeHtml(item.tipo || "Agenda")}</strong>
+                      <span class="calendar-item-status">${escapeHtml(item.status || "Pendente")}</span>
                       ${escapeHtml(item.nome || "-")}
                     </div>
                   `).join("")}
