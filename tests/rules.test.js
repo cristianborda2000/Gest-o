@@ -9,6 +9,7 @@ const source = [
 ].map((file) => fs.readFileSync(file, "utf8")).join("\n");
 
 const sandbox = {
+  assert,
   console,
   Intl,
   Date,
