@@ -11,9 +11,28 @@ create table public.app_state (
 );
 
 alter table public.app_state enable row level security;
+alter table public.app_state force row level security;
 
 grant usage on schema public to anon, authenticated;
+revoke all on public.app_state from anon;
 grant select, insert, update, delete on public.app_state to authenticated;
+
+create or replace function public.set_app_state_updated_at()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+create trigger set_app_state_updated_at
+before update on public.app_state
+for each row
+execute function public.set_app_state_updated_at();
 
 -- Libera a tabela para sincronizacao em tempo real entre navegadores e celular.
 do $$

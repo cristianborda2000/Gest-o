@@ -232,15 +232,46 @@
 
       const totals = getFinancialTotalsForMonth(financeMonth);
       const fixedDue = getFixedExpensesForMonth(financeMonth).length;
+      const projected = totals.entradas - totals.saidas + totals.entradasPendentes - totals.saidasPendentes - totals.gastosFixosVencendo;
+      const monthRows = state.financeiro.filter((row) => rowMatchesMonth(row, financeMonth));
+      const overdue = monthRows.filter((row) => row.status !== "Pago" && row.status !== "Cancelado" && row.prazo && row.prazo < todayIso());
+      const categories = getFinanceCategoryBreakdown(monthRows);
       return `
         <div class="mini-dashboard">
           <div><span>Entradas pagas</span><strong class="money-positive">${currency.format(totals.entradas)}</strong></div>
           <div><span>Saídas pagas</span><strong class="money-negative">${currency.format(totals.saidas)}</strong></div>
           <div><span>Lucro do mês</span><strong class="${totals.lucro >= 0 ? "money-positive" : "money-negative"}">${currency.format(totals.lucro)}</strong></div>
-          <div><span>Pendências</span><strong>${currency.format(totals.entradasPendentes + totals.saidasPendentes)}</strong></div>
+          <div><span>Previsto no mês</span><strong class="${projected >= 0 ? "money-positive" : "money-negative"}">${currency.format(projected)}</strong></div>
           <div><span>Fixos vencendo</span><strong>${fixedDue} - ${currency.format(totals.gastosFixosVencendo)}</strong></div>
         </div>
+        <div class="finance-insights">
+          <section>
+            <h3>Pendências do mês</h3>
+            <dl>
+              <div><dt>Entradas pendentes</dt><dd class="money-positive">${currency.format(totals.entradasPendentes)}</dd></div>
+              <div><dt>Saídas pendentes</dt><dd class="money-negative">${currency.format(totals.saidasPendentes)}</dd></div>
+              <div><dt>Lançamentos vencidos</dt><dd>${overdue.length}</dd></div>
+            </dl>
+          </section>
+          <section>
+            <h3>Categorias principais</h3>
+            ${categories.length ? `<ul>${categories.map((item) => `<li><span>${escapeHtml(item.label)}</span><strong class="${item.value >= 0 ? "money-positive" : "money-negative"}">${currency.format(Math.abs(item.value))}</strong></li>`).join("")}</ul>` : '<p>Nenhum lançamento neste mês.</p>'}
+          </section>
+        </div>
       `;
+    }
+
+    function getFinanceCategoryBreakdown(rows) {
+      const grouped = rows.reduce((acc, row) => {
+        const key = row.responsavel || row.tipo || "Sem categoria";
+        acc[key] = (acc[key] || 0) + Number(row.valor || 0);
+        return acc;
+      }, {});
+
+      return Object.entries(grouped)
+        .map(([label, value]) => ({ label, value }))
+        .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+        .slice(0, 4);
     }
 
     function renderContractHistory() {

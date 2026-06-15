@@ -3,8 +3,8 @@
 // O Tailwind procura classes no HTML e nos arquivos JS que montam partes da tela.
 module.exports = {
   content: [
-    "./outputs/zama-tailwind/index.html",
-    "./outputs/zama-tailwind/assets/js/**/*.js"
+    "./app/index.html",
+    "./app/assets/js/**/*.js"
   ],
   theme: {
     extend: {

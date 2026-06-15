@@ -8,9 +8,8 @@ manutencao futura.
 ## Mapa rapido do projeto
 
 ```text
-outputs/zama-tailwind/
+app/
   index.html                  Tela principal e estrutura base
-  ARQUITETURA.md              Explicacao completa dos fluxos e arquivos
   zama-logo.png               Logo usado no sistema e no contrato
   assets/styles.input.css     CSS de origem, edite este arquivo
   assets/styles.css           CSS compilado pelo Tailwind
@@ -24,7 +23,7 @@ outputs/zama-tailwind/
   assets/js/boot.js           Inicializacao e eventos globais
 ```
 
-Para entender a arquitetura inteira, leia primeiro `ARQUITETURA.md`.
+Para entender a arquitetura inteira, leia primeiro `../docs/ARQUITETURA.md`.
 
 ## Onde mexer
 
@@ -59,7 +58,7 @@ Passos no Supabase:
 
 1. Abra o projeto Supabase.
 2. Va em `SQL Editor`.
-3. Execute o arquivo `supabase-setup.sql`, que fica na raiz do projeto.
+3. Execute o arquivo `database/supabase-setup.sql`.
 4. Va em `Authentication > Users`.
 5. Crie apenas o seu usuario de acesso.
 6. Em `Authentication`, desative cadastro publico se estiver habilitado.
@@ -136,7 +135,7 @@ npm.cmd run serve
 O arquivo principal desta versao e:
 
 ```text
-outputs/zama-tailwind/index.html
+app/index.html
 ```
 
 ## Publicar na Vercel
@@ -146,7 +145,7 @@ O projeto ja tem um arquivo `vercel.json` na raiz. Ele informa para a Vercel:
 ```text
 installCommand: npm install
 buildCommand: npm run build:css
-outputDirectory: outputs/zama-tailwind
+outputDirectory: app
 ```
 
 ### Pelo site da Vercel

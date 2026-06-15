@@ -9,7 +9,9 @@
 
       const win = window.open("", "_blank");
       if (!win) {
-        alert("Permita pop-ups para gerar o contrato em PDF.");
+        if (typeof showToast === "function") {
+          showToast("Pop-up bloqueado", "Permita pop-ups para gerar o contrato em PDF.", "error");
+        }
         return;
       }
 

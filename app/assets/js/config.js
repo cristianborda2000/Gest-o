@@ -4,11 +4,12 @@
   e dados iniciais usados quando ainda nao existe nada salvo no navegador.
 */
 
-    const storageKey = "admin-simples-v1";
-    const cloudStateTable = "app_state";
-    const supabaseUrl = "https://rtiwoctipvlsejxcptks.supabase.co";
-    const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0aXdvY3RpcHZsc2VqeGNwdGtzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4ODg1MjEsImV4cCI6MjA5NjQ2NDUyMX0.AtxF8jqXz895Hn3wAyootMtR3UBc5HwkBATmQvTts-k";
-    const supabaseClient = window.supabase
+    const appConfig = window.ZAMA_CONFIG || {};
+    const storageKey = appConfig.storageKey || "admin-simples-v1";
+    const cloudStateTable = appConfig.cloudStateTable || "app_state";
+    const supabaseUrl = appConfig.supabaseUrl || "";
+    const supabaseAnonKey = appConfig.supabaseAnonKey || "";
+    const supabaseClient = window.supabase && supabaseUrl && supabaseAnonKey
       ? window.supabase.createClient(supabaseUrl, supabaseAnonKey)
       : null;
     const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -29,7 +30,7 @@
     // Para criar um modulo/campo novo, comece por este objeto.
     const modules = {
       dashboard: {
-        title: "ZAMA",
+        title: "Dashboard geral",
         subtitle: "Visão geral de projetos, clientes, equipe e dinheiro em caixa.",
         listTitle: "Dashboard geral",
         formTitle: "",

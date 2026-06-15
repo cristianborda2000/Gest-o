@@ -14,6 +14,13 @@
         data.implantacao = Number(data.implantacao || 0);
       }
       const rowsKey = getCurrentRowsKey();
+      const validationError = validateRecordData(data, getCurrentModuleConfig(), rowsKey);
+      if (validationError) {
+        if (typeof showToast === "function") {
+          showToast("Revise o formulário", validationError, "error");
+        }
+        return;
+      }
 
       if (activeModule === "financeiro" && financeView === "fixos") {
         normalizeFixedExpenseRow(data);
@@ -66,6 +73,76 @@
       render();
     }
 
+    function validateRecordData(data, module, rowsKey) {
+      const requiredField = (module.fields || []).find((field) => field.required && !String(data[field.key] || "").trim());
+      if (requiredField) return `Preencha o campo obrigatório: ${requiredField.label}.`;
+
+      if ("email" in data && data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+        return "Informe um e-mail válido.";
+      }
+
+      if ("documento" in data && data.documento) {
+        const digits = onlyDigits(data.documento);
+        if (![11, 14].includes(digits.length)) {
+          return "Informe um CPF com 11 dígitos ou CNPJ com 14 dígitos.";
+        }
+      }
+
+      if ("telefone" in data && data.telefone) {
+        const digits = onlyDigits(data.telefone);
+        if (digits.length < 10 || digits.length > 11) {
+          return "Informe um telefone com DDD.";
+        }
+      }
+
+      if ("prazo" in data && data.prazo && !/^\d{4}-\d{2}-\d{2}$/.test(data.prazo)) {
+        return "Informe uma data válida.";
+      }
+
+      if ("inicio" in data && data.inicio && !/^\d{4}-\d{2}-\d{2}$/.test(data.inicio)) {
+        return "Informe uma data de início válida.";
+      }
+
+      if ("inicio" in data && data.inicio && data.prazo && data.inicio > data.prazo) {
+        return "A data de início não pode ser depois do prazo.";
+      }
+
+      if ((rowsKey === "financeiro" || rowsKey === "gastosFixos" || rowsKey === "mensalidades") && !Number.isFinite(Number(data.valor))) {
+        return "Informe um valor financeiro válido.";
+      }
+
+      if ((rowsKey === "financeiro" || rowsKey === "gastosFixos" || rowsKey === "mensalidades" || rowsKey === "clientes" || rowsKey === "projetos") && Number(data.valor) < 0) {
+        return "Informe o valor sem sinal negativo. O sistema ajusta entradas e saídas automaticamente.";
+      }
+
+      if ("implantacao" in data && Number(data.implantacao) < 0) {
+        return "Informe o valor de implantação sem sinal negativo.";
+      }
+
+      if (rowsKey === "gastosFixos" && (!Number.isInteger(Number(data.dia)) || Number(data.dia) < 1 || Number(data.dia) > 31)) {
+        return "O dia de vencimento precisa ficar entre 1 e 31.";
+      }
+
+      if (rowsKey === "agenda" && data.valor && (Number(data.valor) < 1 || Number(data.valor) > 5)) {
+        return "Use prioridade de 1 a 5 na agenda.";
+      }
+
+      if (rowsKey === "mensalidades" && !editingId) {
+        const duplicate = state.mensalidades.some((row) => (
+          row.nome === data.nome &&
+          row.prazo === data.prazo &&
+          row.status !== "Cancelado"
+        ));
+        if (duplicate) return "Já existe uma mensalidade para este cliente nesta data.";
+      }
+
+      return "";
+    }
+
+    function onlyDigits(value) {
+      return String(value || "").replace(/\D/g, "");
+    }
+
     function formatDate(value) {
       if (!value) return "-";
       const [year, month, day] = value.split("-");
@@ -74,6 +151,8 @@
     }
 
     function formatFieldLabel(key) {
+      if (activeModule === "agenda" && key === "valor") return "Prioridade";
+
       const labels = {
         nome: "Nome",
         responsavel: "Responsável",
@@ -101,6 +180,7 @@
     }
 
     function formatDetailValue(key, value) {
+      if (activeModule === "agenda" && key === "valor") return escapeHtml(value || "-");
       if (key === "valor" || key === "implantacao") return currency.format(Number(value || 0));
       if (key === "prazo" || key === "inicio" || key === "pagoEm") return formatDate(String(value).slice(0, 10));
       if (key === "createdAt") return new Date(value).toLocaleString("pt-BR");

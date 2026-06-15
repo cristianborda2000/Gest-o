@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ZAMA</title>
-  <link rel="stylesheet" href="assets/styles.css?v=20260608-8">
+  <link rel="stylesheet" href="assets/styles.css?v=20260615-video-mascot-2">
 </head>
 <body>
 
@@ -24,7 +24,11 @@
         Senha
         <input id="loginPassword" type="password" autocomplete="current-password" required>
       </label>
-      <button class="button primary" type="submit">Entrar</button>
+      <div class="auth-actions">
+        <button class="button primary" type="submit" id="loginSubmitBtn">Entrar</button>
+        <button class="button" type="button" id="signupBtn">Criar acesso</button>
+      </div>
+      <p class="auth-help">Para criar um novo acesso, informe e-mail e senha e clique em Criar acesso.</p>
       <p class="auth-error" id="authError" aria-live="polite"></p>
     </form>
   </section>
@@ -102,11 +106,20 @@
             <span class="settings-label">Sincronização</span>
             <strong class="cloud-status" id="cloudStatus">Nuvem aguardando</strong>
           </section>
+          <section class="settings-section">
+            <span class="settings-label">Adicionar usuário</span>
+            <div class="settings-user-form">
+              <label>E-mail do usuário<input id="newUserEmail" type="email" autocomplete="off" placeholder="usuario@email.com"></label>
+              <button class="button primary" type="button" id="createUserBtn">Enviar convite</button>
+              <p id="createUserStatus" class="settings-note" aria-live="polite">O usuário receberá um link por e-mail para acessar o sistema.</p>
+            </div>
+          </section>
           <div class="settings-actions">
             <button class="button" type="button" id="importBtn">Importar dados</button>
             <input id="importInput" type="file" accept="application/json,.json" hidden>
             <button class="button" type="button" id="exportBtn">Exportar dados</button>
             <button class="button" type="button" id="monthlyBackupBtn">Backup do mês</button>
+            <button class="button" type="button" id="loadExamplesBtn">Carregar dados de exemplo</button>
             <button class="button" type="button" id="logoutBtn">Sair da conta</button>
             <button class="button danger" type="button" id="resetBtn">Limpar tudo</button>
           </div>
@@ -187,11 +200,29 @@
     </section>
     <button class="quick-add" type="button" id="quickAddBtn" aria-label="Adicionar registro">+</button>
   </div>
+  <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="true"></div>
+  <div class="confirm-backdrop" id="confirmBackdrop" hidden></div>
+  <section class="confirm-dialog" id="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" hidden>
+    <div>
+      <span class="settings-label" id="confirmEyebrow">Confirmação</span>
+      <h2 id="confirmTitle">Confirmar ação</h2>
+      <p id="confirmMessage"></p>
+    </div>
+    <label class="confirm-input-wrap" id="confirmInputWrap">
+      Digite o texto solicitado
+      <input id="confirmInput" type="text" autocomplete="off">
+    </label>
+    <div class="confirm-actions">
+      <button class="button" type="button" id="confirmCancelBtn">Cancelar</button>
+      <button class="button danger" type="button" id="confirmOkBtn">Confirmar</button>
+    </div>
+  </section>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="assets/js/config.js"></script>
+  <script src="assets/js/env.js"></script>
+  <script src="assets/js/config.js?v=20260615-video-mascot-2"></script>
   <script src="assets/js/core.js"></script>
   <script src="assets/js/forms.js"></script>
-  <script src="assets/js/dashboard.js"></script>
+  <script src="assets/js/dashboard.js?v=20260615-video-mascot-2"></script>
   <script src="assets/js/contracts.js?v=20260609-1"></script>
   <script src="assets/js/table.js"></script>
   <script src="assets/js/records.js"></script>

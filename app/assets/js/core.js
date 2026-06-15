@@ -39,10 +39,19 @@
     function createInitialState() {
       const initialState = Object.fromEntries(Object.entries(modules).map(([key, module]) => [
         key,
-        (module.rows || []).map((row) => ({ id: createId(), ...row }))
+        []
       ]));
 
       return prepareState(initialState);
+    }
+
+    function createExampleState() {
+      const exampleState = Object.fromEntries(Object.entries(modules).map(([key, module]) => [
+        key,
+        (module.rows || []).map((row) => ({ id: createId(), createdAt: new Date().toISOString(), ...row }))
+      ]));
+
+      return prepareState(exampleState);
     }
 
     async function getCurrentUser() {
@@ -306,6 +315,22 @@
         const totals = getFinancialTotals();
         const openProjects = state.projetos.filter((row) => !/conclu/i.test(row.status || "")).length;
         setStat("Agenda de hoje", getTodayAgenda().length, "Mensalidades a receber", currency.format(totals.pendingMonthly), "Saldo em caixa", currency.format(totals.balance), "Gastos do mês", currency.format(totals.monthlyExpenses));
+        return;
+      }
+
+      if (activeModule === "agenda") {
+        const rows = state.agenda;
+        const pending = rows.filter((row) => /pendente|adiado/i.test(row.status || "")).length;
+        const done = rows.filter((row) => /conclu/i.test(row.status || "")).length;
+        const today = rows.filter((row) => row.prazo === todayIso()).length;
+        const priorities = rows
+          .map((row) => Number(row.valor || 0))
+          .filter((value) => Number.isFinite(value) && value > 0);
+        const averagePriority = priorities.length
+          ? (priorities.reduce((sum, value) => sum + value, 0) / priorities.length).toFixed(1)
+          : "-";
+
+        setStat("Tarefas na agenda", rows.length, "Pendentes / adiadas", pending, "Concluídas", done, "Hoje / prioridade média", `${today} / ${averagePriority}`);
         return;
       }
 

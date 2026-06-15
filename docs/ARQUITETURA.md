@@ -44,15 +44,12 @@ ele depende.
 ## Mapa de arquivos
 
 ```text
-outputs/zama-tailwind/
+app/
   index.html
     Estrutura principal: login, menu lateral, topbar, paineis e modais.
 
   README.md
     Guia rapido para rodar, publicar e entender o projeto.
-
-  ARQUITETURA.md
-    Este documento.
 
   zama-logo.png
     Logo usado na interface e no contrato/PDF.
@@ -327,9 +324,9 @@ npm.cmd run build:css
 Verificar sintaxe JS:
 
 ```cmd
-node --check outputs\zama-tailwind\assets\js\dashboard.js
-node --check outputs\zama-tailwind\assets\js\records.js
-node --check outputs\zama-tailwind\assets\js\table.js
+node --check app\assets\js\dashboard.js
+node --check app\assets\js\records.js
+node --check app\assets\js\table.js
 ```
 
 Subir para GitHub:

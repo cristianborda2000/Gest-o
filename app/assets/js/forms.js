@@ -40,7 +40,8 @@
         }
 
         const required = field.required ? "required" : "";
-        return `<label>${field.label}<input name="${field.key}" type="${field.type}" value="${escapeHtml(value)}" ${required}></label>`;
+        const inputAttributes = getInputAttributes(field, rowsKey);
+        return `<label>${field.label}<input name="${field.key}" type="${field.type}" value="${escapeHtml(value)}" ${required} ${inputAttributes}></label>`;
       });
 
       recordForm.innerHTML = `
@@ -80,6 +81,19 @@
           <div class="form-grid">${group.join("")}</div>
         </fieldset>
       `).join("");
+    }
+
+    function getInputAttributes(field, rowsKey) {
+      if (field.type === "number") {
+        if (field.key === "dia") return 'min="1" max="31" step="1" inputmode="numeric"';
+        if (rowsKey === "agenda" && field.key === "valor") return 'min="1" max="5" step="1" inputmode="numeric"';
+        return 'min="0" step="0.01" inputmode="decimal"';
+      }
+
+      if (field.type === "email") return 'autocomplete="email"';
+      if (field.key === "telefone") return 'autocomplete="tel" inputmode="tel"';
+      if (field.key === "documento") return 'inputmode="numeric"';
+      return "";
     }
 
     function renderFinanceTabs() {
