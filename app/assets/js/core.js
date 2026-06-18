@@ -13,7 +13,6 @@
       normalizeFixedExpenseRows(savedState);
       normalizeAgendaRows(savedState);
       normalizeMonthlyPlans(savedState);
-      savedState.projetos.forEach((project) => syncProjectFinance(project, savedState));
       savedState.clientes.forEach((client) => syncClientMonthly(client, savedState));
       savedState.mensalidades.forEach((monthly) => syncMonthlyFinance(monthly, savedState));
       return savedState;
@@ -283,11 +282,16 @@
 
     function renderListControls() {
       const isDashboard = activeModule === "dashboard";
+      const isFinanceMovements = activeModule === "financeiro" && financeView === "movimentacoes";
+      const hasActiveFilters = searchInput.value.trim() || statusFilter !== "Todos" || financeTypeFilter !== "Todos" || (activeModule === "financeiro" && financeMonth !== todayIso().slice(0, 7));
+      financeTypeFilterInput.hidden = !isFinanceMovements;
       statusFilterInput.hidden = isDashboard;
       financeMonthFilter.hidden = activeModule !== "financeiro";
+      clearFiltersBtn.hidden = isDashboard || !hasActiveFilters;
       viewToggleBtn.hidden = isDashboard;
       viewToggleBtn.textContent = listViewMode === "table" ? "Cards" : "Tabela";
       financeMonthFilter.value = financeMonth;
+      financeTypeFilterInput.value = financeTypeFilter;
 
       if (isDashboard) return;
 
@@ -295,6 +299,11 @@
       if (!options.includes(statusFilter)) statusFilter = "Todos";
       statusFilterInput.innerHTML = options
         .map((option) => `<option value="${escapeHtml(option)}" ${option === statusFilter ? "selected" : ""}>${escapeHtml(option)}</option>`)
+        .join("");
+
+      if (!["Todos", "Entrada", "Saída"].includes(financeTypeFilter)) financeTypeFilter = "Todos";
+      financeTypeFilterInput.innerHTML = ["Todos", "Entrada", "Saída"]
+        .map((option) => `<option value="${escapeHtml(option)}" ${option === financeTypeFilter ? "selected" : ""}>${escapeHtml(option)}</option>`)
         .join("");
     }
 
@@ -307,7 +316,7 @@
           return;
         }
 
-        setStat("Entradas do mês", currency.format(monthTotals.entradas), "Saídas do mês", currency.format(monthTotals.saidas), "Lucro do mês", currency.format(monthTotals.lucro), "Pendências", currency.format(monthTotals.entradasPendentes + monthTotals.saidasPendentes));
+        setStat("Saldo em caixa", currency.format(totals.balance), "A receber", currency.format(monthTotals.entradasPendentes), "A pagar", currency.format(monthTotals.saidasPendentes), "Lucro realizado", currency.format(monthTotals.lucro));
         return;
       }
 

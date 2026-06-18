@@ -41,13 +41,6 @@
         }
       }
 
-      if (activeModule === "projetos") {
-        const savedProject = editingId
-          ? state.projetos.find((row) => row.id === editingId)
-          : state.projetos[state.projetos.length - 1];
-        syncProjectFinance(savedProject, state);
-      }
-
       if (activeModule === "mensalidades") {
         const savedMonthly = editingId
           ? state.mensalidades.find((row) => row.id === editingId)
@@ -172,6 +165,7 @@
         observacoes: "Observações",
         canal: "Canal",
         tipo: "Tipo",
+        formaPagamento: "Forma de pagamento",
         dia: "Dia de vencimento",
         pagoEm: "Pago em",
         createdAt: "Criado em"
@@ -196,6 +190,7 @@
 
     // Projetos geram duas entradas financeiras: 50% no inicio e 50% na conclusao.
     function syncProjectFinance(project, targetState) {
+      return targetState;
       if (!project) return;
 
       const halfValue = Number(project.valor || 0) / 2;
@@ -223,6 +218,7 @@
     }
 
     function upsertFinanceFromProject(targetState, project, entry) {
+      return targetState;
       const existingIndex = targetState.financeiro.findIndex((row) => row.projectId === project.id && row.installment === entry.installment);
       const record = {
         tipo: "Entrada",
@@ -248,6 +244,7 @@
     }
 
     function removeProjectFinance(projectId) {
+      return state.financeiro;
       state.financeiro = state.financeiro.filter((row) => row.projectId !== projectId);
     }
 
@@ -378,13 +375,21 @@
     }
 
     function normalizeFinanceRow(row) {
+      if (row.source === "projeto" || row.projectId) {
+        delete row.source;
+        delete row.projectId;
+        delete row.installment;
+      }
+
       if (!row.tipo) {
         row.tipo = Number(row.valor || 0) < 0 || row.responsavel !== "Receita" ? "Saída" : "Entrada";
       }
 
       if (row.tipo === "Saída") {
+        row.formaPagamento = row.formaPagamento || "Pix";
         row.valor = -Math.abs(Number(row.valor || 0));
       } else {
+        row.formaPagamento = row.formaPagamento || "Pix";
         row.valor = Math.abs(Number(row.valor || 0));
       }
     }
@@ -559,12 +564,7 @@
     }
 
     function getPendingProjectFinalPayments() {
-      return state.financeiro.filter((row) => (
-        row.source === "projeto" &&
-        row.installment === "final" &&
-        row.status !== "Pago" &&
-        row.status !== "Cancelado"
-      ));
+      return [];
     }
 
     function fillCompanyForm() {

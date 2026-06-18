@@ -25,7 +25,8 @@
         const matchesSearch = JSON.stringify(row).toLowerCase().includes(query);
         const matchesStatus = passesStatusFilter(row);
         const matchesMonth = activeModule !== "financeiro" || financeView !== "movimentacoes" || rowMatchesMonth(row, financeMonth);
-        return matchesSearch && matchesStatus && matchesMonth;
+        const matchesFinanceType = activeModule !== "financeiro" || financeView !== "movimentacoes" || financeTypeFilter === "Todos" || row.tipo === financeTypeFilter;
+        return matchesSearch && matchesStatus && matchesMonth && matchesFinanceType;
       });
 
       if (activeModule === "agenda" && agendaView === "calendario") {
@@ -68,10 +69,9 @@
               <tr data-detail="${row.id}">
                 <td>
                   <strong>${escapeHtml(row.nome || "-")}</strong>
-                  ${row.source === "projeto" ? '<br><span class="badge blue">Projeto vinculado</span>' : ""}
                   ${row.source === "mensalidade" ? '<br><span class="badge blue">Mensalidade vinculada</span>' : ""}
                 </td>
-                <td>${activeModule === "agenda" ? `${escapeHtml(row.tipo || "-")} / ${escapeHtml(row.responsavel || "-")}` : activeModule === "financeiro" ? `${financeView === "fixos" ? "Saída fixa" : escapeHtml(row.tipo || "-")} / ${escapeHtml(row.responsavel || "-")}` : escapeHtml(row[optionalKey] || "-")}</td>
+                <td>${activeModule === "agenda" ? `${escapeHtml(row.tipo || "-")} / ${escapeHtml(row.responsavel || "-")}` : activeModule === "financeiro" ? `${financeView === "fixos" ? "Saída fixa" : escapeHtml(row.tipo || "-")} / ${escapeHtml(row.responsavel || "-")}${financeView === "movimentacoes" && row.formaPagamento ? `<br><small>${escapeHtml(row.formaPagamento)}</small>` : ""}` : escapeHtml(row[optionalKey] || "-")}</td>
                 <td>${renderStatusBadge(row.status)}</td>
                 <td>${activeModule === "agenda" ? `${formatDate(row.prazo)} ${escapeHtml(row.hora || "")}` : financeView === "fixos" && activeModule === "financeiro" ? `Dia ${escapeHtml(row.dia || "-")}` : formatDate(row.prazo)}</td>
                 <td class="${activeModule === "agenda" ? "" : Number(row.valor || 0) >= 0 ? "money-positive" : "money-negative"}">${activeModule === "agenda" ? escapeHtml(row.valor || "-") : currency.format(Number(row.valor || 0))}</td>
@@ -144,9 +144,6 @@
       tableArea.querySelectorAll("[data-delete]").forEach((button) => {
         button.addEventListener("click", async (event) => {
           event.stopPropagation();
-          if (activeModule === "projetos") {
-            removeProjectFinance(button.dataset.delete);
-          }
           if (activeModule === "mensalidades") {
             removeMonthlyFinance(button.dataset.delete);
           }
@@ -170,7 +167,7 @@
       const detail = activeModule === "agenda"
         ? `${escapeHtml(row.tipo || "-")} / ${escapeHtml(row.responsavel || "-")}`
         : activeModule === "financeiro"
-          ? `${financeView === "fixos" ? "Saída fixa" : escapeHtml(row.tipo || "-")} / ${escapeHtml(row.responsavel || "-")}`
+          ? `${financeView === "fixos" ? "Saída fixa" : escapeHtml(row.tipo || "-")} / ${escapeHtml(row.responsavel || "-")}${financeView === "movimentacoes" && row.formaPagamento ? ` / ${escapeHtml(row.formaPagamento)}` : ""}`
           : escapeHtml(row[optionalKey] || "-");
 
       return `
@@ -271,6 +268,82 @@
       return Object.entries(grouped)
         .map(([label, value]) => ({ label, value }))
         .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+        .slice(0, 4);
+    }
+
+    function renderFinanceSummary() {
+      if (activeModule !== "financeiro") return "";
+
+      const totals = getFinancialTotalsForMonth(financeMonth);
+      const cashTotals = getFinancialTotals();
+      const fixedDue = getFixedExpensesForMonth(financeMonth).length;
+      const projected = totals.entradas - totals.saidas + totals.entradasPendentes - totals.saidasPendentes - totals.gastosFixosVencendo;
+      const monthRows = state.financeiro.filter((row) => rowMatchesMonth(row, financeMonth));
+      const overdue = monthRows.filter((row) => row.status !== "Pago" && row.status !== "Cancelado" && row.prazo && row.prazo < todayIso());
+      const categories = getFinanceCategoryBreakdown(monthRows);
+      const paymentMethods = getFinancePaymentBreakdown(monthRows);
+      const maxChart = Math.max(totals.entradas, totals.saidas, totals.entradasPendentes, totals.saidasPendentes + totals.gastosFixosVencendo, 1);
+
+      return `
+        <div class="mini-dashboard finance-kpis">
+          <div><span>Saldo em caixa</span><strong class="${cashTotals.balance >= 0 ? "money-positive" : "money-negative"}">${currency.format(cashTotals.balance)}</strong><small>Somente valores pagos</small></div>
+          <div><span>A receber</span><strong class="money-positive">${currency.format(totals.entradasPendentes)}</strong><small>Entradas pendentes do mes</small></div>
+          <div><span>A pagar</span><strong class="money-negative">${currency.format(totals.saidasPendentes + totals.gastosFixosVencendo)}</strong><small>Saidas pendentes + fixos</small></div>
+          <div><span>Lucro realizado</span><strong class="${totals.lucro >= 0 ? "money-positive" : "money-negative"}">${currency.format(totals.lucro)}</strong><small>Entradas pagas - saidas pagas</small></div>
+          <div><span>Previsto no mes</span><strong class="${projected >= 0 ? "money-positive" : "money-negative"}">${currency.format(projected)}</strong><small>Realizado + pendencias</small></div>
+        </div>
+        <div class="finance-insights finance-insights-wide">
+          <section>
+            <h3>Entradas x saidas</h3>
+            <div class="finance-bars">
+              ${financeBar("Entradas pagas", totals.entradas, maxChart, "green")}
+              ${financeBar("Saidas pagas", totals.saidas, maxChart, "red")}
+              ${financeBar("A receber", totals.entradasPendentes, maxChart, "green")}
+              ${financeBar("A pagar", totals.saidasPendentes + totals.gastosFixosVencendo, maxChart, "red")}
+            </div>
+          </section>
+          <section>
+            <h3>Status do mes</h3>
+            <dl>
+              <div><dt>Lancamentos vencidos</dt><dd>${overdue.length}</dd></div>
+              <div><dt>Fixos vencendo</dt><dd>${fixedDue} - ${currency.format(totals.gastosFixosVencendo)}</dd></div>
+              <div><dt>Lancamentos no mes</dt><dd>${totals.lancamentos}</dd></div>
+            </dl>
+          </section>
+          <section>
+            <h3>Categorias principais</h3>
+            ${categories.length ? `<ul>${categories.map((item) => `<li><span>${escapeHtml(item.label)}</span><strong class="${item.value >= 0 ? "money-positive" : "money-negative"}">${currency.format(Math.abs(item.value))}</strong></li>`).join("")}</ul>` : '<p>Nenhum lancamento neste mes.</p>'}
+          </section>
+          <section>
+            <h3>Formas de pagamento</h3>
+            ${paymentMethods.length ? `<ul>${paymentMethods.map((item) => `<li><span>${escapeHtml(item.label)}</span><strong>${currency.format(item.value)}</strong></li>`).join("")}</ul>` : '<p>Nenhuma forma informada.</p>'}
+          </section>
+        </div>
+      `;
+    }
+
+    function financeBar(label, value, maxValue, colorClass) {
+      const width = Math.max(3, Math.round((Math.abs(value) / maxValue) * 100));
+      return `
+        <div class="finance-bar-row">
+          <div><span>${escapeHtml(label)}</span><strong>${currency.format(Math.abs(value))}</strong></div>
+          <i class="${colorClass}" style="--w:${width}%"></i>
+        </div>
+      `;
+    }
+
+    function getFinancePaymentBreakdown(rows) {
+      const grouped = rows
+        .filter((row) => row.formaPagamento && row.status === "Pago")
+        .reduce((acc, row) => {
+          const key = row.formaPagamento || "Nao informado";
+          acc[key] = (acc[key] || 0) + Math.abs(Number(row.valor || 0));
+          return acc;
+        }, {});
+
+      return Object.entries(grouped)
+        .map(([label, value]) => ({ label, value }))
+        .sort((a, b) => b.value - a.value)
         .slice(0, 4);
     }
 

@@ -167,7 +167,8 @@
         fields: [
           { key: "nome", label: "Descrição", type: "text", required: true },
           { key: "tipo", label: "Tipo", type: "select", options: ["Entrada", "Saída"] },
-          { key: "responsavel", label: "Categoria", type: "select", options: ["Receita", "Despesa", "Imposto", "Folha", "Fornecedor"] },
+          { key: "responsavel", label: "Categoria", type: "select", options: ["Receita", "Despesa", "Imposto", "Folha", "Fornecedor", "Marketing", "Sistema", "Outro"] },
+          { key: "formaPagamento", label: "Forma de pagamento", type: "select", options: ["Pix", "Dinheiro", "CartÃ£o", "Boleto", "TransferÃªncia", "Outro"] },
           { key: "prazo", label: "Vencimento", type: "date" },
           { key: "status", label: "Status", type: "select", options: ["Pendente", "Pago", "Atrasado", "Agendado"] },
           { key: "valor", label: "Valor", type: "number", required: true },

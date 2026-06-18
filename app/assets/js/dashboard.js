@@ -16,7 +16,6 @@
       const todayAgenda = getTodayAgenda();
       const upcomingMonthly = getUpcomingMonthlyDue(7);
       const upcomingFixed = getUpcomingFixedExpenses(7);
-      const finalProjectPayments = getPendingProjectFinalPayments();
       const overdueMonthly = state.mensalidades.filter((row) => row.status !== "Pago" && row.status !== "Cancelado" && row.prazo && row.prazo < todayIso());
       const overdueFinance = state.financeiro.filter((row) => row.status !== "Pago" && row.status !== "Cancelado" && row.prazo && row.prazo < todayIso());
       const overdueProjects = state.projetos.filter((row) => !/conclu/i.test(row.status || "") && row.prazo && row.prazo < todayIso());
@@ -114,7 +113,6 @@
               <li data-go="projetos"><span>Projetos atrasados</span><strong>${overdueProjects.length}</strong></li>
               <li data-go="mensalidades"><span>Mensalidades vencendo em 7 dias</span><strong>${upcomingMonthly.length}</strong></li>
               <li data-go="agenda"><span>Tarefas e reuniões de hoje</span><strong>${todayAgenda.length}</strong></li>
-              <li data-go="financeiro"><span>Pagamentos finais de projetos</span><strong>${finalProjectPayments.length}</strong></li>
               <li data-go="financeiro" data-finance-target="fixos"><span>Gastos fixos vencendo</span><strong>${upcomingFixed.length}</strong></li>
             </ul>
           </div>
@@ -183,7 +181,6 @@
 
       attachDashboardLinks();
       attachDashboardQuickActions();
-      setupChromaMascots();
       attachMascotInteraction({
         balance: totals.balance,
         profit: monthTotals.lucro,
@@ -210,22 +207,24 @@
 
     function renderChromaMascot() {
       return `
-        <div class="chroma-mascot" data-video-src="assets/gato-zama-green.mov?v=20260609-2">
-          <canvas class="dashboard-mascot chroma-canvas" width="480" height="480" aria-label="Mascote ZAMA" hidden></canvas>
+        <div class="chroma-mascot">
+          <!-- NAO ALTERAR SEM PEDIDO EXPLICITO: mascote aprovado pelo cliente. -->
+          <video class="dashboard-mascot chroma-video" autoplay muted loop playsinline preload="auto"
+            poster="assets/gato-zama-transparent-preview.png?v=20260617-210146" aria-label="Mascote ZAMA">
+            <source src="assets/gato-zama-transparent.webm?v=20260617-210146" type="video/webm">
+          </video>
         </div>
       `;
     }
 
-    // O video original tem fundo verde. Ele nao entra no HTML visivel:
-    // criamos um video em memoria, removemos o verde frame a frame e exibimos so o canvas.
+    // Legado: mantido para compatibilidade com versoes antigas baseadas em canvas.
+    // O mascote aprovado usa o video WebM transparente acima.
     function setupChromaMascots() {
       tableArea.querySelectorAll(".chroma-mascot").forEach((wrap) => {
         const canvas = wrap.querySelector(".chroma-canvas");
-        const source = wrap.dataset.videoSrc;
-        if (!source || !canvas || !canvas.getContext) return;
+        const video = wrap.querySelector(".chroma-source-video");
+        if (!video || !canvas || !canvas.getContext) return;
 
-        const video = document.createElement("video");
-        video.src = source;
         video.muted = true;
         video.loop = true;
         video.autoplay = true;
@@ -236,10 +235,9 @@
         const buffer = document.createElement("canvas");
         buffer.width = canvas.width;
         buffer.height = canvas.height;
-        const bufferCtx = buffer.getContext("2d");
+        const bufferCtx = buffer.getContext("2d", { willReadFrequently: true });
         bufferCtx.imageSmoothingEnabled = true;
         bufferCtx.imageSmoothingQuality = "high";
-        let active = true;
         let lastDraw = 0;
 
         const drawVideoContain = () => {
@@ -262,19 +260,15 @@
           bufferCtx.drawImage(video, x, y, width, height);
         };
 
-        const draw = (time = 0) => {
-          if (!active) return;
-          if (time - lastDraw < 50) {
-            requestAnimationFrame(draw);
-            return;
-          }
-          lastDraw = time;
+        const drawFrame = () => {
+          if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) return;
 
-          if (video.readyState >= 2 && video.videoWidth && video.videoHeight) {
-            canvas.hidden = false;
+          try {
             drawVideoContain();
             const frame = bufferCtx.getImageData(0, 0, buffer.width, buffer.height);
+            const original = new Uint8ClampedArray(frame.data);
             const data = frame.data;
+            let opaquePixels = 0;
 
             for (let i = 0; i < data.length; i += 4) {
               const r = data[i];
@@ -282,64 +276,55 @@
               const b = data[i + 2];
               const greenDominance = g - Math.max(r, b);
 
-              if (g > 62 && greenDominance > 16 && g > r * 1.08 && g > b * 1.08) {
+              if (g > 78 && greenDominance > 24 && g > r * 1.14 && g > b * 1.14) {
                 data[i + 3] = 0;
-              } else if (g > 48 && greenDominance > 8) {
-                data[i + 3] = Math.max(0, 255 - greenDominance * 14);
-                data[i + 1] = Math.max(Math.max(r, b), g - greenDominance * 1.8);
-              } else if (g > r && g > b) {
-                data[i + 1] = Math.max(Math.max(r, b), g - Math.max(0, greenDominance * .42));
+              } else if (g > 62 && greenDominance > 14) {
+                data[i + 3] = Math.max(0, 255 - greenDominance * 8);
+                data[i + 1] = Math.max(Math.max(r, b), g - greenDominance * 1.3);
+              } else if (g > r && g > b && greenDominance > 7) {
+                data[i + 1] = Math.max(Math.max(r, b), g - greenDominance * .32);
               }
+
+              if (data[i + 3] > 18) opaquePixels += 1;
             }
 
-            ctx.putImageData(frame, 0, 0);
-          }
+            if (opaquePixels < 5000) {
+              data.set(original);
+            }
 
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.putImageData(frame, 0, 0);
+            canvas.dataset.ready = "true";
+            wrap.classList.add("is-chroma-ready");
+          } catch (error) {
+            canvas.dataset.ready = "false";
+            wrap.classList.remove("is-chroma-ready");
+            console.warn("Nao foi possivel renderizar o mascote no canvas.", error);
+          }
+        };
+
+        const draw = (time = 0) => {
+          if (time - lastDraw >= 50) {
+            lastDraw = time;
+            drawFrame();
+          }
           requestAnimationFrame(draw);
         };
 
-        const drawFirstFrame = () => {
-          if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) return false;
-          canvas.hidden = false;
-          drawVideoContain();
-          const frame = bufferCtx.getImageData(0, 0, buffer.width, buffer.height);
-          const data = frame.data;
-
-          for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-            const greenDominance = g - Math.max(r, b);
-
-            if (g > 62 && greenDominance > 16 && g > r * 1.08 && g > b * 1.08) {
-              data[i + 3] = 0;
-            } else if (g > 48 && greenDominance > 8) {
-              data[i + 3] = Math.max(0, 255 - greenDominance * 14);
-              data[i + 1] = Math.max(Math.max(r, b), g - greenDominance * 1.8);
-            } else if (g > r && g > b) {
-              data[i + 1] = Math.max(Math.max(r, b), g - Math.max(0, greenDominance * .42));
-            }
-          }
-
-          ctx.putImageData(frame, 0, 0);
-          return true;
-        };
-
-        video.addEventListener("loadeddata", drawFirstFrame);
+        video.addEventListener("loadeddata", drawFrame);
         video.addEventListener("canplay", () => {
-          drawFirstFrame();
-          video.play().catch(() => {
-            drawFirstFrame();
-          });
+          drawFrame();
+          video.play().catch(() => {});
         });
-        video.addEventListener("error", () => {
-          active = false;
-          canvas.hidden = true;
-        });
-        video.play().catch(() => {
-          if (!drawFirstFrame()) canvas.hidden = true;
-        });
+        if ("requestVideoFrameCallback" in video) {
+          const drawVideoFrame = () => {
+            drawFrame();
+            video.requestVideoFrameCallback(drawVideoFrame);
+          };
+          video.requestVideoFrameCallback(drawVideoFrame);
+        }
         video.load();
+        video.play().catch(() => {});
         draw();
       });
     }

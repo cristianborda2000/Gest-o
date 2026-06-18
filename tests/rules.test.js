@@ -48,10 +48,7 @@ function testProjectFinance() {
   resetState();
   const project = { id: "project-1", nome: "Site novo", inicio: "2026-06-01", prazo: "2026-06-20", status: "Em andamento", valor: 1000 };
   syncProjectFinance(project, state);
-  assert.strictEqual(state.financeiro.length, 2);
-  assert.strictEqual(state.financeiro[0].valor, 500);
-  assert.strictEqual(state.financeiro[1].installment, "final");
-  assert.strictEqual(state.financeiro[1].status, "Agendado");
+  assert.strictEqual(state.financeiro.length, 0);
 }
 
 function testMonthlyFinance() {

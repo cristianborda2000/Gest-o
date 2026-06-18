@@ -12,6 +12,7 @@
     let selectedCalendarDate = todayIso();
     let financeMonth = todayIso().slice(0, 7);
     let statusFilter = "Todos";
+    let financeTypeFilter = "Todos";
     let listViewMode = window.matchMedia("(max-width: 640px)").matches ? "cards" : "table";
     let editingId = null;
     let formPanelOpen = false;
@@ -33,8 +34,10 @@
     const tableArea = document.getElementById("tableArea");
     const recordForm = document.getElementById("recordForm");
     const searchInput = document.getElementById("searchInput");
+    const financeTypeFilterInput = document.getElementById("financeTypeFilter");
     const statusFilterInput = document.getElementById("statusFilter");
     const financeMonthFilter = document.getElementById("financeMonthFilter");
+    const clearFiltersBtn = document.getElementById("clearFiltersBtn");
     const viewToggleBtn = document.getElementById("viewToggleBtn");
     const workspace = document.getElementById("workspace");
     const formPanel = document.getElementById("formPanel");
@@ -497,7 +500,6 @@
         normalizeFixedExpenseRows(importedState);
         normalizeAgendaRows(importedState);
         normalizeMonthlyPlans(importedState);
-        importedState.projetos.forEach((project) => syncProjectFinance(project, importedState));
         importedState.clientes.forEach((client) => syncClientMonthly(client, importedState));
         importedState.mensalidades.forEach((monthly) => syncMonthlyFinance(monthly, importedState));
         state = importedState;
@@ -521,12 +523,23 @@
     });
 
     searchInput.addEventListener("input", renderTable);
+    financeTypeFilterInput.addEventListener("change", () => {
+      financeTypeFilter = financeTypeFilterInput.value;
+      renderTable();
+    });
     statusFilterInput.addEventListener("change", () => {
       statusFilter = statusFilterInput.value;
       renderTable();
     });
     financeMonthFilter.addEventListener("change", () => {
       financeMonth = financeMonthFilter.value || todayIso().slice(0, 7);
+      render();
+    });
+    clearFiltersBtn.addEventListener("click", () => {
+      searchInput.value = "";
+      statusFilter = "Todos";
+      financeTypeFilter = "Todos";
+      financeMonth = todayIso().slice(0, 7);
       render();
     });
     recordForm.addEventListener("submit", saveRecord);
