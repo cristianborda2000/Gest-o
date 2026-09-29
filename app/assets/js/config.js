@@ -9,6 +9,11 @@
     const cloudStateTable = appConfig.cloudStateTable || "app_state";
     const supabaseUrl = appConfig.supabaseUrl || "";
     const supabaseAnonKey = appConfig.supabaseAnonKey || "";
+    // Capture before the SDK consumes and clears authentication fragments.
+    const authCallbackParams = new URLSearchParams(window.location.hash.slice(1));
+    const passwordRecoveryRequested = authCallbackParams.get("type") === "recovery"
+      || new URLSearchParams(window.location.search).get("reset") === "password";
+    const authCallbackError = authCallbackParams.get("error_code") || authCallbackParams.get("error");
     const supabaseClient = window.supabase && supabaseUrl && supabaseAnonKey
       ? window.supabase.createClient(supabaseUrl, supabaseAnonKey)
       : null;

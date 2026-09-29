@@ -14,7 +14,9 @@ const sandbox = {
   Intl,
   Date,
   Math,
+  URLSearchParams,
   window: {
+    location: { hash: "", search: "" },
     supabase: null,
     crypto: {
       randomUUID: (() => {

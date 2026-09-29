@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ZAMA</title>
-  <link rel="stylesheet" href="assets/styles.css?v=20260617-232711">
+  <link rel="stylesheet" href="assets/styles.css?v=20260929-recovery">
 </head>
 <body>
 
@@ -28,8 +28,27 @@
         <button class="button primary" type="submit" id="loginSubmitBtn">Entrar</button>
         <button class="button" type="button" id="signupBtn">Criar acesso</button>
       </div>
+      <button class="button" type="button" id="forgotPasswordBtn">Esqueci minha senha</button>
       <p class="auth-help">Para criar um novo acesso, informe e-mail e senha e clique em Criar acesso.</p>
       <p class="auth-error" id="authError" aria-live="polite"></p>
+      <p class="auth-help" id="authStatus" role="status"></p>
+    </form>
+    <form class="auth-card" id="resetPasswordForm" hidden>
+      <img class="auth-logo" src="zama-logo.png" alt="ZAMA">
+      <div>
+        <h1>Redefinir senha</h1>
+        <p>Escolha uma nova senha para acessar seu painel.</p>
+      </div>
+      <label>Nova senha
+        <input id="newPassword" type="password" autocomplete="new-password" minlength="8" required>
+      </label>
+      <label>Confirmar nova senha
+        <input id="confirmPassword" type="password" autocomplete="new-password" minlength="8" required>
+      </label>
+      <p class="auth-help">Use pelo menos 8 caracteres.</p>
+      <button class="button primary" id="savePasswordBtn" type="submit">Salvar nova senha</button>
+      <button class="button" id="cancelResetBtn" type="button">Voltar ao login</button>
+      <p class="auth-error" id="resetPasswordError" aria-live="polite"></p>
     </form>
   </section>
 
@@ -220,15 +239,15 @@
     </div>
   </section>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="assets/js/env.js?v=20260617-232711"></script>
-  <script src="assets/js/config.js?v=20260617-232711"></script>
-  <script src="assets/js/core.js?v=20260617-232711"></script>
-  <script src="assets/js/forms.js?v=20260617-232711"></script>
-  <script src="assets/js/dashboard.js?v=20260617-232711"></script>
-  <script src="assets/js/contracts.js?v=20260617-232711"></script>
-  <script src="assets/js/table.js?v=20260617-232711"></script>
-  <script src="assets/js/records.js?v=20260617-232711"></script>
-  <script src="assets/js/boot.js?v=20260617-232711"></script>
+  <script src="assets/js/env.js?v=20260929-recovery"></script>
+  <script src="assets/js/config.js?v=20260929-recovery"></script>
+  <script src="assets/js/core.js?v=20260929-recovery"></script>
+  <script src="assets/js/forms.js?v=20260929-recovery"></script>
+  <script src="assets/js/dashboard.js?v=20260929-recovery"></script>
+  <script src="assets/js/contracts.js?v=20260929-recovery"></script>
+  <script src="assets/js/table.js?v=20260929-recovery"></script>
+  <script src="assets/js/records.js?v=20260929-recovery"></script>
+  <script src="assets/js/boot.js?v=20260929-recovery"></script>
 </body>
 </html>
 

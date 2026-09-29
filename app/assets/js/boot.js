@@ -26,6 +26,15 @@
     const loginSubmitBtn = document.getElementById("loginSubmitBtn");
     const signupBtn = document.getElementById("signupBtn");
     const authError = document.getElementById("authError");
+    const authStatus = document.getElementById("authStatus");
+    const forgotPasswordBtn = document.getElementById("forgotPasswordBtn");
+    const resetPasswordForm = document.getElementById("resetPasswordForm");
+    const newPassword = document.getElementById("newPassword");
+    const confirmPassword = document.getElementById("confirmPassword");
+    const savePasswordBtn = document.getElementById("savePasswordBtn");
+    const cancelResetBtn = document.getElementById("cancelResetBtn");
+    const resetPasswordError = document.getElementById("resetPasswordError");
+    let recoveryActive = passwordRecoveryRequested;
     const navButtons = document.querySelectorAll("[data-module]");
     const moduleTitle = document.getElementById("moduleTitle");
     const moduleSubtitle = document.getElementById("moduleSubtitle");
@@ -141,6 +150,9 @@
     }
 
     function showAuth(message = "") {
+      loginForm.hidden = false;
+      resetPasswordForm.hidden = true;
+      authStatus.textContent = "";
       authError.textContent = message;
       authScreen.hidden = false;
       appShell.hidden = true;
@@ -151,6 +163,7 @@
     function setAuthLoading(isLoading) {
       loginSubmitBtn.disabled = isLoading;
       signupBtn.disabled = isLoading;
+      forgotPasswordBtn.disabled = isLoading;
       loginEmail.disabled = isLoading;
       loginPassword.disabled = isLoading;
       loginSubmitBtn.textContent = isLoading ? "Entrando..." : "Entrar";
@@ -222,6 +235,119 @@
       maybeShowOnboarding();
     }
 
+    function clearRecoveryUrl() {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("reset");
+      url.hash = "";
+      window.history.replaceState(null, "", url.pathname + url.search);
+    }
+
+    function showPasswordReset() {
+      recoveryActive = true;
+      authScreen.hidden = false;
+      appShell.hidden = true;
+      loginForm.hidden = true;
+      resetPasswordForm.hidden = false;
+      newPassword.value = "";
+      confirmPassword.value = "";
+      resetPasswordError.textContent = "";
+      newPassword.focus();
+    }
+
+    forgotPasswordBtn.addEventListener("click", async () => {
+      authError.textContent = "";
+      authStatus.textContent = "";
+      if (!loginEmail.value.trim() || !loginEmail.checkValidity()) {
+        authError.textContent = "Informe um e-mail válido para recuperar sua senha.";
+        loginEmail.focus();
+        return;
+      }
+      if (!supabaseClient) {
+        authError.textContent = "Não foi possível conectar ao Supabase. Recarregue a página.";
+        return;
+      }
+      setAuthLoading(true);
+      forgotPasswordBtn.textContent = "Enviando...";
+      try {
+        const redirectTo = new URL(window.location.pathname, window.location.origin);
+        redirectTo.searchParams.set("reset", "password");
+        const { error } = await supabaseClient.auth.resetPasswordForEmail(loginEmail.value.trim(), {
+          redirectTo: redirectTo.href
+        });
+        if (error) throw error;
+        authStatus.textContent = "Se este e-mail estiver cadastrado, você receberá um link para redefinir a senha. Confira também o spam e use o e-mail mais recente.";
+      } catch (error) {
+        authError.textContent = error.status === 429
+          ? "Aguarde um minuto antes de solicitar outro link."
+          : "Não foi possível enviar o link. Verifique sua conexão e tente novamente.";
+      } finally {
+        setAuthLoading(false);
+        forgotPasswordBtn.textContent = "Esqueci minha senha";
+      }
+    });
+
+    resetPasswordForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      resetPasswordError.textContent = "";
+      if (newPassword.value.length < 8) {
+        resetPasswordError.textContent = "Use uma senha com pelo menos 8 caracteres.";
+        return;
+      }
+      if (newPassword.value !== confirmPassword.value) {
+        resetPasswordError.textContent = "As senhas não coincidem.";
+        return;
+      }
+      savePasswordBtn.disabled = cancelResetBtn.disabled = true;
+      savePasswordBtn.textContent = "Salvando...";
+      try {
+        const { data, error: sessionError } = await supabaseClient.auth.getSession();
+        if (sessionError || !data.session || !recoveryActive) {
+          recoveryActive = false;
+          clearRecoveryUrl();
+          showAuth("Sua sessão de recuperação expirou. Solicite outro link em Esqueci minha senha.");
+          return;
+        }
+        const { error } = await supabaseClient.auth.updateUser({ password: newPassword.value });
+        if (error) {
+          resetPasswordError.textContent = error.code === "same_password"
+            ? "Escolha uma senha diferente da atual."
+            : "Não foi possível salvar. Use uma senha mais forte ou solicite um novo link.";
+          return;
+        }
+        recoveryActive = false;
+        clearRecoveryUrl();
+        newPassword.value = confirmPassword.value = "";
+        showAuth();
+        authStatus.textContent = "Senha atualizada com sucesso. Entre com sua nova senha.";
+      } catch {
+        resetPasswordError.textContent = "Não foi possível salvar a senha. Verifique sua conexão e tente novamente.";
+      } finally {
+        savePasswordBtn.disabled = cancelResetBtn.disabled = false;
+        savePasswordBtn.textContent = "Salvar nova senha";
+      }
+    });
+
+    cancelResetBtn.addEventListener("click", async () => {
+      cancelResetBtn.disabled = savePasswordBtn.disabled = true;
+      try {
+        const { error } = await supabaseClient.auth.signOut({ scope: "local" });
+        if (error) throw error;
+        recoveryActive = false;
+        clearRecoveryUrl();
+        newPassword.value = confirmPassword.value = "";
+        showAuth();
+      } catch {
+        resetPasswordError.textContent = "Não foi possível sair. Tente novamente.";
+      } finally {
+        cancelResetBtn.disabled = savePasswordBtn.disabled = false;
+      }
+    });
+
+    // Keep this callback synchronous: awaiting Auth calls here can deadlock the SDK.
+    supabaseClient?.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") showPasswordReset();
+    });
+
     async function initializeAuth() {
       if (!supabaseClient) {
         showAuth("Não foi possível carregar o Supabase. Verifique sua conexão.");
@@ -229,7 +355,17 @@
       }
 
       try {
-        const { data } = await supabaseClient.auth.getSession();
+        const { data, error } = await supabaseClient.auth.getSession();
+        if (authCallbackError || (recoveryActive && (error || !data.session))) {
+          recoveryActive = false;
+          clearRecoveryUrl();
+          showAuth("O link de recuperação é inválido ou expirou. Informe seu e-mail e clique em Esqueci minha senha para receber outro.");
+          return;
+        }
+        if (recoveryActive && data.session) {
+          showPasswordReset();
+          return;
+        }
         if (data.session) {
           await showApp(data.session);
         } else {
@@ -243,6 +379,7 @@
     loginForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       authError.textContent = "";
+      authStatus.textContent = "";
       setAuthLoading(true);
 
       try {

@@ -70,8 +70,22 @@ navegador ou celular.
 Importante: a chave `sb_secret_...` nunca deve ir no codigo. Se ela foi exposta,
 gere uma nova no Supabase. O sistema usa somente a chave anon/public.
 
-## Logica principal
+## Recuperação de senha
 
+Na tela de login, informe o e-mail e clique em **Esqueci minha senha**.
+Abra o link do e-mail mais recente para escolher e confirmar uma nova senha.
+Links inválidos ou expirados mostram uma orientação para solicitar outro.
+
+No Supabase, em **Authentication > URL Configuration**, configure **Site URL**
+com o endereço do sistema e adicione em **Redirect URLs** o endereço de recuperação:
+`http://localhost:5174/?reset=password` para uso local, ou
+`https://SEU-DOMINIO/?reset=password` para o site publicado. Se o sistema estiver
+em uma subpasta, inclua o caminho dela. O botão usa o endereço da página atual.
+O servidor local deve estar em execução para abrir um link localhost.
+
+Referência: https://supabase.com/docs/reference/javascript/auth-resetpasswordforemail
+
+## Logica principal
 - Projetos geram duas entradas financeiras automaticamente: 50% no inicio e 50% na conclusao.
 - Mensalidades pagas geram entrada financeira.
 - Clientes ativos criam/atualizam mensalidades automaticamente.
