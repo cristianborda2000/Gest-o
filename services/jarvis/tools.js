@@ -66,8 +66,13 @@ function resolvePeriod(args, context) {
 function checkRange({ from, to }) {
   if (!Finance.validDate(from) || !Finance.validDate(to) || from > to || (Date.parse(to) - Date.parse(from)) / 86400000 >= 366) throw new JarvisError('Escolha um período de até 366 dias.', 400, 'INVALID_PERIOD');
 }
-function taskView(task, context) {
-  return { id: task.seriesId || task.id, occurrence_date: task.occurrenceDate || task.prazo, title: task.nome, date: task.prazo, time: task.hora || null, duration_minutes: task.duracao || 0, priority: task.prioridade, status: Agenda.helpers.taskStatus(task, +now(context)), description: String(task.observacoes || '').slice(0, 1000), type: task.tipo || 'Tarefa', recurrence: task.recorrencia || 'none', recurrence_end: task.recurrenceEnd || null };
+function taskView(task, context, state) {
+  const preferences = Agenda.helpers.settings(state || {});
+  const reminder = Agenda.helpers.reminderFor(task, { ...preferences, taskEnabled: true });
+  const reminderTime = reminder ? Time.nowParts(new Date(reminder.dueAt)) : null;
+  return { id: task.seriesId || task.id, occurrence_date: task.occurrenceDate || task.prazo, title: task.nome, date: task.prazo, time: task.hora || null, duration_minutes: task.duracao || 0, priority: task.prioridade, status: Agenda.helpers.taskStatus(task, +now(context)), description: String(task.observacoes || '').slice(0, 1000), type: task.tipo || 'Tarefa', recurrence: task.recorrencia || 'none', recurrence_end: task.recurrenceEnd || null,
+    reminder_minutes: task.reminderMinutes ?? null,
+    reminder: reminder ? { minutes: task.reminderMinutes ?? preferences.leadMinutes, date: reminderTime.date, time: reminderTime.time, timezone: Time.zone, enabled_in_settings: Boolean(preferences.enabled && preferences.taskEnabled), delivery: 'app_open', requires_browser_permission: true } : null };
 }
 function taskList(state, args, context) {
   const end = resolveDate(args.to || args.from || 'hoje', context);
@@ -81,7 +86,7 @@ function taskList(state, args, context) {
       if (args.status === 'overdue' && status !== 'Atrasada') continue;
       if (args.status === 'completed' && !Agenda.helpers.isDone(task)) continue;
       if (args.status === 'pending' && Agenda.helpers.isDone(task)) continue;
-      rows.push(taskView(task, context));
+      rows.push(taskView(task, context, state));
     }
   }
   return { from: start, to: end, total: rows.length, tasks: rows.slice(0, args.limit || 50), truncated: rows.length > (args.limit || 50), timezone: Time.zone };
@@ -113,7 +118,7 @@ function daySummary(state, context) {
   let upcoming = null;
   for (let date = day, last = Time.addDays(day, 30); date <= last && !upcoming; date = Time.addDays(date, 1)) {
     const task = Agenda.todayTasks(state, date).find(t => !Agenda.helpers.isDone(t) && !Agenda.helpers.isCancelled(t) && Agenda.helpers.validTime(t.hora) && Time.toEpoch(t.prazo, t.hora) >= +now(context));
-    if (task) upcoming = taskView(task, context);
+    if (task) upcoming = taskView(task, context, state);
   }
   const reminder = Agenda.nextReminder(state, +now(context));
   return { date: day, timezone: Time.zone, tasks, overdue: { ...overdue, note: 'Ocorrências nos últimos 366 dias.' }, financial: financialSummary(state, { period: 'current_month' }, context), nextAppointment: upcoming || null, nextReminder: reminder ? { title: reminder.title, at: new Date(reminder.dueAt).toISOString() } : null,
@@ -125,14 +130,17 @@ function define(name, risk, description, schema, execute, prepare) {
 }
 const listSchema = z.object({ from: date.optional(), to: date.optional(), status: z.enum(['all', 'pending', 'completed', 'overdue']).optional(), limit: z.number().int().min(1).max(50).optional() }).strict();
 const periodSchema = z.object({ period: z.enum(['today', 'current_week', 'current_month', 'last_month', 'custom']).optional(), from: date.optional(), to: date.optional() }).strict();
-const taskSchema = z.object({ title: str(180), date, time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(), description: opt(5000), priority, duration_minutes: z.number().int().min(0).max(1440).optional(), recurrence: z.enum(['none', 'daily', 'weekdays', 'weekly', 'monthly']).optional(), recurrence_end: date.optional() }).strict();
-const taskInput = (args, context) => ({ nome: args.title, prazo: resolveDate(args.date, context), hora: args.time || '', duracao: args.duration_minutes ?? 30, prioridade: priorities[args.priority || 'medium'], status: 'Pendente', observacoes: args.description || '', recorrencia: args.recurrence || 'none', recurrenceEnd: args.recurrence_end ? resolveDate(args.recurrence_end, context) : '', reminderMinutes: null, jarvisActionId: context.operationId });
+const taskSchema = z.object({ title: str(180), date, time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(), description: opt(5000), priority, duration_minutes: z.number().int().min(0).max(1440).optional(), reminder_minutes: z.number().int().min(-1).max(1440).nullable().optional().describe('Antecedência do aviso em minutos: 15 para 15 minutos antes, 0 na hora, -1 sem lembrete, null usa a configuração geral. Exige horário para um aviso individual. Não ativa notificações nem permite entrega com aplicativo fechado.'), recurrence: z.enum(['none', 'daily', 'weekdays', 'weekly', 'monthly']).optional(), recurrence_end: date.optional() }).strict();
+function taskInput(args, context) {
+  if (args.reminder_minutes != null && args.reminder_minutes >= 0 && !args.time) throw new JarvisError('Informe o horário da tarefa para configurar o lembrete.', 400, 'MISSING_TASK_TIME');
+  return { nome: args.title, prazo: resolveDate(args.date, context), hora: args.time || '', duracao: args.duration_minutes ?? 30, prioridade: priorities[args.priority || 'medium'], status: 'Pendente', observacoes: args.description || '', recorrencia: args.recurrence || 'none', recurrenceEnd: args.recurrence_end ? resolveDate(args.recurrence_end, context) : '', reminderMinutes: args.reminder_minutes ?? null, jarvisActionId: context.operationId };
+}
 define('get_today_summary', 'read', 'Resumo REAL de hoje: tarefas, compromissos, atrasos, contas e financeiro. Não contar compromissos duas vezes: são registros da agenda.', z.object({}).strict(), (s, a, c) => daySummary(s, c));
 define('list_tasks', 'read', 'Consulte tarefas antes de escolher um ID para editar/concluir. Filtre hoje, próximas ou atrasadas. Nunca invente IDs.', listSchema, taskList);
 define('get_agenda', 'read', 'Agenda real por intervalo de datas (máximo 366 dias), com horários de São Paulo.', listSchema, taskList);
 define('get_financial_summary', 'read', 'Totais reais em centavos e BRL, contas pendentes e maiores categorias. Período custom exige from e to.', periodSchema, (s, a, c) => { if (a.period === 'custom' && (!a.from || !a.to)) throw new JarvisError('Informe início e fim do período.'); return financialSummary(s, a, c); });
-define('create_task', 'write', 'Crie uma tarefa na agenda. Exige título claro e data; se faltar, pergunte. Data aceita amanhã/sexta/hoje e espanhol. Horário omitido significa sem hora definida.', taskSchema, (s, a, c) => taskView(Agenda.saveTask(s, taskInput(a, c)), c));
-define('create_agenda_event', 'write', 'Crie compromisso na mesma agenda existente, sem duplicar tarefa. Exige título e data.', taskSchema, (s, a, c) => taskView(Agenda.saveTask(s, { ...taskInput(a, c), tipo: 'Compromisso' }), c));
+define('create_task', 'write', 'Crie uma tarefa na agenda. Exige título claro e data; se faltar, pergunte. Data aceita amanhã/sexta/hoje e espanhol. Horário omitido significa sem hora definida. Salve a antecedência solicitada em reminder_minutes.', taskSchema, (s, a, c) => taskView(Agenda.saveTask(s, taskInput(a, c)), c, s));
+define('create_agenda_event', 'write', 'Crie compromisso na mesma agenda existente, sem duplicar tarefa. Exige título e data. Use reminder_minutes para o aviso antecipado solicitado.', taskSchema, (s, a, c) => taskView(Agenda.saveTask(s, { ...taskInput(a, c), tipo: 'Compromisso' }), c, s));
 const updateSchema = taskSchema.partial().extend({ id: str(160), occurrence_date: date.optional() }).strict();
 define('update_task', 'write', 'Edite uma tarefa identificada por consulta anterior. Recorrentes exigem occurrence_date e alteram só aquela ocorrência. Não invente ID.', updateSchema, (s, a, c) => {
   const base = (s.agenda || []).find(t => t.id === a.id); if (!base) throw new JarvisError('Tarefa não encontrada.', 404);
@@ -141,14 +149,16 @@ define('update_task', 'write', 'Edite uma tarefa identificada por consulta anter
   if (recurring && (a.recurrence || a.recurrence_end)) throw new JarvisError('Altere a série pelo editor da agenda.');
   const original = a.occurrence_date ? resolveDate(a.occurrence_date, c) : base.prazo;
   const changes = { jarvisActionId: c.operationId };
-  const mapping = { title: 'nome', time: 'hora', description: 'observacoes', duration_minutes: 'duracao', recurrence: 'recorrencia' };
+  const mapping = { title: 'nome', time: 'hora', description: 'observacoes', duration_minutes: 'duracao', recurrence: 'recorrencia', reminder_minutes: 'reminderMinutes' };
   for (const [key, field] of Object.entries(mapping)) if (a[key] !== undefined) changes[field] = a[key];
   if (a.date) changes.prazo = resolveDate(a.date, c);
   if (a.recurrence_end) changes.recurrenceEnd = resolveDate(a.recurrence_end, c);
   if (a.priority) changes.prioridade = priorities[a.priority];
+  const current = recurring ? Agenda.helpers.occurrence(base, original) : base;
+  if (a.reminder_minutes != null && a.reminder_minutes >= 0 && !(changes.hora || current?.hora)) throw new JarvisError('Informe o horário da tarefa para configurar o lembrete.', 400, 'MISSING_TASK_TIME');
   Agenda.saveTask(s, changes, a.id, original);
   const saved = s.agenda.find(t => t.id === a.id);
-  return taskView(recurring ? Agenda.helpers.occurrence(saved, original) : saved, c);
+  return taskView(recurring ? Agenda.helpers.occurrence(saved, original) : saved, c, s);
 });
 define('complete_task', 'write', 'Conclua a tarefa real identificada por consulta; em recorrência exige a data original da ocorrência. Nunca adivinhe entre títulos parecidos.', z.object({ id: str(160), occurrence_date: date.optional() }).strict(), (s, a, c) => {
   const base = (s.agenda || []).find(t => t.id === a.id); if (!base) throw new JarvisError('Tarefa não encontrada.', 404);
@@ -156,7 +166,7 @@ define('complete_task', 'write', 'Conclua a tarefa real identificada por consult
   const original = resolveDate(a.occurrence_date || base.prazo, c);
   Agenda.saveTask(s, { status: 'Concluído', jarvisActionId: c.operationId }, a.id, original);
   const saved = s.agenda.find(t => t.id === a.id);
-  return taskView(base.recorrencia && base.recorrencia !== 'none' ? Agenda.helpers.occurrence(saved, original) : saved, c);
+  return taskView(base.recorrencia && base.recorrencia !== 'none' ? Agenda.helpers.occurrence(saved, original) : saved, c, s);
 });
 define('save_idea', 'write', 'Salve uma ideia no banco existente. Não existe módulo de projetos ativo; não crie vínculo fictício.', z.object({ title: str(180), description: opt(5000), category: opt(80), priority }).strict(), (s, a, c) => {
   const row = Ideas.upsert(s, { titulo: a.title, descricao: a.description, categoria: a.category || 'Geral', prioridade: priorities[a.priority || 'medium'], etapa: 'capturada', data: today(c) });

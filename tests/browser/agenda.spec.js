@@ -4,6 +4,20 @@ const { mock, seed } = require('./mock-supabase');
 const agendaNav = page => page.locator('.nav [data-module="agenda"]').click();
 const taskCard = (page, title) => page.locator('.za-task').filter({ has: page.locator('.za-task-title strong', { hasText: title }) });
 const dialog = page => page.locator('dialog.za-dialog');
+
+test('agenda preserves a custom lead saved by Jarvis when editing and reloading', async ({ page }) => {
+  await mock(page, { ...seed, agenda: [{ id: 'jarvis-reminder', nome: 'Reunião', prazo: '2026-09-29', hora: '10:00', duracao: 30, status: 'Pendente', prioridade: 'Média', recorrencia: 'none', reminderMinutes: 20, jarvisActionId: 'test-action' }] });
+  await agendaNav(page);
+  await expect(taskCard(page, 'Reunião').locator('.za-task-reminder')).toContainText('09:40');
+  await taskCard(page, 'Reunião').getByRole('button', { name: 'Editar' }).click();
+  await expect(dialog(page).getByLabel('Lembrete', { exact: true })).toHaveValue('20');
+  await dialog(page).getByLabel('Título', { exact: true }).fill('Reunião revisada');
+  await dialog(page).getByRole('button', { name: 'Salvar tarefa' }).click();
+  await expect(dialog(page)).toHaveCount(0);
+  await page.reload(); await agendaNav(page);
+  await expect(taskCard(page, 'Reunião revisada').locator('.za-task-reminder')).toContainText('09:40');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('test-cloud')).data.agenda[0].reminderMinutes)).toBe(20);
+});
 async function addTask(page, values = {}) {
   await page.locator('.za-header [data-action="new"]').click();
   const form = dialog(page);

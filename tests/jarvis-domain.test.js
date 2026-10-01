@@ -99,6 +99,44 @@ test('cria tarefa e compromisso nos registros reais da agenda com vínculo de au
   assert.equal(state.agenda.length, 2);
 });
 
+test('lembrete explícito usa serviço da agenda e preserva preferências globais', () => {
+  const state = { agenda: [], agendaSettings: { enabled: false, taskEnabled: true, leadMinutes: 60 } };
+  const result = execute('create_agenda_event', state, { title: 'Reunião', date: 'amanhã', time: '10:00', reminder_minutes: 15 });
+  assert.equal(state.agenda[0].reminderMinutes, 15);
+  assert.equal(state.agendaSettings.leadMinutes, 60); assert.equal(state.agendaSettings.enabled, false);
+  assert.equal(result.reminder.time, '09:45'); assert.equal(result.reminder.date, '2026-10-01');
+  assert.equal(result.reminder.enabled_in_settings, false); assert.equal(result.reminder.delivery, 'app_open');
+  const reloaded = JSON.parse(JSON.stringify(state));
+  assert.equal(execute('get_agenda', reloaded, { from: 'amanhã' }).tasks[0].reminder.time, '09:45');
+  reloaded.agendaSettings.enabled = true;
+  const due = Agenda.helpers.toEpoch('2026-10-01', '09:45');
+  const reminders = Agenda.helpers.remindersBetween(reloaded, due, due);
+  assert.equal(reminders.length, 1); assert.equal(reminders[0].dueAt, due);
+});
+
+test('editar lembrete preserva hora, atualiza ocorrência e cancela apenas o aviso escolhido', () => {
+  const state = { agenda: [task({ recorrencia: 'daily', reminderMinutes: 15 })], agendaSettings: { enabled: true, taskEnabled: true, leadMinutes: 60 } };
+  let result = execute('update_task', state, { id: 'task-1', occurrence_date: 'hoje', reminder_minutes: 30 });
+  assert.equal(result.reminder.time, '08:30'); assert.equal(state.agenda[0].reminderMinutes, 15);
+  assert.equal(state.agenda[0].exceptions['2026-09-30'].reminderMinutes, 30);
+  result = execute('update_task', state, { id: 'task-1', occurrence_date: 'hoje', reminder_minutes: -1 });
+  assert.equal(result.reminder, null);
+  result = execute('update_task', state, { id: 'task-1', occurrence_date: 'hoje', reminder_minutes: null });
+  assert.equal(result.reminder.time, '08:00');
+  assert.equal(execute('get_agenda', state, { from: 'amanhã' }).tasks[0].reminder.time, '08:45');
+});
+
+test('lembrete na hora e cruzando meia-noite é calculado em São Paulo', () => {
+  for (const [minutes, day, time] of [[0, '2026-10-01', '00:10'], [15, '2026-09-30', '23:55']]) {
+    const result = execute('create_task', {}, { title: 'Reunião', date: 'amanhã', time: '00:10', reminder_minutes: minutes });
+    assert.equal(result.reminder.date, day); assert.equal(result.reminder.time, time);
+  }
+  for (const minutes of [-2, 1441, 1.5, '15']) assert.throws(() => execute('create_task', {}, { title: 'Reunião', date: 'amanhã', time: '10:00', reminder_minutes: minutes }), /inválidos/);
+  const state = {};
+  assert.throws(() => execute('create_task', state, { title: 'Reunião', date: 'amanhã', reminder_minutes: 15 }), /horário/);
+  assert.equal(state.agenda, undefined);
+});
+
 test('alteração pontual retorna a data efetivamente salva e não aceita IDs inexistentes', () => {
   const state = { agenda: [task()] };
   const updated = execute('update_task', state, { id: 'task-1', date: 'amanhã', time: '14:00' });

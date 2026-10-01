@@ -2,6 +2,30 @@
 
 ## Atualização: agendamento, fluidez e fones Apple
 
+### Lembrete individual solicitado ao JARVIS
+
+“Agendar reunião amanhã às 10, me avisar 15 min antes” usa um único compromisso,
+com `reminder_minutes: 15` no schema e `reminderMinutes: 15` no registro existente.
+O retorno confirma 10:00 e o lembrete às 09:45 calculado em São Paulo, sem modificar
+preferências globais. Criar e editar aceitam 0–1440 minutos, -1 para desativar e
+null para voltar à configuração geral. Sem horário, o agente deve pedir esse
+detalhe antes de definir um lembrete individual. Consultas retornam antecedência,
+data/horário calculados e a condição de entrega com aplicativo aberto.
+
+Isso não implementa Web Push. No iPhone, aplicativo suspenso/tela bloqueada não
+tem entrega garantida pela rotina atual. Instalar a PWA sozinho não resolve:
+continua necessário implementar inscrições, envio no servidor e agendamento
+fora da página. Não foi criada uma reunião na conta de produção durante o teste.
+
+No conjunto informado, iPhone 14 Pro Max + AirPods Pro 3, conferir iOS 26 ou mais
+recente, conectar os fones antes de abrir o JARVIS e selecionar AirPods como saída
+na Central de Controle se necessário. O botão de fala permanece na tela da ZAMA;
+a haste dos AirPods não é um acionador do JARVIS. A compatibilidade física e a
+qualidade de captação precisam ser verificadas no aparelho.
+[Apple: configuração dos AirPods](https://support.apple.com/pt-br/104989),
+[Apple: modelos com iOS 26](https://support.apple.com/pt-br/123705),
+[WebKit: Web Push no iPhone](https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/).
+
 O servidor reconhece pedidos explícitos como “coloca na agenda”, “marca uma
 reunião” e “me lembra amanhã”, também em espanhol. A resposta a uma pergunta de
 esclarecimento pode completar o pedido anterior durante até 30 minutos e quatro

@@ -181,6 +181,22 @@ test('HTTP accepts URL-encoded action IDs from the actual frontend and confirms 
 });
 module.exports = { memoryRepository, provider };
 
+test('frase exata do usuário grava uma reunião com antecedência e recibo sem promessa de push', async () => {
+  const repo = memoryRepository('A', { agendaSettings: { enabled: false, taskEnabled: true, leadMinutes: 60 } });
+  const ai = provider([{ name: 'create_agenda_event', args: { title: 'Reunião', date: 'amanhã', time: '10:00', reminder_minutes: 15 } }]);
+  const agent = createAgent({ repository: repo, config, clock: () => new Date('2026-10-01T14:00:00-03:00'), provider: ai });
+  const body = { message: 'agendar reuniao amanha as 10 me avisar 15 min antes', request_id: randomUUID() };
+  const response = await agent.send(body);
+  assert.equal(response.actions[0].status, 'executed'); assert.equal(response.actions[0].result.reminder.time, '09:45');
+  assert.match(response.messages.at(-1).content, /02\/10\/2026 às 10:00/);
+  assert.match(response.messages.at(-1).content, /02\/10\/2026 às 09:45/);
+  assert.match(response.messages.at(-1).content, /Ative os avisos/);
+  assert.match(response.messages.at(-1).content, /não é enviado com a tela bloqueada/);
+  await agent.send(body);
+  const stored = await repo.read(); assert.equal(stored.state.agenda.length, 1); assert.equal(stored.state.agenda[0].reminderMinutes, 15);
+  assert.equal(stored.state.agendaSettings.enabled, false); assert.equal(ai.requests.length, 1);
+});
+
 test('agendamento natural PT/ES grava e responde com recibo real em uma chamada', async () => {
   for (const phrase of ['Coloca na agenda amanhã às 9: ligar para fornecedor.', 'Jarvis, marca uma reunião amanhã às 9 com fornecedor.', 'Me lembra amanhã às 9 de ligar para fornecedor.', 'Recuérdame mañana a las 9 llamar al proveedor.']) {
     const repo = memoryRepository('A'), ai = provider([{ name: 'create_task', args: { title: 'Ligar para fornecedor', date: 'amanhã', time: '09:00' } }]);

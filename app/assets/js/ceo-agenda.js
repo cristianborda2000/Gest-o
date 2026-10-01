@@ -243,6 +243,8 @@
     const originalDay = occurrenceDate || row?.occurrenceDate || row?.prazo || date;
     const recurring = Boolean(base && base.recorrencia && base.recorrencia !== "none");
     const value = row ? (recurring && scope === "series" ? base : row) : { nome: "", prazo: date, hora: "09:00", duracao: 30, prioridade: "Média", recorrencia: "none", status: "Pendente", reminderMinutes: null, observacoes: "" };
+    const reminderOptions = [["", "Usar configuração geral"], ["-1", "Sem lembrete"], ["0", "Na hora"], ["5", "5 minutos antes"], ["15", "15 minutos antes"], ["30", "30 minutos antes"], ["60", "1 hora antes"], ["1440", "1 dia antes"]];
+    if (Number.isInteger(value.reminderMinutes) && value.reminderMinutes >= 0 && !reminderOptions.some(([minutes]) => text(minutes) === text(value.reminderMinutes))) reminderOptions.push([value.reminderMinutes, `${value.reminderMinutes} minutos antes`]);
     const element = dialog(row ? "Editar tarefa" : "Nova tarefa", `<form class="ceo-form-grid za-task-form">
       ${recurring ? field("Aplicar alteração", `<select name="scope">${options([["occurrence", "Somente esta ocorrência"], ["series", "Toda a série (preserva exceções)"]], scope)}</select>`, true) : ""}
       ${field("Título", `<input name="nome" value="${esc(value.nome)}" required maxlength="180" autofocus>`, true)}
@@ -253,7 +255,7 @@
       ${field("Situação", `<select name="status">${options([["Pendente", "Pendente"], ["Concluído", "Concluída"], ["Adiado", "Adiada"], ["Cancelado", "Cancelada"]], isDone(value) ? "Concluído" : value.status)}</select>`)}
       ${field("Repetição", `<select name="recorrencia" ${recurring && scope === "occurrence" ? "disabled" : ""}>${options(Object.entries(recurrenceLabels), value.recorrencia || "none")}</select>`)}
       ${field("Repetir até (opcional)", `<input type="date" name="recurrenceEnd" value="${esc(value.recurrenceEnd || "")}" ${recurring && scope === "occurrence" ? "disabled" : ""}>`)}
-      ${field("Lembrete", `<select name="reminderMinutes">${options([["", "Usar configuração geral"], ["-1", "Sem lembrete"], ["0", "Na hora"], ["5", "5 minutos antes"], ["15", "15 minutos antes"], ["30", "30 minutos antes"], ["60", "1 hora antes"], ["1440", "1 dia antes"]], value.reminderMinutes == null ? "" : value.reminderMinutes)}</select>`)}
+      ${field("Lembrete", `<select name="reminderMinutes">${options(reminderOptions, value.reminderMinutes == null ? "" : value.reminderMinutes)}</select>`)}
       ${field("Descrição", `<textarea name="observacoes" rows="3" maxlength="5000">${esc(value.observacoes || value.descricao || "")}</textarea>`, true)}
       <p class="za-help za-wide">Recorrências usam o horário de São Paulo. Em meses mais curtos, tarefas do dia 29, 30 ou 31 acontecem no último dia do mês. Concluir uma tarefa recorrente afeta apenas o dia escolhido.</p>
       <p class="za-error za-wide" data-error role="alert"></p><div class="za-form-actions za-wide"><button class="ceo-button" type="button" data-cancel>Cancelar</button><button class="ceo-button primary" type="submit">Salvar tarefa</button></div>
