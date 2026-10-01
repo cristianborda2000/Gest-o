@@ -3,5 +3,7 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build:css",
   "outputDirectory": "app",
-  "cleanUrls": true
+  "cleanUrls": true,
+  "functions": { "api/jarvis.js": { "maxDuration": 180 } },
+  "rewrites": [{ "source": "/api/jarvis/:path*", "destination": "/api/jarvis?path=:path*" }]
 }

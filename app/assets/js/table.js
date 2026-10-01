@@ -144,6 +144,8 @@
       tableArea.querySelectorAll("[data-delete]").forEach((button) => {
         button.addEventListener("click", async (event) => {
           event.stopPropagation();
+          const confirmed = await requestConfirmation({ title: "Excluir este registro?", message: "O registro e seus vínculos gerados serão removidos da sua conta." });
+          if (!confirmed) return;
           if (activeModule === "mensalidades") {
             removeMonthlyFinance(button.dataset.delete);
           }

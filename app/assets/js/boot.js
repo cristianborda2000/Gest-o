@@ -150,6 +150,7 @@
     }
 
     function showAuth(message = "") {
+      if (typeof ZamaJarvis !== "undefined") ZamaJarvis.reset();
       loginForm.hidden = false;
       resetPasswordForm.hidden = true;
       authStatus.textContent = "";
@@ -227,12 +228,42 @@
       authScreen.hidden = true;
       appShell.hidden = false;
       userEmail.textContent = session?.user?.email || "";
-      state = await loadState();
+      const ceoArea = document.getElementById("ceoWorkspace");
+      if (ceoArea) {
+        ceoArea.hidden = false;
+        workspace.hidden = true;
+        document.querySelector(".stats").hidden = true;
+        ceoArea.innerHTML = '<div class="ceo-loading" role="status">Carregando os dados da sua conta…</div>';
+      }
+      try {
+        state = await loadState();
+      } catch (error) {
+        if (!ceoArea) throw error;
+        ceoArea.innerHTML = `<div class="ceo-card ceo-empty" role="alert"><h2>Não foi possível carregar seus dados</h2><p>${escapeHtml(error.message)}</p><button class="ceo-button primary" id="retryLoadBtn" type="button">Tentar novamente</button></div>`;
+        document.getElementById("retryLoadBtn").onclick = () => showApp(session);
+        return;
+      }
       await subscribeToCloudChanges(session?.user);
       editingId = null;
       fillCompanyForm();
+      const requestedView = new URLSearchParams(window.location.search);
+      if (requestedView.get("view") === "agenda" && typeof ZamaAgenda !== "undefined") {
+        activeModule = "agenda";
+        navButtons.forEach(item => item.classList.toggle("active", item.dataset.module === "agenda"));
+        if (ZamaAgenda.helpers.validDate(requestedView.get("day"))) ZamaAgenda.selectDay(requestedView.get("day"));
+      }
+      if (requestedView.get("view") === "jarvis") {
+        activeModule = "jarvis";
+        navButtons.forEach(item => item.classList.toggle("active", item.dataset.module === "jarvis"));
+      }
       render();
       maybeShowOnboarding();
+      try {
+        const legacyButton = document.getElementById("legacyBackupBtn");
+        if (legacyButton) legacyButton.hidden = !localStorage.getItem(storageKey);
+      } catch {}
+      if (typeof ZamaAgenda !== "undefined") ZamaAgenda.startReminders();
+      if (typeof ZamaJarvis !== "undefined") ZamaJarvis.init(session?.user);
     }
 
     function clearRecoveryUrl() {
@@ -518,18 +549,20 @@
         ...Object.fromEntries(new FormData(onboardingForm).entries())
       };
       state.setupDone = true;
-      await persist();
+      if (!await persist()) return;
       fillCompanyForm();
       hideOnboarding();
       render();
     });
     skipOnboardingBtn.addEventListener("click", async () => {
       state.setupDone = true;
-      await persist();
+      if (!await persist()) return;
       hideOnboarding();
     });
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
+        document.body.classList.remove("menu-open");
+        document.getElementById("ceoMenuBtn")?.setAttribute("aria-expanded", "false");
         closeSettings();
         closeDetailPanel();
         closeConfirmDialog(false);
@@ -545,10 +578,8 @@
       });
       if (!confirmed) return;
 
-      localStorage.removeItem(storageKey);
-      await resetCloudState();
       state = createInitialState();
-      await persist();
+      if (!await persist()) return;
       editingId = null;
       render();
       showToast("Dados apagados", "O sistema voltou ao estado inicial.");
@@ -564,7 +595,7 @@
       if (!confirmed) return;
 
       state = createExampleState();
-      await persist();
+      if (!await persist()) return;
       editingId = null;
       formPanelOpen = false;
       closeSettings();
@@ -574,6 +605,15 @@
 
     document.getElementById("exportBtn").addEventListener("click", () => {
       downloadStateBackup("dados-zama-completo.json", state);
+    });
+
+    document.getElementById("legacyBackupBtn")?.addEventListener("click", () => {
+      try {
+        const data = JSON.parse(localStorage.getItem(storageKey));
+        if (!data) throw new Error();
+        downloadStateBackup("zama-backup-local-anterior.json", data);
+        showToast("Backup anterior baixado", "Confira os registros antes de importar para esta conta.");
+      } catch { showToast("Backup indisponível", "Não foi possível ler a cópia anterior deste navegador.", "error"); }
     });
 
     monthlyBackupBtn.addEventListener("click", () => {
@@ -613,7 +653,7 @@
         ...state.companyProfile,
         ...profile
       };
-      await persist();
+      if (!await persist()) return;
       fillCompanyForm();
       render();
       showToast("Dados salvos", "As informações da empresa foram atualizadas.");
@@ -629,18 +669,14 @@
 
       try {
         const importedState = JSON.parse(await file.text());
+        if (!importedState || typeof importedState !== "object" || Array.isArray(importedState) || !Object.keys(modules).some(key => Array.isArray(importedState[key]))) throw new Error("Backup inválido");
+        const confirmed = await requestConfirmation({ title: "Substituir os dados desta conta?", message: `O arquivo ${file.name} substituirá os registros atuais. Exporte um backup antes de continuar.`, confirmText: "IMPORTAR" });
+        if (!confirmed) return;
         Object.keys(modules).forEach((key) => {
           if (!Array.isArray(importedState[key])) importedState[key] = [];
         });
-        normalizeUtilityState(importedState);
-        normalizeFinanceRows(importedState);
-        normalizeFixedExpenseRows(importedState);
-        normalizeAgendaRows(importedState);
-        normalizeMonthlyPlans(importedState);
-        importedState.clientes.forEach((client) => syncClientMonthly(client, importedState));
-        importedState.mensalidades.forEach((monthly) => syncMonthlyFinance(monthly, importedState));
-        state = importedState;
-        await persist();
+        state = prepareState(importedState);
+        if (!await persist()) return;
         editingId = null;
         render();
         showToast("Dados importados", "O backup foi carregado com sucesso.");
@@ -652,6 +688,7 @@
     });
 
     logoutBtn.addEventListener("click", async () => {
+      if (typeof ZamaAgenda !== "undefined") ZamaAgenda.stopReminders();
       await unsubscribeFromCloudChanges();
       await supabaseClient.auth.signOut();
       state = null;

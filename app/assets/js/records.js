@@ -59,8 +59,8 @@
         calendarMonth = data.prazo.slice(0, 7);
       }
 
+      if (!await persist()) return;
       editingId = null;
-      await persist();
       recordForm.reset();
       formPanelOpen = false;
       render();
@@ -346,7 +346,7 @@
 
     // Datas e normalizacoes evitam inconsistencias quando dados antigos sao importados.
     function todayIso() {
-      return new Date().toISOString().slice(0, 10);
+      return typeof ZamaTime !== "undefined" ? ZamaTime.today() : new Date().toISOString().slice(0, 10);
     }
 
     function toIsoDate(date) {
@@ -375,12 +375,6 @@
     }
 
     function normalizeFinanceRow(row) {
-      if (row.source === "projeto" || row.projectId) {
-        delete row.source;
-        delete row.projectId;
-        delete row.installment;
-      }
-
       if (!row.tipo) {
         row.tipo = Number(row.valor || 0) < 0 || row.responsavel !== "Receita" ? "Saída" : "Entrada";
       }

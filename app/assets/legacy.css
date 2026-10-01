@@ -1,0 +1,2 @@
+/* Keep legacy modules functional without their old theme overriding the workspace. */
+@import url('./styles.css?v=20260929-ceo') layer(legacy);

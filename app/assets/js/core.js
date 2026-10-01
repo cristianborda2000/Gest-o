@@ -4,17 +4,29 @@
   trocar de modulo, renderizar a tela atual e atualizar os indicadores do topo.
 */
 
+    let cloudRevision = null;
+    let cloudUserId = null;
+    let cloudSnapshot = null;
+    let cloudWritePending = false;
+
+    function userStorageKey() { return `${storageKey}:${cloudUserId || "signed-out"}`; }
+    function cacheCloudState(value) {
+      try { localStorage.setItem(userStorageKey(), JSON.stringify(value)); } catch {}
+    }
+
     function prepareState(savedState) {
       Object.keys(modules).forEach((key) => {
-        if (!savedState[key]) savedState[key] = [];
+        if (!Array.isArray(savedState[key])) savedState[key] = [];
       });
       normalizeUtilityState(savedState);
       normalizeFinanceRows(savedState);
       normalizeFixedExpenseRows(savedState);
       normalizeAgendaRows(savedState);
       normalizeMonthlyPlans(savedState);
-      savedState.clientes.forEach((client) => syncClientMonthly(client, savedState));
-      savedState.mensalidades.forEach((monthly) => syncMonthlyFinance(monthly, savedState));
+      // Linked records are synchronized when their source is edited, never on read.
+      if (typeof ZamaFinance !== "undefined") ZamaFinance.normalize(savedState);
+      if (typeof ZamaAgenda !== "undefined") ZamaAgenda.normalize(savedState);
+      if (typeof ZamaIdeas !== "undefined") ZamaIdeas.normalize(savedState);
       return savedState;
     }
 
@@ -61,59 +73,35 @@
 
     async function loadCloudState() {
       const user = await getCurrentUser();
-      if (!supabaseClient || !user) return null;
-
-      const { data, error } = await supabaseClient
-        .from(cloudStateTable)
-        .select("data")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (error) {
-        console.warn("Nao foi possivel carregar dados do Supabase.", error);
-        return null;
-      }
-
+      if (!supabaseClient || !user) throw new Error("Sua sessão expirou. Entre novamente.");
+      cloudUserId = user.id;
+      const { data, error } = await supabaseClient.from(cloudStateTable)
+        .select("data,updated_at").eq("user_id", user.id).maybeSingle();
+      if (error) throw new Error("Não foi possível carregar seus dados. Verifique a conexão e tente novamente.");
+      cloudRevision = data?.updated_at || null;
       return data?.data ? prepareState(data.data) : null;
     }
 
-    async function saveCloudState() {
+    async function saveCloudState(candidate = state) {
       const user = await getCurrentUser();
-      if (!supabaseClient || !user || !state) return false;
-
-      setCloudStatus("Salvando...", "saving");
-
-      const { data: existing, error: lookupError } = await supabaseClient
-        .from(cloudStateTable)
-        .select("user_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (lookupError) {
-        console.warn("Nao foi possivel verificar registro no Supabase.", lookupError);
-        setCloudStatus(`Erro: ${lookupError.message}`, "error");
-        return false;
+      if (!supabaseClient || !user || user.id !== cloudUserId || !candidate) {
+        throw new Error("Sua sessão expirou. Entre novamente para salvar.");
       }
-
-      const payload = {
-        user_id: user.id,
-        data: state,
-        updated_at: new Date().toISOString()
-      };
-
-      const query = existing
-        ? supabaseClient.from(cloudStateTable).update(payload).eq("user_id", user.id)
+      const payload = { user_id: user.id, data: candidate, updated_at: new Date().toISOString() };
+      const query = cloudRevision
+        ? supabaseClient.from(cloudStateTable).update(payload).eq("user_id", user.id).eq("updated_at", cloudRevision)
         : supabaseClient.from(cloudStateTable).insert(payload);
-
-      const { error } = await query;
-
-      if (error) {
-        console.warn("Nao foi possivel salvar dados no Supabase.", error);
-        setCloudStatus(`Erro: ${error.message}`, "error");
-        return false;
+      const { data, error } = await query.select("updated_at").maybeSingle();
+      if (error || !data) {
+        if ((!data && !error) || error?.code === "23505") {
+          throw new Error("Os dados foram alterados em outro dispositivo. Atualize a página antes de tentar novamente.");
+        }
+        throw new Error("Não foi possível salvar na nuvem. Verifique sua conexão e tente novamente.");
       }
-
-      setCloudStatus("Nuvem salva", "");
+      cloudRevision = data.updated_at;
+      cloudSnapshot = structuredClone(candidate);
+      cacheCloudState(candidate);
+      setCloudStatus("Salvo na nuvem", "");
       return true;
     }
 
@@ -151,6 +139,12 @@
             filter: `user_id=eq.${user.id}`
           },
           (payload) => {
+            if (cloudWritePending) return;
+            if (payload.new?.updated_at && payload.new.updated_at === cloudRevision) return;
+            if (document.querySelector("dialog[open]") || formPanelOpen) {
+              setCloudStatus("Há alterações em outro dispositivo. Atualize antes de salvar.", "error");
+              return;
+            }
             if (payload.eventType === "DELETE") {
               state = createInitialState();
             } else if (payload.new?.data) {
@@ -159,7 +153,9 @@
               return;
             }
 
-            localStorage.setItem(storageKey, JSON.stringify(state));
+            cloudRevision = payload.new?.updated_at || null;
+            cloudSnapshot = structuredClone(state);
+            cacheCloudState(state);
             setCloudStatus("Atualizado", "");
             render();
           }
@@ -176,37 +172,83 @@
     }
 
     async function loadState() {
-      const cloudState = await loadCloudState();
-      if (cloudState) {
-        localStorage.setItem(storageKey, JSON.stringify(cloudState));
-        return cloudState;
-      }
-
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        try {
-          const savedState = prepareState(JSON.parse(saved));
-          state = savedState;
-          await saveCloudState();
-          return savedState;
-        } catch (error) {
-          localStorage.removeItem(storageKey);
-        }
-      }
-
-      const initialState = createInitialState();
-      state = initialState;
-      await saveCloudState();
-      return initialState;
+      const loaded = await loadCloudState();
+      const result = loaded || createInitialState();
+      cloudSnapshot = structuredClone(result);
+      cacheCloudState(result);
+      return result;
     }
 
     async function persist() {
-      // Salvamento central: primeiro grava no navegador, depois tenta sincronizar com Supabase.
-      localStorage.setItem(storageKey, JSON.stringify(state));
-      return saveCloudState();
+      if (cloudWritePending) return false;
+      cloudWritePending = true;
+      setCloudStatus("Salvando...", "saving");
+      try {
+        return await saveCloudState();
+      } catch (error) {
+        if (cloudSnapshot) state = structuredClone(cloudSnapshot);
+        setCloudStatus(error.message, "error");
+        showToast("Alteração não salva", error.message, "error");
+        return false;
+      } finally { cloudWritePending = false; }
+    }
+
+    async function ceoCommit(mutator, message = "Alterações salvas") {
+      if (cloudWritePending) return false;
+      cloudWritePending = true;
+      setCloudStatus("Salvando...", "saving");
+      const draft = structuredClone(state);
+      try {
+        await mutator(draft);
+        await saveCloudState(draft);
+        state = draft;
+        render();
+        showToast(message, "Salvo na sua conta.");
+        return true;
+      } catch (error) {
+        setCloudStatus(error.message, "error");
+        showToast("Alteração não salva", error.message, "error");
+        return false;
+      } finally { cloudWritePending = false; }
+    }
+
+    // Claim delivery in the existing user-owned JSON row. The revision filter makes
+    // two devices compete for a single receipt without requiring a new SQL table.
+    async function claimCloudReminder(key, now = Date.now()) {
+      if (cloudWritePending) return false;
+      cloudWritePending = true;
+      try {
+        const user = await getCurrentUser();
+        if (!user || user.id !== cloudUserId) return false;
+        const { data: remote, error } = await supabaseClient.from(cloudStateTable)
+          .select("data,updated_at").eq("user_id", user.id).maybeSingle();
+        if (error || !remote?.data || !remote.updated_at) return false;
+        const receipts = { ...(remote.data.reminderReceipts || {}) };
+        if (receipts[key]) return false;
+        // A completion/edit in another device must cancel the old reminder too.
+        const reminder = ZamaAgenda.helpers.remindersBetween(remote.data, now - 60000, now).find(item => item.key === key);
+        if (!reminder) return false;
+        Object.keys(receipts).forEach(id => { if (now - receipts[id] > 35 * 86400000) delete receipts[id]; });
+        receipts[key] = now;
+        const payload = { ...remote.data, reminderReceipts: receipts };
+        const { data: result, error: writeError } = await supabaseClient.from(cloudStateTable)
+          .update({ data: payload, updated_at: new Date().toISOString() })
+          .eq("user_id", user.id).eq("updated_at", remote.updated_at).select("updated_at").maybeSingle();
+        if (writeError || !result) return false;
+        if (cloudRevision === remote.updated_at) {
+          cloudRevision = result.updated_at;
+          state.reminderReceipts = receipts;
+          if (cloudSnapshot) cloudSnapshot.reminderReceipts = structuredClone(receipts);
+          cacheCloudState(state);
+        }
+        return reminder;
+      } catch { return false; }
+      finally { cloudWritePending = false; }
     }
 
     function setCloudStatus(text, statusClass = "") {
+      const sync = document.getElementById("ceoSync");
+      if (sync) { sync.textContent = text; sync.className = `ceo-sync ${statusClass}`; }
       if (!cloudStatus) return;
       cloudStatus.textContent = text;
       cloudStatus.classList.toggle("saving", statusClass === "saving");
@@ -235,6 +277,7 @@
 
     // Troca de aba no menu lateral e permite abrir sub-abas como financeiro/fixos.
     function goToModule(module, options = {}) {
+      if (!['dashboard', 'financeiro', 'investimentos', 'agenda', 'ideias', 'jarvis'].includes(module)) module = 'dashboard';
       activeModule = module;
       if (options.financeView) financeView = options.financeView;
       if (options.agendaView) agendaView = options.agendaView;
@@ -243,11 +286,16 @@
       searchInput.value = "";
       navButtons.forEach((item) => item.classList.toggle("active", item.dataset.module === module));
       document.querySelector(".nav").classList.remove("expanded");
+      document.body.classList.remove("menu-open");
+      document.getElementById("ceoMenuBtn")?.setAttribute("aria-expanded", "false");
       closeDetailPanel();
       render();
     }
 
     function render() {
+      if (!state) return;
+      if (!['dashboard', 'financeiro', 'investimentos', 'agenda', 'ideias', 'jarvis'].includes(activeModule)) activeModule = 'dashboard';
+      if (typeof renderCeoModule === "function" && renderCeoModule()) return;
       // Renderizacao central: sempre que dados/modulo mudam, esta funcao redesenha a tela.
       const module = modules[activeModule];
       moduleTitle.textContent = module.title;

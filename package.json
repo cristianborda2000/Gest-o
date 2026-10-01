@@ -1,18 +1,28 @@
 {
   "name": "zama-admin",
   "version": "1.0.0",
-  "description": "Sistema administrativo ZAMA com dashboard, clientes, agenda, financeiro, contratos e Tailwind.",
+  "description": "Central ZAMA com financeiro, investimentos, agenda, ideias e assistente JARVIS.",
   "private": true,
   "scripts": {
     "build:css": "node ./node_modules/tailwindcss/lib/cli.js -i ./app/assets/styles.input.css -o ./app/assets/styles.css --minify",
     "dev:css": "node ./node_modules/tailwindcss/lib/cli.js -i ./app/assets/styles.input.css -o ./app/assets/styles.css --watch",
-    "serve": "vite --host localhost --port 5174 --strictPort ./app",
-    "test": "node tests/rules.test.js && node tests/auth-recovery.test.js"
+    "serve": "node scripts/dev.mjs",
+    "test": "node tests/rules.test.js && node tests/auth-recovery.test.js && node tests/ceo-finance.test.js && node tests/ceo-agenda.test.js && node tests/ceo-ideas.test.js && node tests/ceo-persistence.test.js && node tests/reminder-delivery.test.js && npm run test:jarvis",
+    "test:jarvis": "node --test tests/jarvis-domain.test.js tests/jarvis-agent.test.js tests/jarvis-database.test.js",
+    "test:browser": "playwright test"
   },
+  "engines": { "node": ">=22" },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@playwright/test": "^1.63.0",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "vite": "^6.0.7"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.117.2",
+    "openai": "^7.25.0",
+    "zod": "^4.6.5"
   }
 }

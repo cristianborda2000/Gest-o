@@ -1,5 +1,11 @@
 # Arquitetura do ZAMA Admin
 
+> Atualização da Central CEO: o fluxo de dados, os novos módulos, as regras de
+> finanças e lembretes e a organização atual do CSS estão no
+> [guia da Central CEO](CENTRAL-CEO.md). As seções abaixo descrevem a base legada
+> preservada. O carregamento atual não envia automaticamente o localStorage ao
+> Supabase; as gravações usam controle de versão com `updated_at`.
+
 Este documento explica como o sistema esta organizado, onde cada parte vive e
 qual caminho seguir para fazer manutencao sem quebrar as funcoes existentes.
 

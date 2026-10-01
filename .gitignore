@@ -2,3 +2,10 @@ node_modules/
 .vercel/
 *.log
 npm-debug.log*
+.npm-cache/
+.playwright/
+test-results/
+playwright-report/
+.env
+.env.*
+!.env.example

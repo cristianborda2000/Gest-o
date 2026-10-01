@@ -1,0 +1,45 @@
+.ceo-ideas > .ceo-toolbar { justify-content: space-between; }
+.ceo-ideas .ceo-toolbar h2 { margin: 0 0 4px; }
+.ceo-ideas .ceo-toolbar p { margin: 0; }
+.ceo-idea-filters { display: grid; grid-template-columns: minmax(220px,2fr) repeat(4,minmax(120px,1fr)); gap: 14px; padding: 18px; margin-top: 22px; }
+.ceo-idea-filters .ceo-field { min-width: 0; }
+.ceo-idea-results { font-size: 13px; color: #777d89; margin: 18px 0 12px; }
+.ceo-ideas-board { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); align-items: start; gap: 16px; }
+.ceo-idea-column { background: #eef0f3; border: 1px solid #e6e8ec; border-radius: 14px; padding: 14px; min-width: 0; }
+.ceo-idea-column > header { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 2px 2px 16px; }
+.ceo-idea-column > header h2 { font-size: 14px; margin: 0; font-weight: 650; }
+.ceo-idea-stack { display: grid; gap: 12px; }
+.ceo-idea-card { min-width: 0; background: #fff; border: 1px solid #e6e8ec; border-radius: 10px; padding: 16px; box-shadow: 0 2px 3px rgb(0 0 0 / 2%); }
+.ceo-idea-card h3 { font-size: 15px; line-height: 1.45; margin: 14px 0 7px; overflow-wrap: anywhere; }
+.ceo-idea-description { color: #6d7481; font-size: 13px; line-height: 1.6; white-space: pre-line; overflow-wrap: anywhere; margin: 0 0 12px; max-height: 180px; overflow-y: auto; }
+.ceo-idea-meta { display: flex; gap: 5px; flex-wrap: wrap; }
+.ceo-idea-meta .ceo-badge { font-size: 11px; max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
+.ceo-idea-meta .ceo-idea-priority-alta { background: #fee7e9; color: #aa3343; }
+.ceo-idea-meta .ceo-idea-priority-media { background: #ededed; color: #525252; }
+.ceo-idea-meta .ceo-idea-priority-baixa { background: #e5f3ec; color: #287652; }
+.ceo-idea-date { font-size: 11px; color: #7f8692; margin: 10px 0; }
+.ceo-idea-linked { font-size: 12px; color: #34785e; background: #eef8f1; border-radius: 6px; padding: 9px; }
+.ceo-idea-move { font-size: 11px; margin: 13px 0; }
+.ceo-idea-move select { width: 100%; min-height: 35px; font-size: 12px; }
+.ceo-idea-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.ceo-idea-actions .ceo-button { min-height: 30px; padding: 6px 9px; font-size: 11px; }
+.ceo-idea-actions .ceo-idea-convert { flex: 1 0 100%; background: #f4f5f7; }
+.ceo-idea-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+.ceo-idea-dialog-header h2 { margin: 0; font-size: 23px; }
+.ceo-idea-dialog-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.ceo-idea-conversion-summary { font-size: 17px; font-weight: 600; }
+.ceo-idea-form .ceo-muted { margin-bottom: 20px; }
+.ceo-span-2 { grid-column: 1 / -1; }
+@media (max-width: 1180px) {
+  .ceo-ideas-board { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .ceo-idea-filters { grid-template-columns: repeat(4,minmax(0,1fr)); }
+  .ceo-idea-search { grid-column: 1 / -1; }
+}
+@media (max-width: 600px) {
+  .ceo-ideas-board { grid-template-columns: minmax(0,1fr); }
+  .ceo-idea-filters { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; padding: 14px; }
+  .ceo-ideas .ceo-toolbar { align-items: flex-start; gap: 14px; }
+  .ceo-idea-card { padding: 16px; }
+  .ceo-idea-actions .ceo-button, .ceo-ideas .ceo-button, .ceo-idea-form .ceo-button, .ceo-idea-move select { min-height: 44px; font-size: 12px; }
+  .ceo-ideas input, .ceo-ideas select, .ceo-idea-form input, .ceo-idea-form select, .ceo-idea-form textarea { font-size: 16px; }
+}

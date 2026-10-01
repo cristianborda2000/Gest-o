@@ -1,5 +1,11 @@
 # ZAMA Admin
 
+JARVIS: veja [configuracao, migration, testes e limites da entrega](docs/JARVIS.md).
+
+A central de gestão e rotina reúne financeiro, investimentos, agenda e ideias,
+preservando os módulos e os dados existentes. Veja [o guia da Central CEO](docs/CENTRAL-CEO.md)
+para os fluxos, compatibilidade, lembretes e validações.
+
 Este projeto foi separado por pastas para ficar mais facil de entender e manter.
 
 ## Estrutura
