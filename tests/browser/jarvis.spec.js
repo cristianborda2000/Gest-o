@@ -20,9 +20,10 @@ async function jarvisMock(page,options={}){
       return respond({enabled:true,configured:true,memoryEnabled:false,voiceEnabled:false,...options.config});
     }
     if(path==='/summary')return options.summaryError?respond({error:options.summaryError},503):respond({summary});
-    if(path==='/conversations')return respond({conversations:api.history});
+    if(path==='/conversations')return options.historyFailsAfterMessage&&api.messages.length?respond({error:'Histórico temporariamente indisponível.'},503):respond({conversations:api.history});
     if(path===`/conversations/${conversationId}`)return respond({conversation,messages:api.messages,actions:api.actions});
     if(path==='/message'){
+      if(options.messageGate)await options.messageGate;
       if(api.messageFailures-->0)return respond({error:'Falha temporária de rede. Tente novamente.'},503);
       api.history=[conversation];
       api.messages=[{id:'m1',role:'user',content:body.message},{id:'m2',role:'assistant',content:options.reply||'Neste mês, as saídas pagas somam R$ 480,25.'}];
@@ -155,6 +156,78 @@ test('typing while configuration loads preserves the draft and cursor when ready
   await expect(page.getByRole('button',{name:'Enviar',exact:false})).toBeEnabled();
   await expect(input).toHaveValue('Organize meu dia');await expect(input).toBeFocused();
   expect(await input.evaluate(el=>el.selectionStart)).toBe(8);
+});
+
+test('message appears immediately while a new draft remains editable without duplicate requests',async({page})=>{
+  let release;const messageGate=new Promise(resolve=>{release=resolve;});
+  const api=await jarvisMock(page,{messageGate});await openJarvis(page);
+  await send(page,'Como está meu dia?');
+  const pending=page.locator('.jarvis-message.pending');
+  await expect(pending).toContainText('Como está meu dia?');
+  await expect(pending).toContainText('Enviando…');
+  await expect(page.locator('.jarvis-thinking')).toContainText('Aguardando resposta');
+  const input=page.getByLabel('Mensagem para o JARVIS');
+  await expect(input).toBeEnabled();await expect(input).toHaveValue('');
+  await input.fill('Minha próxima pergunta');
+  await input.evaluate(el=>el.setSelectionRange(6,6));
+  await expect(page.getByRole('button',{name:'Enviar',exact:false})).toBeDisabled();
+  await page.locator('form.jarvis-composer').evaluate(el=>el.requestSubmit());
+  expect(api.requests.filter(r=>r.path==='/message')).toHaveLength(1);
+  release();
+  await expect(page.locator('.jarvis-message.assistant')).toContainText('480,25');
+  await expect(pending).toHaveCount(0);
+  await expect(input).toHaveValue('Minha próxima pergunta');await expect(input).toBeFocused();
+  expect(await input.evaluate(el=>el.selectionStart)).toBe(6);
+  await expect(page.getByRole('button',{name:'Enviar',exact:false})).toBeEnabled();
+  expect(api.requests.filter(r=>r.path==='/message')).toHaveLength(1);
+});
+
+test('uncertain message retries the original request while preserving a different draft',async({page})=>{
+  const api=await jarvisMock(page,{messageFailures:1});await openJarvis(page);
+  await send(page,'Crie uma tarefa para amanhã');
+  await expect(page.locator('.jarvis-message.pending')).toContainText('Resposta não recebida');
+  const input=page.getByLabel('Mensagem para o JARVIS');await input.fill('Quanto gastei este mês?');
+  await expect(page.getByRole('button',{name:'Enviar',exact:false})).toBeDisabled();
+  await page.getByRole('button',{name:'Tentar novamente',exact:true}).click();
+  await expect(page.locator('.jarvis-message.assistant')).toBeVisible();
+  const posts=api.requests.filter(r=>r.path==='/message');expect(posts).toHaveLength(2);
+  expect(posts[1].body).toEqual(posts[0].body);
+  await expect(input).toHaveValue('Quanto gastei este mês?');
+});
+
+test('a history refresh failure after acknowledgment never offers to repeat the message',async({page})=>{
+  const api=await jarvisMock(page,{historyFailsAfterMessage:true});await openJarvis(page);
+  await send(page,'Salva uma ideia: programa de indicação');
+  await expect(page.locator('.jarvis-message.assistant')).toBeVisible();
+  await expect(page.locator('.jarvis-error')).toContainText('Resposta recebida.');
+  await expect(page.getByRole('button',{name:'Tentar novamente',exact:true})).toHaveCount(0);
+  await expect(page.locator('.jarvis-message.pending')).toHaveCount(0);
+  expect(api.requests.filter(r=>r.path==='/message')).toHaveLength(1);
+});
+
+test('rerenders preserve the reading position and cursor within long conversations',async({page})=>{
+  const messages=Array.from({length:30},(_,i)=>({id:`history-${i}`,role:i%2?'assistant':'user',content:`Registro ${i}: uma mensagem de histórico com informações da agenda.`}));
+  await jarvisMock(page,{history:[conversation],messages});await openJarvis(page);
+  await page.getByLabel('Histórico de conversas').selectOption(conversationId);
+  await expect(page.locator('.jarvis-message')).toHaveCount(30);
+  const feed=page.locator('.jarvis-feed'),input=page.getByLabel('Mensagem para o JARVIS');
+  await input.fill('Continue daqui');await input.evaluate(el=>el.setSelectionRange(4,4));
+  await feed.evaluate(el=>{el.scrollTop=170;});
+  const top=await feed.evaluate(el=>el.scrollTop);
+  await page.evaluate(()=>render());
+  expect(await feed.evaluate(el=>el.scrollTop)).toBe(top);
+  await expect(input).toBeFocused();expect(await input.evaluate(el=>el.selectionStart)).toBe(4);
+});
+
+test('mobile composer grows for multiline drafts and contracts after clearing',async({page})=>{
+  await page.setViewportSize({width:390,height:844});await jarvisMock(page);await openJarvis(page);
+  const input=page.getByLabel('Mensagem para o JARVIS');
+  const initial=await input.evaluate(el=>el.clientHeight);
+  await input.fill(Array.from({length:20},(_,i)=>`Linha ${i+1}`).join('\n'));
+  const expanded=await input.evaluate(el=>el.clientHeight);
+  expect(expanded).toBeGreaterThan(initial);expect(expanded).toBeLessThanOrEqual(180);
+  await input.fill('');expect(await input.evaluate(el=>el.clientHeight)).toBe(initial);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 
 for(const viewport of [{width:390,height:844},{width:1024,height:768}]){

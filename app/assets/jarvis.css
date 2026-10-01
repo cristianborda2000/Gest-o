@@ -44,11 +44,13 @@
 .jarvis-message.assistant{border-bottom-left-radius:4px}
 .jarvis-message>span{font-size:10px;letter-spacing:1px;opacity:.75;font-weight:700}
 .jarvis-message p{white-space:pre-wrap;line-height:1.6;font-size:14px;margin:7px 0 0}
+.jarvis-message.pending{border:1px dashed var(--j-border-strong)}
+.jarvis-message.pending small{display:block;font-size:11px;margin-top:8px;color:inherit;opacity:.8}
 .jarvis-quick{display:flex;gap:8px;flex-wrap:wrap}
 .jarvis-quick button{font-size:12px;padding:8px 12px}
 .jarvis-composer{border:1px solid var(--j-border-strong);border-radius:14px;padding:12px 14px;background:var(--j-surface)}
 .jarvis-composer:focus-within{border-color:var(--j-focus);box-shadow:0 0 0 3px #00000012}
-.jarvis-composer textarea{display:block;width:100%;resize:vertical;max-height:180px;min-height:55px;background:transparent;border:0;padding:2px;outline:none;font:inherit;font-size:14px;color:var(--j-text);caret-color:var(--j-text)}
+.jarvis-composer textarea{display:block;width:100%;resize:none;max-height:180px;min-height:55px;background:transparent;border:0;padding:2px;outline:none;font:inherit;font-size:14px;line-height:1.5;color:var(--j-text);caret-color:var(--j-text)}
 .jarvis-composer textarea:disabled{opacity:.65}
 .jarvis-composer textarea:focus-visible{outline:none;box-shadow:none}
 .jarvis-composer-hint{font-size:11px;line-height:1.45;color:var(--j-muted);margin:6px 0 10px}

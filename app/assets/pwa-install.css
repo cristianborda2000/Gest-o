@@ -1,0 +1,64 @@
+.pwa-install-section {
+  color: #202020;
+  background: #fafafa;
+  border: 1px solid #dedede;
+  border-radius: 16px;
+  padding: 18px;
+}
+.pwa-install-section p,
+.pwa-install-dialog p {
+  color: #595959;
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 10px 0 16px;
+}
+.pwa-install-button,
+.pwa-install-close {
+  appearance: none;
+  font: inherit;
+  cursor: pointer;
+  min-height: 44px;
+  border: 1px solid #171717;
+  border-radius: 10px;
+}
+.pwa-install-button {
+  background: #171717;
+  color: #fff;
+  padding: 11px 18px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.pwa-install-button:hover { background: #333; }
+.pwa-install-button:disabled { cursor: default; opacity: .6; }
+.pwa-install-button[hidden] { display: none; }
+.pwa-install-button:focus-visible,
+.pwa-install-close:focus-visible,
+.pwa-install-dialog summary:focus-visible {
+  outline: 2px solid #171717;
+  outline-offset: 4px;
+}
+.pwa-install-dialog {
+  color: #202020;
+  background: #fff;
+  width: min(480px, calc(100vw - 32px));
+  box-sizing: border-box;
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  padding: 24px;
+  border: 1px solid #dedede;
+  border-radius: 20px;
+  box-shadow: 0 20px 70px #0003;
+}
+.pwa-install-dialog::backdrop { background: #0008; }
+.pwa-install-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.pwa-install-head h2 { color: #171717; font-size: 23px; line-height: 1.2; margin: 0; }
+.pwa-install-close { color: #171717; background: #fff; width: 44px; flex: 0 0 44px; font-size: 22px; border-color: #dedede; }
+.pwa-install-dialog ol { list-style: decimal; padding-left: 22px; margin: 12px 0 20px; }
+.pwa-install-dialog li { padding-left: 3px; margin: 12px 0; font-size: 15px; line-height: 1.55; }
+.pwa-install-dialog details { margin: 16px 0; }
+.pwa-install-dialog summary { cursor: pointer; min-height: 44px; padding: 12px 0; }
+.pwa-install-dialog .pwa-install-note { font-size: 13px; border-top: 1px solid #e5e5e5; padding-top: 16px; }
+@media (max-width: 540px) {
+  .pwa-install-dialog { padding: 20px; }
+  .pwa-install-dialog > .pwa-install-button { width: 100%; }
+}

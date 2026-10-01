@@ -15,6 +15,15 @@ no banco antes do envio. O botão Enviar só é liberado após carregar a config
 o resumo e o histórico, com a integração habilitada e uma mensagem preenchida.
 Escrever um rascunho não chama a OpenAI nem altera registros.
 
+Ao enviar, a mensagem aparece imediatamente com o estado “Enviando”, sem afirmar
+que já foi salva. O campo continua disponível para preparar o próximo rascunho;
+o próximo envio aguarda a resposta atual. O tamanho do campo acompanha o texto,
+e atualizações preservam cursor e posição de leitura. Se a resposta não chegar,
+“Tentar novamente” reutiliza o mesmo identificador. Uma falha ao atualizar o
+histórico depois de receber a resposta não oferece repetir a ação já recebida.
+Essas melhorias reduzem esperas na interface; não simulam streaming nem alteram
+o tempo de processamento do modelo.
+
 O microfone exibe **Voz indisponível** e apenas explica o estado atual. Áudio ainda
 não foi implementado; nenhuma permissão de microfone é solicitada. Ativar somente
 `JARVIS_VOICE_ENABLED` não cria a integração de voz.
@@ -251,6 +260,24 @@ de dados autenticados. A instalação depende de HTTPS e dos critérios do naveg
 iPhone usa “Adicionar à Tela de Início”. Instalação física em iOS/Android não foi
 verificada nesta máquina.
 
+Em **Configurações → Instalar ZAMA**, o navegador abre o pedido de instalação
+quando disponível. Caso contrário, a interface apresenta as instruções para a
+plataforma. A instalação só é solicitada após o clique; o botão fica oculto ao
+receber a confirmação do navegador ou ao abrir em modo aplicativo.
+
+- Android: abra `https://www.zam4.com` no Chrome, menu ⋮, “Instalar aplicativo”
+  ou “Adicionar à tela inicial”, e confirme.
+- iPhone/iPad: abra o endereço no Safari, Compartilhar, “Adicionar à Tela de
+  Início”, ative “Abrir como App da Web” se aparecer e toque em Adicionar.
+- Computador: use o mesmo botão nas Configurações ou a opção de instalação do
+  Chrome/Edge. O aplicativo precisa de internet para conversar e sincronizar.
+
+Implementação: `app/assets/js/pwa-install.js`, `app/assets/pwa-install.css` e
+referências em `app/index.html`. Testes em `tests/browser/pwa.spec.js` simulam
+disponibilidade, recusa, instalação concluída, modo standalone e instruções
+iOS/Android; não instalam um aplicativo físico. Nenhuma migration ou variável
+de ambiente nova é necessária para essas melhorias de interface.
+
 O botão de microfone é uma preparação visual e informa que voz não está disponível.
 Não solicita permissão, não abre o microfone, não faz wake word nem cria credencial
 temporária falsa. A fase Realtime/WebRTC, token efêmero, push-to-talk, interrupção e
@@ -309,4 +336,6 @@ Após a ativação, validar em uma conta de teste:
 Referências oficiais usadas na implementação:
 [OpenAI — function calling](https://developers.openai.com/api/docs/guides/function-calling),
 [OpenAI — Realtime](https://developers.openai.com/api/docs/guides/realtime),
+[Apple — aplicativo da web no iPhone](https://support.apple.com/pt-br/guide/iphone/iphea86e5236/ios),
+[Google — instalar aplicativos da web](https://support.google.com/chrome/answer/9658361?co=GENIE.Platform%3DAndroid&hl=pt-BR),
 [PGlite — API PostgreSQL local](https://pglite.dev/docs/api).
