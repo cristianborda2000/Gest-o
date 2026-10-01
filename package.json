@@ -8,7 +8,7 @@
     "dev:css": "node ./node_modules/tailwindcss/lib/cli.js -i ./app/assets/styles.input.css -o ./app/assets/styles.css --watch",
     "serve": "node scripts/dev.mjs",
     "test": "node tests/rules.test.js && node tests/auth-recovery.test.js && node tests/ceo-finance.test.js && node tests/ceo-agenda.test.js && node tests/ceo-ideas.test.js && node tests/ceo-persistence.test.js && node tests/reminder-delivery.test.js && npm run test:jarvis",
-    "test:jarvis": "node --test tests/jarvis-domain.test.js tests/jarvis-agent.test.js tests/jarvis-database.test.js",
+    "test:jarvis": "node --test tests/jarvis-domain.test.js tests/jarvis-agent.test.js tests/jarvis-database.test.js tests/jarvis-voice.test.js",
     "test:browser": "playwright test"
   },
   "engines": { "node": ">=22" },

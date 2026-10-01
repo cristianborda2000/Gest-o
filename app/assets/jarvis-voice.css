@@ -1,0 +1,19 @@
+/* Voice controls share JARVIS's existing monochrome tokens. */
+.jarvis-voice-status{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 14px;border:1px solid var(--j-border);border-radius:12px;background:var(--j-surface-soft);font-size:12px;line-height:1.5;color:var(--j-text);overflow-wrap:anywhere}
+.jarvis-voice-status>span{margin:0;flex:1;min-width:160px}
+.jarvis-voice-status small{color:var(--j-muted);font-size:10px}
+.jarvis-voice-status .ceo-button{min-height:40px;padding:8px 12px;font-size:12px}
+.jarvis-voice-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.jarvis-voice-status [data-voice-stop]{margin-left:auto}
+.jarvis-voice-status[data-state="listening"],.jarvis-voice-status[data-state="speaking"]{border-color:var(--j-border-strong);background:var(--j-surface-muted)}
+.jarvis-voice-status[data-state="error"]{border-color:var(--j-text)}
+.jarvis-voice-disclosure{font-size:10px;line-height:1.5;color:var(--j-muted);margin:0}
+.jarvis-microphone[aria-pressed="true"],.jarvis-microphone[data-status="listening"],.jarvis-microphone[data-voice-state="listening"]{background:var(--j-text);color:var(--j-surface);border-color:var(--j-text);box-shadow:0 0 0 5px #17171712}
+.jarvis-microphone[data-status="listening"]::after,.jarvis-microphone[data-voice-state="listening"]::after{content:"";position:absolute;inset:-5px;border:1px solid var(--j-border-strong);border-radius:50%;animation:jarvis-voice-pulse 1.4s ease-out infinite;pointer-events:none}
+.jarvis-microphone{position:relative;min-width:44px;min-height:44px;touch-action:manipulation}
+.jarvis-microphone:disabled{cursor:wait;opacity:.6}
+.jarvis-voice-status button:focus-visible,.jarvis-microphone:focus-visible{outline:2px solid var(--j-focus);outline-offset:4px}
+.jarvis-voice-control small{max-width:100px!important}
+@keyframes jarvis-voice-pulse{from{transform:scale(.9);opacity:.65}to{transform:scale(1.14);opacity:0}}
+@media(max-width:600px){.jarvis-voice-status{gap:8px;padding:10px}.jarvis-voice-status>span{min-width:100%;flex-basis:100%}.jarvis-voice-actions{width:100%}.jarvis-voice-status .ceo-button{flex:1;min-width:110px}.jarvis-voice-status [data-voice-stop]{margin-left:0}.jarvis-microphone{width:52px;height:52px}.jarvis-voice-disclosure{font-size:10px}}
+@media(prefers-reduced-motion:reduce){.jarvis-microphone[data-status="listening"]::after,.jarvis-microphone[data-voice-state="listening"]::after{animation:none}}

@@ -8,6 +8,9 @@
   let host, dialog, account = null, generation = 0, initialized = false;
   let config = null, summary = null, conversations = [], messages = [], actions = [], memories = [], conversation = null;
   let busy = false, loading = false, ready = false, error = '', draft = '', retry = null, pendingMessage = null, activity = '';
+  let voice = null, voiceState = { status: 'idle', connected: false }, retryVoice = false;
+  const voiceTurns = new Map();
+  const voiceCapturing = () => ['connecting', 'listening', 'transcribing'].includes(voiceState.status);
   const money = cents => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((cents || 0) / 100);
   async function api(path, options = {}) {
     const { data } = await supabaseClient.auth.getSession();
@@ -18,7 +21,9 @@
     return body;
   }
   function reset() {
-    generation++; initialized = false; account = null; config = summary = conversation = null;
+    generation++; voice?.stop(); voice = null; voiceTurns.clear(); retryVoice = false;
+    voiceState = { status: 'idle', connected: false };
+    initialized = false; account = null; config = summary = conversation = null;
     conversations = []; messages = []; actions = []; memories = []; error = draft = activity = ''; retry = pendingMessage = null; busy = loading = ready = false;
     if (dialog?.open) dialog.close(); host?.remove(); host = null;
   }
@@ -31,6 +36,7 @@
     try {
       const nextConfig = await api('/config'); if (gen !== generation) return;
       config = nextConfig;
+      if (config.voiceEnabled) ensureVoice(); else voice?.stop();
       if (config.enabled) {
         const [home, history, memory] = await Promise.all([api('/summary'), api('/conversations'), config.memoryEnabled ? api('/memories') : Promise.resolve({ memories: [] })]);
         if (gen !== generation) return;
@@ -46,6 +52,49 @@
     const name = account?.user_metadata?.first_name || account?.user_metadata?.full_name?.split(' ')[0];
     return `${salutation}${name ? `, ${name}` : ''}.`;
   }
+  function ensureVoice() {
+    if (voice || !global.ZamaJarvisVoice) return voice;
+    const gen = generation;
+    voice = global.ZamaJarvisVoice.create({
+      api,
+      onState: next => { if (gen === generation) { voiceState = next; paint(); } },
+      onError: message => { if (gen === generation) { error = message; paint(); } },
+      onTranscript: async ({ text, turnId }) => {
+        if (gen !== generation || !ready || voiceTurns.has(turnId)) return;
+        // A provider transcript is forwarded exactly once through the existing text API.
+        // Audio never chooses a tool, account or confirmation endpoint.
+        const body = { message: text, request_id: crypto.randomUUID(), ...(conversation ? { conversation_id: conversation.id } : {}) };
+        voiceTurns.set(turnId, body);
+        if (voiceTurns.size > 100) voiceTurns.delete(voiceTurns.keys().next().value);
+        if (busy || loading || retry) {
+          voice?.stop();
+          error = 'Não foi possível enviar este áudio enquanto outra mensagem está pendente. Termine o envio anterior e grave novamente.';
+          paint(); return;
+        }
+        await send(body, true);
+      }
+    });
+    voiceState = voice.getState();
+    return voice;
+  }
+  function voicePanelMarkup() {
+    if (!config?.voiceEnabled) return '';
+    const labels = { idle: 'Microfone desligado. Toque para falar e, depois, para enviar.', connecting: 'Conectando a voz…', listening: 'Ouvindo. Toque em Enviar áudio quando terminar.', transcribing: 'Entendendo seu áudio…', thinking: 'JARVIS está consultando seus dados…', speaking: 'JARVIS está falando.', error: 'Microfone desligado.' };
+    const active = voiceState.connected || voiceCapturing();
+    return `<div class="jarvis-voice-status" role="status" aria-live="polite" data-state="${esc(voiceState.status)}"><span>${esc(voiceState.message || labels[voiceState.status] || labels.idle)}</span><div class="jarvis-voice-actions">${voiceState.status === 'speaking' ? '<button type="button" class="ceo-button" data-voice-interrupt>Interromper resposta</button>' : ''}${voiceState.playbackBlocked ? '<button type="button" class="ceo-button" data-voice-play>Ouvir resposta</button>' : ''}${active ? '<button type="button" class="ceo-button" data-voice-stop>Desligar voz</button>' : ''}</div><small>Voz gerada por IA. O áudio é enviado à OpenAI; a transcrição fica na conversa. Movimentações exigem confirmação na tela.</small></div>`;
+  }
+  async function toggleVoice() {
+    if (!config?.voiceEnabled) { error = `${config?.voiceReason || 'Ative a integração de voz no servidor.'} O microfone permanece desligado.`; paint(); return; }
+    const controller = ensureVoice();
+    if (!controller?.isSupported()) { error = 'Este navegador não oferece áudio compatível. Abra a ZAMA no Safari ou Chrome atualizado, com HTTPS.'; paint(); return; }
+    if (!ready || busy || loading || retry) return;
+    error = '';
+    if (voiceState.status === 'listening') await controller.finish();
+    else await controller.start();
+  }
+  function navigation() {
+    if (typeof activeModule !== 'undefined' && activeModule !== 'jarvis' && !dialog?.open) voice?.stop();
+  }
   function ensureHost() {
     if (!host) { host = document.createElement('section'); host.className = 'jarvis'; host.setAttribute('aria-label', 'Assistente JARVIS'); }
     return host;
@@ -59,18 +108,20 @@
     if (activeModule === 'jarvis') { host?.querySelector('textarea')?.focus(); return; }
     if (!dialog) {
       dialog = document.createElement('dialog'); dialog.className = 'jarvis-dialog'; dialog.setAttribute('aria-label', 'JARVIS — acesso rápido');
-      dialog.addEventListener('close', () => { host?.remove(); });
+      dialog.addEventListener('close', () => { voice?.stop(); host?.remove(); });
       document.body.appendChild(dialog);
     }
     dialog.replaceChildren(ensureHost()); paint(); dialog.showModal(); host.querySelector('textarea')?.focus();
   }
   function actionCard(action) {
+    const busy = globalBusyForAction();
     const pending = action.status === 'pending', input = action.input || {}, result = action.result || {};
     const financial = action.tool_name === 'register_expense' || action.tool_name === 'register_income';
     const states = { pending: 'Aguardando confirmação', executed: 'Concluída', cancelled: 'Cancelada', failed: 'Não executada' };
     if (!financial && action.status === 'executed') return `<div class="jarvis-receipt"><span aria-hidden="true">✓</span> ${esc(toolNames[action.tool_name] || action.tool_name)}${result.title ? ` · ${esc(result.title)}` : ''}</div>`;
     return `<article class="jarvis-action ${pending ? 'pending' : ''}" data-action-id="${esc(action.id)}"><div><span class="ceo-eyebrow">${esc(states[action.status] || action.status)}</span><h3>${esc(toolNames[action.tool_name] || action.tool_name)}</h3></div>${financial ? `<strong class="jarvis-amount">${esc(result.amount || money(Math.round((input.amount || 0) * 100)))}</strong><dl><div><dt>Descrição</dt><dd>${esc(input.description)}</dd></div><div><dt>Categoria</dt><dd>${esc(input.category)}</dd></div><div><dt>Data</dt><dd>${esc(input.date ? input.date.split('-').reverse().join('/') : '')}</dd></div><div><dt>Situação</dt><dd>${input.status === 'pending' ? 'Pendente' : action.tool_name === 'register_income' ? 'Recebida' : 'Paga'}</dd></div>${input.due_date !== input.date ? `<div><dt>Vencimento</dt><dd>${esc(input.due_date?.split('-').reverse().join('/'))}</dd></div>` : ''}</dl>` : ''}${action.status === 'failed' ? `<p>${esc(result.error || 'Ação não executada.')}</p>` : ''}${pending ? `<p>A movimentação será salva somente após sua confirmação.</p><div class="jarvis-confirm-buttons"><button class="ceo-button primary" data-confirm="${esc(action.id)}" ${busy ? 'disabled' : ''}>Confirmar</button><button class="ceo-button" data-cancel="${esc(action.id)}" ${busy ? 'disabled' : ''}>Cancelar</button></div>` : ''}</article>`;
   }
+  function globalBusyForAction() { return busy || voiceCapturing(); }
   function homeMarkup() {
     if (!summary) return `<div class="jarvis-welcome"><div class="jarvis-orb" aria-hidden="true">J</div><h2>${esc(greeting())}</h2><p>Seu espaço para pensar, organizar e agir.</p></div>`;
     const tasks = summary.tasks?.tasks || [], overdue = summary.overdue?.total || 0;
@@ -93,27 +144,34 @@
     const previousFeed = host.querySelector('.jarvis-feed');
     const feedTop = previousFeed?.scrollTop || 0;
     const followLatest = !previousFeed || previousFeed.scrollHeight - previousFeed.clientHeight - feedTop < 48;
-    const canSend = ready && !busy && !loading && !retry;
+    const capturing = voiceCapturing();
+    const canSend = ready && !busy && !loading && !retry && !capturing;
+    const microphoneLabel = !config?.voiceEnabled ? 'Informações sobre voz' : voiceState.status === 'listening' ? 'Enviar áudio' : 'Falar com o JARVIS';
+    const microphoneDisabled = config?.voiceEnabled && (!ready || busy || loading || retry || ['connecting', 'transcribing', 'thinking'].includes(voiceState.status));
     const composerHint = busy ? 'Você pode preparar a próxima mensagem enquanto aguarda.' : retry ? 'A resposta não chegou. Use Tentar novamente para recuperar o mesmo envio com segurança.' : loading ? 'Você já pode escrever enquanto verificamos a conexão.' : ready ? 'Enter para enviar · Shift + Enter para nova linha' : config && (!config.enabled || !config.configured) ? 'Você pode escrever. O envio aguarda a configuração da integração.' : 'Você pode escrever. O envio está indisponível; use Atualizar para tentar a conexão novamente.';
-    host.innerHTML = `<header class="jarvis-header"><div><span class="ceo-eyebrow">SEU ASSISTENTE EXECUTIVO</span><h2>JARVIS<span class="jarvis-status-dot"></span></h2></div><div class="jarvis-header-actions"><button class="ceo-button" data-new ${busy ? 'disabled' : ''}>Nova conversa</button>${dialog?.open || host.parentElement === dialog ? '<button class="ceo-icon-button" data-close aria-label="Fechar JARVIS">×</button>' : ''}</div></header>
-      <div class="jarvis-history-bar"><label>Conversas<select aria-label="Histórico de conversas" ${busy ? 'disabled' : ''}><option value="">Selecione uma conversa</option>${conversations.map(c => `<option value="${esc(c.id)}" ${conversation?.id === c.id ? 'selected' : ''}>${esc(c.title)}</option>`).join('')}</select></label><button class="ceo-button" data-refresh ${busy || loading ? 'disabled' : ''} aria-label="Atualizar JARVIS">↻ Atualizar</button></div>
+    host.innerHTML = `<header class="jarvis-header"><div><span class="ceo-eyebrow">SEU ASSISTENTE EXECUTIVO</span><h2>JARVIS<span class="jarvis-status-dot"></span></h2></div><div class="jarvis-header-actions"><button class="ceo-button" data-new ${busy || capturing ? 'disabled' : ''}>Nova conversa</button>${dialog?.open || host.parentElement === dialog ? '<button class="ceo-icon-button" data-close aria-label="Fechar JARVIS">×</button>' : ''}</div></header>
+      <div class="jarvis-history-bar"><label>Conversas<select aria-label="Histórico de conversas" ${busy || capturing ? 'disabled' : ''}><option value="">Selecione uma conversa</option>${conversations.map(c => `<option value="${esc(c.id)}" ${conversation?.id === c.id ? 'selected' : ''}>${esc(c.title)}</option>`).join('')}</select></label><button class="ceo-button" data-refresh ${busy || loading || capturing ? 'disabled' : ''} aria-label="Atualizar JARVIS">↻ Atualizar</button></div>
       ${loading ? '<p class="jarvis-notice" role="status">Carregando seu espaço…</p>' : ''}${config && (!config.enabled || !config.configured) ? `<p class="jarvis-notice">${esc(config.reason)}</p>` : ''}
       <div class="jarvis-feed" role="log" aria-label="Conversa com o JARVIS" aria-live="polite">${messages.length ? messages.map(m => `<article class="jarvis-message ${m.role === 'user' ? 'user' : 'assistant'}"><span>${m.role === 'user' ? 'Você' : 'JARVIS'}</span><p>${esc(m.content)}</p></article>`).join('') : pendingMessage ? '' : homeMarkup()}${pendingMessage ? `<article class="jarvis-message user pending" data-pending-request="${esc(pendingMessage.request_id)}"><span>Você</span><p>${esc(pendingMessage.message)}</p><small>${pendingMessage.status === 'sending' ? 'Enviando…' : 'Resposta não recebida'}</small></article>` : ''}${actions.length ? `<section class="jarvis-actions" aria-label="Ações desta conversa">${actions.map(actionCard).join('')}</section>` : ''}${busy ? `<p class="jarvis-thinking" role="status"><span></span> ${esc(activity || 'JARVIS está processando…')}</p>` : ''}</div>
       ${error ? `<div class="jarvis-error" role="alert"><p>${esc(error)}</p>${retry ? '<button class="ceo-button" data-retry>Tentar novamente</button>' : ''}</div>` : ''}
       <div class="jarvis-quick" aria-label="Ações rápidas">${[['Tarefa', 'Crie uma tarefa para '], ['Despesa', 'Registra uma despesa de R$ '], ['Entrada', 'Registra uma entrada de R$ '], ['Ideia', 'Salva uma ideia: ']].map(([label, prompt]) => `<button class="ceo-button" data-draft="${esc(prompt)}">+ ${label}</button>`).join('')}</div>
-      <form class="jarvis-composer"><label class="sr-only" for="jarvisInput">Mensagem para o JARVIS</label><textarea id="jarvisInput" rows="2" maxlength="4000" placeholder="Como posso ajudar?" aria-describedby="jarvisComposerHint">${esc(draft)}</textarea><p class="jarvis-composer-hint" id="jarvisComposerHint" role="status">${esc(composerHint)}</p><div class="jarvis-composer-actions"><small>Horário de Brasília · Português e espanhol</small><div class="jarvis-voice-control"><button class="jarvis-microphone" type="button" data-mic aria-label="Informações sobre voz" title="Voz ainda não implementada">${mic}</button><small>Voz indisponível</small></div><button class="ceo-button primary" type="submit" ${canSend && draft.trim() ? '' : 'disabled'}>Enviar <span aria-hidden="true">↑</span></button></div></form>
+      <form class="jarvis-composer"><label class="sr-only" for="jarvisInput">Mensagem para o JARVIS</label><textarea id="jarvisInput" rows="2" maxlength="4000" placeholder="Como posso ajudar?" aria-describedby="jarvisComposerHint">${esc(draft)}</textarea><p class="jarvis-composer-hint" id="jarvisComposerHint" role="status">${esc(composerHint)}</p><div class="jarvis-composer-actions"><small>Horário de Brasília · Português e espanhol</small><div class="jarvis-voice-control"><button class="jarvis-microphone" type="button" data-mic data-voice-state="${esc(voiceState.status)}" aria-label="${microphoneLabel}" title="${microphoneLabel}" ${microphoneDisabled ? 'disabled' : ''}>${mic}</button><small>${config?.voiceEnabled ? voiceState.status === 'listening' ? 'Enviar áudio' : 'Toque para falar' : 'Voz indisponível'}</small></div><button class="ceo-button primary" type="submit" ${canSend && draft.trim() ? '' : 'disabled'}>Enviar <span aria-hidden="true">↑</span></button></div></form>
+      ${voicePanelMarkup()}
       <p class="jarvis-footnote">Consulte os registros para decisões importantes. Movimentações financeiras exigem confirmação.</p>
       ${config?.memoryEnabled ? `<details class="jarvis-memories"><summary>Memórias explícitas (${memories.length})</summary><p>Somente o que você pediu para lembrar. Você pode desativar uma memória.</p>${memories.map(m => `<div><p>${esc(m.content)}</p><button class="ceo-button" data-forget="${esc(m.id)}">Esquecer</button></div>`).join('') || '<p>Nenhuma memória salva.</p>'}</details>` : ''}`;
     const input = host.querySelector('textarea'); input.oninput = () => { draft = input.value; resizeInput(input); host.querySelector('[type="submit"]').disabled = !canSend || !draft.trim(); };
     input.onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && canSend) { event.preventDefault(); host.querySelector('form').requestSubmit(); } };
     host.querySelector('form').onsubmit = event => { event.preventDefault(); if (canSend && draft.trim()) send(); };
-    host.querySelector('[data-new]').onclick = () => { conversation = null; messages = []; actions = []; draft = error = ''; retry = pendingMessage = null; paint({ scroll: 'end' }); host.querySelector('textarea').focus({ preventScroll: true }); };
+    host.querySelector('[data-new]').onclick = () => { voice?.stop(); conversation = null; messages = []; actions = []; draft = error = ''; retry = pendingMessage = null; retryVoice = false; paint({ scroll: 'end' }); host.querySelector('textarea').focus({ preventScroll: true }); };
     host.querySelector('[data-close]')?.addEventListener('click', () => dialog.close());
     host.querySelector('[data-refresh]').onclick = async () => { await loadHome(); if (conversation) await selectConversation(conversation.id); };
     host.querySelector('select').onchange = event => { if (event.target.value) selectConversation(event.target.value); };
     host.querySelectorAll('[data-draft],[data-prompt]').forEach(button => button.onclick = () => { draft = button.dataset.draft || button.dataset.prompt; if (!retry) error = ''; paint(); host.querySelector('textarea').focus({ preventScroll: true }); });
-    host.querySelector('[data-mic]').onclick = () => { error = 'Voz ainda não foi implementada; o microfone permanece desligado. Primeiro será validada a conversa por texto. Depois será adicionada a integração de áudio.'; paint(); };
-    host.querySelector('[data-retry]')?.addEventListener('click', () => send(retry));
+    host.querySelector('[data-mic]').onclick = toggleVoice;
+    host.querySelector('[data-voice-stop]')?.addEventListener('click', () => voice?.stop());
+    host.querySelector('[data-voice-interrupt]')?.addEventListener('click', () => voice?.interrupt());
+    host.querySelector('[data-voice-play]')?.addEventListener('click', () => voice?.resumePlayback());
+    host.querySelector('[data-retry]')?.addEventListener('click', () => send(retry, retryVoice));
     host.querySelectorAll('[data-confirm],[data-cancel]').forEach(button => button.onclick = () => resolveAction(button.dataset.confirm || button.dataset.cancel, Boolean(button.dataset.confirm)));
     host.querySelectorAll('[data-forget]').forEach(button => button.onclick = async () => { try { await api(`/memories/${encodeURIComponent(button.dataset.forget)}`, { method: 'DELETE' }); await loadHome(); } catch (failure) { error = failure.message; paint(); } });
     resizeInput(input);
@@ -122,6 +180,7 @@
     feed.scrollTop = options.scroll === 'end' || followLatest ? feed.scrollHeight : feedTop;
   }
   async function selectConversation(conversationId) {
+    voice?.stop();
     const gen = generation; busy = true; activity = 'Carregando conversa…'; error = ''; paint();
     try { const data = await api(`/conversations/${encodeURIComponent(conversationId)}`); if (gen !== generation) return; conversation = data.conversation; messages = data.messages; actions = data.actions; retry = pendingMessage = null; }
     catch (failure) { if (gen === generation) error = failure.message; }
@@ -133,10 +192,11 @@
     state = await loadState(); renderApp();
   }
   function renderApp() { if (typeof global.render === 'function') global.render(); }
-  async function send(repeated) {
+  async function send(repeated, fromVoice = false) {
     const gen = generation;
     const body = repeated || { message: draft.trim(), request_id: crypto.randomUUID(), ...(conversation ? { conversation_id: conversation.id } : {}) };
     if (!body.message || busy || loading || !ready || (retry && repeated !== retry)) return;
+    if (!fromVoice) { if (voiceCapturing()) return; voice?.interrupt(); }
     let received = false;
     busy = true; activity = 'Aguardando resposta do JARVIS…'; error = ''; retry = null;
     pendingMessage = { ...body, status: 'sending' };
@@ -148,6 +208,11 @@
       received = true;
       conversation = data.conversation; messages = data.messages; actions = data.actions; pendingMessage = null;
       activity = 'Atualizando a conversa…'; paint();
+      if (fromVoice) {
+        const answer = [...messages].reverse().find(message => message.role === 'assistant');
+        if (answer?.content) await voice?.speak(answer.content);
+        else voice?.stop();
+      }
       // Auxiliary refresh errors must never offer to repeat an already acknowledged write.
       if (data.state_changed) await syncState();
       const history = await api('/conversations'); if (gen !== generation) return; conversations = history.conversations;
@@ -155,13 +220,13 @@
     } catch (failure) {
       if (gen === generation) {
         error = received ? `Resposta recebida. Não foi possível atualizar os dados da tela: ${failure.message}` : failure.message;
-        if (!received) { retry = body; pendingMessage.status = 'uncertain'; }
+        if (!received) { retry = body; retryVoice = fromVoice; pendingMessage.status = 'uncertain'; if (fromVoice) voice?.stop(); }
       }
     }
     finally { if (gen === generation) { busy = false; activity = ''; paint(); } }
   }
   async function resolveAction(actionId, confirm) {
-    if (busy) return; const gen = generation; busy = true; activity = confirm ? 'Confirmando movimentação…' : 'Cancelando ação…'; error = ''; paint();
+    if (busy || voiceCapturing()) return; voice?.interrupt(); const gen = generation; busy = true; activity = confirm ? 'Confirmando movimentação…' : 'Cancelando ação…'; error = ''; paint();
     try {
       const data = await api(`/actions/${encodeURIComponent(actionId)}/${confirm ? 'confirm' : 'cancel'}`, { method: 'POST', body: confirm ? { confirmation: true } : {} });
       if (gen !== generation) return;
@@ -171,6 +236,6 @@
     } catch (failure) { if (gen === generation) error = failure.message; }
     finally { if (gen === generation) { busy = false; activity = ''; paint(); } }
   }
-  global.ZamaJarvis = { init, reset, render, open };
+  global.ZamaJarvis = { init, reset, render, open, navigation };
   document.getElementById('jarvisLauncher')?.addEventListener('click', open);
 })(window);

@@ -4,6 +4,7 @@ const { createClient } = require('@supabase/supabase-js');
 const { configuration, publicConfiguration } = require('./config');
 const { createRepository } = require('./repository');
 const { createAgent } = require('./agent');
+const { createVoice } = require('./voice');
 const { JarvisError } = require('./errors');
 const messageSchema = z.object({ message: z.string().trim().min(1).max(4000), conversation_id: z.uuid().optional(), request_id: z.uuid() }).strict();
 const credentials = /\b(sk-[\w-]{15,}|eyJ[\w-]{15,}\.[\w-]{15,}\.[\w-]+)|(?:api[_ -]?key|access_token|refresh_token|senha|password)\s*[:=]\s*\S+/i;
@@ -63,7 +64,10 @@ function createHandler(dependencies = {}) {
           return { result: { success: true } };
         }));
       }
-      if (path === '/usage' && req.method === 'GET') return send(200, { metrics: (await repository.read()).jarvis.metrics });
+      if (path === '/usage' && req.method === 'GET') {
+        const { jarvis } = await repository.read();
+        return send(200, { metrics: jarvis.metrics, voice_metrics: jarvis.voice_metrics || [] });
+      }
       if (req.method === 'POST') {
         if (!/^application\/json(?:;|$)/i.test(req.headers['content-type'] || '')) throw new JarvisError('Use application/json.', 415);
         const body = await readBody(req);
@@ -82,7 +86,11 @@ function createHandler(dependencies = {}) {
           if (!schema.safeParse(body).success) throw new JarvisError('Confirmação explícita obrigatória.', 400, 'CONFIRMATION_REQUIRED');
           return send(200, await agent.confirm(action[1], action[2] === 'confirm'));
         }
-        if (path === '/realtime/token') throw new JarvisError('Voz ainda não ativada: valide primeiro texto e ferramentas com a API real.', 501, 'VOICE_NOT_IMPLEMENTED');
+        if (path === '/realtime/token') {
+          if (!z.object({}).strict().safeParse(body).success) throw new JarvisError('A sessão de voz não aceita parâmetros do navegador.');
+          const voice = createVoice({ repository, config, provider: dependencies.voiceProvider, clock: dependencies.clock });
+          return send(200, await voice.issueToken());
+        }
       }
       throw new JarvisError('Endpoint não encontrado.', 404, 'NOT_FOUND');
     } catch (error) {

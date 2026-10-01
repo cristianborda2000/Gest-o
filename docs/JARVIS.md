@@ -1,4 +1,4 @@
-# JARVIS — primeira entrega por texto
+# JARVIS — texto e voz
 
 O JARVIS foi acrescentado ao projeto existente. O código usa a API oficial da
 OpenAI e o Supabase real; não há respostas, usuários ou registros fictícios como
@@ -24,9 +24,11 @@ histórico depois de receber a resposta não oferece repetir a ação já recebi
 Essas melhorias reduzem esperas na interface; não simulam streaming nem alteram
 o tempo de processamento do modelo.
 
-O microfone exibe **Voz indisponível** e apenas explica o estado atual. Áudio ainda
-não foi implementado; nenhuma permissão de microfone é solicitada. Ativar somente
-`JARVIS_VOICE_ENABLED` não cria a integração de voz.
+O microfone usa a API Realtime da OpenAI por WebRTC, com credencial efêmera emitida
+no servidor. Requer `JARVIS_VOICE_ENABLED=true` e `OPENAI_JARVIS_VOICE_MODEL`.
+Com a voz desativada, o botão explica a configuração sem solicitar permissão.
+O modelo de texto continua em `OPENAI_JARVIS_MODEL`; não substitua esse valor pelo
+modelo de áudio. A chave da OpenAI existente é reutilizada somente no servidor.
 
 Próximo passo de ativação: aplicar a migration aditiva abaixo, configurar as
 credenciais exclusivas do servidor e o modelo, habilitar `JARVIS_ENABLED` e
@@ -35,9 +37,10 @@ uma conta real, consulta financeira, tarefa, ideia e confirmação de uma única
 despesa. Os testes automatizados usam respostas controladas de IA/API e não
 substituem essa validação conectada.
 
-Depois do texto validado, implementar Realtime por WebRTC, credenciais efêmeras
-emitidas no backend e push-to-talk no navegador, preservando a autorização e as
-confirmações das ferramentas. A chave principal continua somente no servidor.
+O usuário confirmou que o texto funciona na conta real antes da implementação de
+voz. A experiência usa dois toques: tocar para falar e tocar em **Enviar áudio**.
+Após entender o áudio, o mesmo agente de texto processa a transcrição. A resposta
+salva aparece na conversa e é narrada pela voz. É possível interromper a fala.
 
 ## Análise da arquitetura anterior
 
@@ -82,6 +85,8 @@ Criados:
 
 - `api/jarvis.js`: entrada da função Vercel.
 - `services/jarvis/{agent,config,errors,http,repository,tools}.js`.
+- `services/jarvis/voice.js`, `app/assets/js/jarvis-voice.js`,
+  `app/assets/jarvis-voice.css` e testes `jarvis-voice.test.js`/`jarvis-voice.spec.js`.
 - `app/assets/js/jarvis.js`, `app/assets/jarvis.css`.
 - `app/manifest.webmanifest`, `app/icons/zama-{180,192,512}.png`.
 - `scripts/dev.mjs`: Vite e API na mesma origem local.
@@ -145,7 +150,12 @@ configure os valores por um editor seguro. Nunca coloque chaves no chat, no
 | `APP_ORIGIN` | `https://www.zam4.com` em produção |
 | `JARVIS_ENABLED` | `true` após configurar e aplicar a migration; padrão desativado |
 | `JARVIS_MEMORY_ENABLED` | `true` para permitir memórias explícitas; padrão desativado |
-| `JARVIS_VOICE_ENABLED` | Reservada; manter `false`. Voz ainda não implementada |
+| `JARVIS_VOICE_ENABLED` | `true` para habilitar voz após configurar modelo; padrão `false` |
+| `OPENAI_JARVIS_VOICE_MODEL` | Modelo Realtime disponível no projeto OpenAI, por exemplo `gpt-realtime` |
+| `OPENAI_JARVIS_VOICE` | Voz opcional; padrão `marin` |
+| `OPENAI_JARVIS_TRANSCRIPTION_MODEL` | Transcrição opcional; padrão `gpt-4o-mini-transcribe` |
+| `JARVIS_VOICE_REQUESTS_PER_MINUTE` | Emissões de credenciais por conta/minuto; padrão 3, teto 10 |
+| `JARVIS_VOICE_REQUESTS_PER_DAY` | Emissões por conta/janela de 24 horas; padrão 30, teto 200 |
 | `JARVIS_MAX_TOOL_CALLS` | Limite por execução; padrão 6, teto 10, até 5 rodadas de modelo |
 | `JARVIS_REQUESTS_PER_MINUTE` | Padrão 10 mensagens por conta/minuto |
 | `JARVIS_REQUESTS_PER_DAY` | Padrão 200 mensagens por conta/janela de 24 horas |
@@ -198,7 +208,7 @@ POST   /api/jarvis/actions/:id/cancel   {}
 GET    /api/jarvis/memories
 DELETE /api/jarvis/memories/:id        (desativa, não apaga)
 GET    /api/jarvis/usage
-POST   /api/jarvis/realtime/token      (501: fase ainda não implementada)
+POST   /api/jarvis/realtime/token      {} (credencial efêmera de voz)
 ```
 
 Envio: `{message, request_id: UUID, conversation_id?: UUID}`. O frontend mantém
@@ -278,11 +288,65 @@ disponibilidade, recusa, instalação concluída, modo standalone e instruções
 iOS/Android; não instalam um aplicativo físico. Nenhuma migration ou variável
 de ambiente nova é necessária para essas melhorias de interface.
 
-O botão de microfone é uma preparação visual e informa que voz não está disponível.
-Não solicita permissão, não abre o microfone, não faz wake word nem cria credencial
-temporária falsa. A fase Realtime/WebRTC, token efêmero, push-to-talk, interrupção e
-estados de áudio ainda precisam ser implementados **após validar texto com as
-credenciais reais**. Ativar a flag de voz sozinho não liga esse recurso.
+### Ativar e usar a voz
+
+1. Na Vercel, em **Environment Variables / Production**, acrescentar
+   `JARVIS_VOICE_ENABLED=true` e `OPENAI_JARVIS_VOICE_MODEL=gpt-realtime` (ou outro
+   modelo Realtime habilitado no projeto OpenAI). Manter as credenciais atuais.
+2. Publicar novamente, abrir a ZAMA por HTTPS, entrar e atualizar o JARVIS.
+3. Tocar no microfone, permitir o acesso, falar e tocar em **Enviar áudio**.
+4. Conferir a transcrição, a resposta por texto e a narração. Se o navegador
+   bloquear o áudio, tocar em **Ouvir resposta**. Esse botão regenera somente a
+   narração da resposta já salva; não repete ferramentas ou ações de negócio.
+5. Usar **Interromper resposta** para parar a fala ou **Desligar voz** para fechar
+   a conexão. Tarefas e ideias seguem as mesmas regras do texto; despesas e
+   entradas continuam dependendo do cartão **Confirmar**.
+
+A interface mostra microfone desligado, conexão, gravação, transcrição, consulta
+e fala. Ao terminar a gravação, as faixas do microfone são paradas fisicamente.
+Também são encerradas ao sair da conta, navegar para outro módulo sem o painel
+aberto, fechar o painel, colocar o aplicativo em segundo plano ou perder a
+conexão. Gravações têm limite de 60 segundos; sessão de 5 minutos e pausa de um
+minuto encerram a conexão. Não há wake word nem escuta contínua.
+
+### Fluxo e limites de segurança da voz
+
+O backend valida a sessão Supabase e a origem, exige JSON vazio e aplica limites
+persistentes antes de chamar `realtime.clientSecrets.create` pelo SDK oficial já
+instalado. Modelo e voz são configurados no servidor. A resposta contém somente
+credencial efêmera, validade, identificador da sessão e limites de interface.
+A chave principal nunca é enviada ao navegador. Não há SQL, cliente Supabase
+privilegiado ou ferramenta de negócio na sessão Realtime.
+
+A transcrição final é enviada sem reconstrução pelo modelo ao `/message` atual.
+Cada turno usa um UUID, repetido em retries; eventos de transcrição duplicados não
+criam novos envios. O agente existente continua validando intenção, autorização,
+schemas e transações. Respostas espontâneas do Realtime não são usadas para ações.
+A narração recebe somente o texto da resposta do backend, com `conversation:none`
+e ferramentas desativadas. Um “sim” falado não confirma uma movimentação.
+
+Áudio é transmitido à OpenAI para processamento. A ZAMA não salva gravações de
+áudio; salva as transcrições e respostas no histórico normal. A UI identifica a
+voz como gerada por IA. A pronúncia e a fidelidade da narração devem ser conferidas
+com o modelo real, especialmente em valores e datas; o registro na tela continua
+disponível. Envio de arquivos de áudio já gravados não faz parte desta entrega.
+
+`GET /usage` inclui `voice_metrics` mensais por modelo: requisições de credenciais,
+emissões, erros, limites atingidos e latência. Esses contadores não medem tokens,
+minutos ou custo de áudio. O uso de transcrição/Realtime e do agente de texto
+gera consumo separado na OpenAI; a fatura do provedor é a referência.
+
+A credencial efêmera tem 60 segundos de validade **para novas conexões**. Essa
+validade não encerra uma conexão já aberta. Os limites de duração são controles
+da aplicação no navegador, não um teto rígido de gasto: um cliente modificado pode
+alterar parâmetros Realtime ou reutilizar a credencial enquanto válida. Limites
+de emissão e controles de gasto no projeto OpenAI complementam a proteção. As
+regras de autorização e confirmação do ERP ficam no backend e não dependem desses
+controles do cliente. Controle duradouro de sessões por conexão sideband não foi
+acrescentado à função serverless.
+
+Nenhuma migration nova ou biblioteca extra é necessária para a voz. As métricas
+usam o JSON privado existente com a mesma transação e permissões.
 
 ## Validações e teste manual
 
@@ -314,13 +378,22 @@ Após a ativação, validar em uma conta de teste:
 6. Testar memória explícita, desativação e acesso por outro dispositivo.
 7. Verificar a chave somente no servidor, logs sem conteúdo sensível, limite de
    uso, instalação PWA e telas com teclado de iPhone/Android reais.
+8. Ativar voz, falar “Quanto gastei este mês?” e conferir a resposta com Financeiro.
+   Criar uma tarefa por áudio e verificar Agenda. Falar uma despesa e confirmar
+   que apenas o clique no cartão executa. Testar permissão negada, interrupção e
+   desligamento ao fechar/colocar o aplicativo em segundo plano.
+
+Os testes automatizados de voz simulam transporte WebRTC, microfone, respostas
+OpenAI e banco. Eles verificam segurança e fluxo, mas não validam captação física,
+entendimento linguístico, pronúncia ou acesso do projeto OpenAI ao modelo. Esses
+pontos exigem o teste acima com a conta real em Safari/iPhone e Chrome/Android.
 
 ## Dependências e limites da entrega
 
 - Migration e variáveis de servidor precisam ser configuradas no ambiente real;
   o deploy do código não cria essas configurações nem executa a migration.
 - Nenhuma chamada real de inferência ou gravação financeira de produção foi feita.
-- Voz/Realtime, push com aplicativo fechado, wake word, exportação/arquivamento de
+- Push com aplicativo fechado, wake word, exportação/arquivamento de
   conversas e painel visual de custos não estão implementados.
 - Publicação e ativação são etapas distintas: verificar a API após o deploy e
   validar a conversa com uma sessão real após configurar banco e credenciais.
@@ -336,6 +409,8 @@ Após a ativação, validar em uma conta de teste:
 Referências oficiais usadas na implementação:
 [OpenAI — function calling](https://developers.openai.com/api/docs/guides/function-calling),
 [OpenAI — Realtime](https://developers.openai.com/api/docs/guides/realtime),
+[OpenAI — WebRTC](https://developers.openai.com/api/docs/guides/voice-webrtc),
+[OpenAI — conversas Realtime](https://developers.openai.com/api/docs/guides/realtime-conversations),
 [Apple — aplicativo da web no iPhone](https://support.apple.com/pt-br/guide/iphone/iphea86e5236/ios),
 [Google — instalar aplicativos da web](https://support.google.com/chrome/answer/9658361?co=GENIE.Platform%3DAndroid&hl=pt-BR),
 [PGlite — API PostgreSQL local](https://pglite.dev/docs/api).

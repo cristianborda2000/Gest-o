@@ -21,6 +21,7 @@ function ceoIcon(name) {
 }
 
 function renderCeoModule() {
+  ZamaJarvis.navigation();
   const isCeo = ['dashboard', 'investimentos', 'agenda', 'ideias', 'jarvis'].includes(activeModule)
     || activeModule === 'financeiro' && financeView !== 'fixos';
   const container = document.getElementById('ceoWorkspace');
