@@ -335,5 +335,5 @@ test('real agent + services + PostgreSQL confirmation is atomic and idempotent a
   assert.equal(history.actions[0].status, 'executed');
   assert.ok(history.actions[0].confirmed_at);
   assert.equal(history.messages.filter(m => m.role === 'user').length, 1);
-  assert.equal(turn, 2, 'request retry must not repeat inference');
+  assert.equal(turn, 1, 'simple writes use one inference and retries never repeat it');
 });

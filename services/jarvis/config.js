@@ -7,7 +7,9 @@ function configuration(env = process.env) {
     voiceRequested: on(env.JARVIS_VOICE_ENABLED),
     apiKey: env.OPENAI_API_KEY || '', model: env.OPENAI_JARVIS_MODEL || '',
     voiceModel: env.OPENAI_JARVIS_VOICE_MODEL || '',
-    voice: env.OPENAI_JARVIS_VOICE || 'marin',
+    voice: env.OPENAI_JARVIS_VOICE || 'cedar',
+    newsEnabled: env.JARVIS_NEWS_ENABLED !== 'false' && env.JARVIS_NEWS_ENABLED !== '0',
+    newsModel: env.OPENAI_JARVIS_NEWS_MODEL || env.OPENAI_JARVIS_MODEL || '',
     transcriptionModel: env.OPENAI_JARVIS_TRANSCRIPTION_MODEL || 'gpt-4o-mini-transcribe',
     voiceRequestsPerMinute: Math.floor(num(env.JARVIS_VOICE_REQUESTS_PER_MINUTE, 3, 1, 10)),
     voiceRequestsPerDay: Math.floor(num(env.JARVIS_VOICE_REQUESTS_PER_DAY, 30, 1, 200)),
@@ -25,7 +27,7 @@ const configuredForText = config => Boolean(config.apiKey && config.model && con
 function publicConfiguration(config) {
   const configured = configuredForText(config);
   const voiceEnabled = Boolean(config.enabled && config.voiceRequested && configured && config.voiceModel);
-  return { enabled: config.enabled, configured, voiceEnabled, memoryEnabled: config.memoryEnabled,
+  return { enabled: config.enabled, configured, voiceEnabled, memoryEnabled: config.memoryEnabled, newsEnabled: config.newsEnabled !== false,
     reason: !config.enabled ? 'JARVIS ainda não foi ativado no servidor.' : !configured ? 'Configure a integração OpenAI e Supabase no servidor para conversar com o JARVIS.' : '',
     voiceReason: voiceEnabled ? '' : !config.voiceRequested ? 'Ative JARVIS_VOICE_ENABLED no servidor para usar o microfone.' : !config.voiceModel ? 'Configure OPENAI_JARVIS_VOICE_MODEL no servidor para usar a voz.' : 'Conclua a configuração do JARVIS no servidor para usar a voz.' };
 }

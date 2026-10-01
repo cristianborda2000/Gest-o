@@ -23,18 +23,28 @@ function readState(state) {
   return snapshot;
 }
 function resolveDate(value, context = {}) {
-  const key = fold(value || 'hoje'), current = today(context);
+  const key = fold(value || 'hoje').replace(/^(?:para |pro |pra |no dia |dia )/, ''), current = today(context);
   if (Finance.validDate(value)) return value;
-  const br = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(key);
-  if (br && Finance.validDate(`${br[3]}-${br[2]}-${br[1]}`)) return `${br[3]}-${br[2]}-${br[1]}`;
+  const br = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(key);
+  if (br) {
+    const day = `${br[3]}-${br[2].padStart(2, '0')}-${br[1].padStart(2, '0')}`;
+    if (Finance.validDate(day)) return day;
+  }
   const offsets = { hoje: 0, hoy: 0, today: 0, amanha: 1, manana: 1, tomorrow: 1, ontem: -1, ayer: -1, 'depois de amanha': 2, 'pasado manana': 2 };
   if (Object.hasOwn(offsets, key)) return Time.addDays(current, offsets[key]);
   const weekDay = new Date(`${current}T12:00:00Z`).getUTCDay();
   if (['semana que vem', 'proxima semana', 'la proxima semana'].includes(key)) return Time.addDays(current, (8 - weekDay) % 7 || 7);
+  const relativeDays = /^(?:daqui a|em|en) (\d{1,3}) dias?$/.exec(key);
+  if (relativeDays && Number(relativeDays[1]) <= 365) return Time.addDays(current, Number(relativeDays[1]));
   const days = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
   const esDays = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
-  const cleaned = key.replace(/^(na |no |el )/, '').replace(/^proxim[ao] /, '').replace(/[- ]feira$/, '');
+  const nextWeek = /(?:da |de la )?(?:semana que vem|proxima semana)$/.test(key);
+  const cleaned = key.replace(/^(na |no |el )/, '').replace(/^proxim[ao] /, '').replace(/\s+(?:(?:da |de la )?(?:semana que vem|proxima semana)|que vem)$/, '').replace(/[- ]feira$/, '');
   const idx = days.includes(cleaned) ? days.indexOf(cleaned) : esDays.indexOf(cleaned);
+  if (idx >= 0 && nextWeek) {
+    const nextMonday = Time.addDays(current, (8 - weekDay) % 7 || 7);
+    return Time.addDays(nextMonday, (idx + 6) % 7);
+  }
   if (idx >= 0) return Time.addDays(current, (idx - weekDay + 7) % 7 || 7);
   throw new JarvisError('Data ambígua ou inválida. Informe o dia no formato DD/MM/AAAA.', 400, 'INVALID_DATE');
 }
@@ -57,7 +67,7 @@ function checkRange({ from, to }) {
   if (!Finance.validDate(from) || !Finance.validDate(to) || from > to || (Date.parse(to) - Date.parse(from)) / 86400000 >= 366) throw new JarvisError('Escolha um período de até 366 dias.', 400, 'INVALID_PERIOD');
 }
 function taskView(task, context) {
-  return { id: task.seriesId || task.id, occurrence_date: task.occurrenceDate || task.prazo, title: task.nome, date: task.prazo, time: task.hora || null, duration_minutes: task.duracao || 0, priority: task.prioridade, status: Agenda.helpers.taskStatus(task, +now(context)), description: String(task.observacoes || '').slice(0, 1000), type: task.tipo || 'Tarefa' };
+  return { id: task.seriesId || task.id, occurrence_date: task.occurrenceDate || task.prazo, title: task.nome, date: task.prazo, time: task.hora || null, duration_minutes: task.duracao || 0, priority: task.prioridade, status: Agenda.helpers.taskStatus(task, +now(context)), description: String(task.observacoes || '').slice(0, 1000), type: task.tipo || 'Tarefa', recurrence: task.recorrencia || 'none', recurrence_end: task.recurrenceEnd || null };
 }
 function taskList(state, args, context) {
   const end = resolveDate(args.to || args.from || 'hoje', context);

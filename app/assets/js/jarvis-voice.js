@@ -19,6 +19,7 @@
     let recordingLimit = 60, sessionLimit = 300, recordingStarted = 0, turn = null, speech = null, narration = '';
     let connectTimer, recordingTimer, transcriptTimer, sessionTimer, idleTimer, speechTimer, drainTimer, disconnectTimer;
     let rejectConnection = null, cancelDrain = null, lifecycleAttached = false;
+    let audioSession = null, previousAudioType = null;
     const delivered = new Set(), cancelledSpeech = new Set();
 
     function emit(status, extra = {}) {
@@ -34,9 +35,61 @@
       [connectTimer, recordingTimer, transcriptTimer, sessionTimer, idleTimer, speechTimer, drainTimer, disconnectTimer].forEach(clearTimeout);
       cancelDrain?.(); cancelDrain = null;
     }
+    function setAudioType(type) {
+      // Safari exposes AudioSession; other browsers continue with their own routing.
+      // Capturing selects the call profile on iPhone/Bluetooth. Explicitly return
+      // to playback after capture ends, without keeping a microphone track alive.
+      try {
+        const session = global.navigator.audioSession;
+        if (!session || !('type' in session)) return;
+        if (!audioSession) {
+          audioSession = session; previousAudioType = session.type;
+          audioSession.addEventListener?.('statechange', audioInterrupted);
+        }
+        audioSession.type = type;
+      } catch { /* AudioSession is optional and must never block the text or voice UI. */ }
+    }
+    function restoreAudioType() {
+      try {
+        audioSession?.removeEventListener?.('statechange', audioInterrupted);
+        if (audioSession && previousAudioType != null) audioSession.type = previousAudioType;
+      } catch { /* A browser may restrict audio routing after the page is hidden. */ }
+      audioSession = null; previousAudioType = null;
+    }
+    function audioInterrupted() {
+      if (audioSession?.state === 'interrupted') stop('O áudio foi interrompido por outro aplicativo. Toque no microfone para continuar.');
+    }
     function releaseMicrophone() {
       stopTracks(microphone); microphone = null;
       if (sender?.replaceTrack) Promise.resolve(sender.replaceTrack(null)).catch(() => {});
+      if (audioSession) setAudioType('playback');
+    }
+    async function deviceChanged() {
+      const gen = generation, stream = microphone;
+      if (stream && ['connecting', 'listening'].includes(state.status)) {
+        const track = stream.getAudioTracks()[0];
+        if (!track || track.readyState === 'ended') {
+          fail('O microfone foi desconectado. Conecte seu fone e toque no microfone para tentar novamente.'); return;
+        }
+        // A generic devicechange also fires for unrelated devices and permission
+        // changes. Only cancel when this specific input disappeared; never open a
+        // replacement microphone automatically or pin a Bluetooth device ID.
+        const deviceId = track.getSettings?.().deviceId;
+        if (deviceId && !['default', 'communications'].includes(deviceId) && global.navigator.mediaDevices.enumerateDevices) {
+          try {
+            const devices = await global.navigator.mediaDevices.enumerateDevices();
+            if (gen !== generation || stream !== microphone) return;
+            const inputs = devices.filter(device => device.kind === 'audioinput' && device.deviceId);
+            if (inputs.length && !inputs.some(device => device.deviceId === deviceId)) {
+              fail('O microfone do fone foi desconectado. Confira a conexão e toque no microfone para gravar novamente.');
+            }
+          } catch { /* Permissions may hide device details; track-ended remains the fallback. */ }
+        }
+      } else if (speech?.started) {
+        // Let the operating system select the output. A changed AirPods route can
+        // pause Safari playback; the existing explicit replay button is the fallback.
+        void playOutput();
+      }
     }
     function lifecycleStop() {
       if (global.document.visibilityState === 'hidden') stop('Voz desligada ao sair da tela.');
@@ -46,6 +99,7 @@
       if (lifecycleAttached) return;
       global.document.addEventListener('visibilitychange', lifecycleStop);
       global.addEventListener('pagehide', pageStop);
+      global.navigator.mediaDevices?.addEventListener?.('devicechange', deviceChanged);
       lifecycleAttached = true;
     }
     function cleanup() {
@@ -53,10 +107,12 @@
       if (lifecycleAttached) {
         global.document.removeEventListener('visibilitychange', lifecycleStop);
         global.removeEventListener('pagehide', pageStop); lifecycleAttached = false;
+        global.navigator.mediaDevices?.removeEventListener?.('devicechange', deviceChanged);
       }
       rejectConnection?.(new Error('VOICE_CANCELLED')); rejectConnection = null;
       request?.abort(); request = null;
       releaseMicrophone();
+      restoreAudioType();
       const oldChannel = channel, oldPeer = peer; channel = peer = sender = null;
       try { oldChannel?.close(); } catch { /* Already closed. */ }
       try { oldPeer?.close(); } catch { /* Already closed. */ }
@@ -251,17 +307,30 @@
       emit('connecting', { playbackBlocked: false, message: 'Conectando o microfone…' });
       connectTimer = setTimeout(() => { if (gen === generation) fail('A conexão de voz demorou demais. Verifique a permissão do microfone e tente novamente.'); }, CONNECT_TIMEOUT);
       try {
-        const stream = await global.navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+        setAudioType('play-and-record');
+        const devices = global.navigator.mediaDevices;
+        const supportedConstraints = devices.getSupportedConstraints?.();
+        const preferences = Object.fromEntries(['echoCancellation', 'noiseSuppression', 'autoGainControl']
+          .filter(name => !supportedConstraints || supportedConstraints[name]).map(name => [name, true]));
+        let stream;
+        try { stream = await devices.getUserMedia({ audio: Object.keys(preferences).length ? preferences : true }); }
+        catch (failure) {
+          // Some headset/browser combinations reject processing constraints.
+          // Retry only that incompatibility, never a denied permission or busy mic.
+          if (gen !== generation || !['OverconstrainedError', 'ConstraintNotSatisfiedError'].includes(failure?.name) || !Object.keys(preferences).length) throw failure;
+          stream = await devices.getUserMedia({ audio: true });
+        }
         if (gen !== generation) { stopTracks(stream); return false; }
         microphone = stream;
         const track = stream.getAudioTracks()[0];
         if (!track) throw new Error('Nenhum microfone foi encontrado neste dispositivo.');
         // No audio is transmitted until the channel is ready and its buffer is cleared.
         stream.getAudioTracks().forEach(item => { item.enabled = false; });
-        track.addEventListener?.('ended', () => { if (gen === generation && state.status === 'listening') fail('O microfone foi desconectado. Tente novamente.'); });
+        track.addEventListener?.('ended', () => { if (gen === generation && microphone === stream && ['connecting', 'listening'].includes(state.status)) fail('O microfone foi desconectado. Conecte seu fone e toque no microfone para tentar novamente.'); });
         if (channel?.readyState === 'open' && sender) await sender.replaceTrack(track);
         else await connect(gen);
         if (gen !== generation) return false;
+        if (track.readyState === 'ended') throw new Error('O microfone foi desconectado. Toque no microfone para tentar novamente.');
         clearTimeout(connectTimer); clearTimeout(idleTimer);
         send({ type: 'input_audio_buffer.clear' });
         turn = { id: id(), itemId: null, submitted: false };

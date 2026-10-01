@@ -68,7 +68,7 @@ test('R$350 pendente, confirmação explícita única, retries e concorrência n
   const saved = await repo.read();
   assert.equal(saved.state.financeiro.length, 1); assert.equal(saved.state.financeiro[0].valor, -350);
   assert.equal(saved.jarvis.actions.length, 1); assert.ok(saved.jarvis.actions[0].confirmed_at);
-  assert.equal(saved.jarvis.requests.length, 1); assert.equal(ai.requests.length, 2);
+  assert.equal(saved.jarvis.requests.length, 1); assert.equal(ai.requests.length, 1);
   await assert.rejects(agent.send({ ...body, message: 'Outro pedido' }), /identificador/);
 });
 test('cancelamento é permanente para aquela ação e confirmação não a executa', async () => {
@@ -80,7 +80,7 @@ test('cancelamento é permanente para aquela ação e confirmação não a execu
 test('modelo repetindo a mesma escrita na execução não duplica tarefa', async () => {
   const repo = memoryRepository(), call = { name: 'create_task', args: { title: 'Planejar', date: 'amanhã' } };
   const agent = createAgent({ repository: repo, config, clock, provider: provider([call, call]) });
-  const response = await send(agent, 'Crie a tarefa de planejar amanhã.');
+  const response = await send(agent, 'Crie a tarefa de planejar amanhã e consulte minha agenda.');
   assert.equal(response.actions.length, 1);
   assert.equal((await repo.read()).state.agenda.length, 1);
 });
@@ -128,7 +128,7 @@ test('falha da API preserva efeitos já gravados sem retry duplicado', async () 
   const original = ai.responses.create; let requests = 0;
   ai.responses.create = async input => { if (requests++) throw new Error('provider outage with sensitive body'); return original(input); };
   const agent = createAgent({ repository: repo, config, clock, provider: ai });
-  const body = { message: 'Crie uma tarefa amanhã.', request_id: randomUUID() };
+  const body = { message: 'Crie uma tarefa amanhã e consulte minha agenda.', request_id: randomUUID() };
   const response = await agent.send(body); assert.equal(response.messages.at(-1).metadata.error, true);
   await agent.send(body); assert.equal((await repo.read()).state.agenda.length, 1);
   assert.ok(!JSON.stringify(await repo.read()).includes('sensitive body'));
@@ -180,3 +180,67 @@ test('HTTP accepts URL-encoded action IDs from the actual frontend and confirms 
   assert.equal((await repo.read()).state.financeiro.length, 1);
 });
 module.exports = { memoryRepository, provider };
+
+test('agendamento natural PT/ES grava e responde com recibo real em uma chamada', async () => {
+  for (const phrase of ['Coloca na agenda amanhã às 9: ligar para fornecedor.', 'Jarvis, marca uma reunião amanhã às 9 com fornecedor.', 'Me lembra amanhã às 9 de ligar para fornecedor.', 'Recuérdame mañana a las 9 llamar al proveedor.']) {
+    const repo = memoryRepository('A'), ai = provider([{ name: 'create_task', args: { title: 'Ligar para fornecedor', date: 'amanhã', time: '09:00' } }]);
+    const body = { message: phrase, request_id: randomUUID() }, agent = createAgent({ repository: repo, config, clock, provider: ai });
+    const reply = await agent.send(body);
+    assert.equal(reply.actions[0].status, 'executed'); assert.match(reply.messages.at(-1).content, /01\/10\/2026 às 09:00/);
+    assert.equal(ai.requests.length, 1); await agent.send(body);
+    assert.equal((await repo.read()).state.agenda.length, 1); assert.equal(ai.requests.length, 1);
+  }
+});
+
+test('detalhe após pergunta completa somente o pedido recente; sim e cancelamento não criam', async () => {
+  for (const detail of ['amanhã às 9', 'sim', 'cancele', 'quanto gastei?']) {
+    const repo = memoryRepository('A');
+    const first = await send(createAgent({ repository: repo, config, clock, provider: provider([], 'Para qual dia e horário devo agendar a ligação ao fornecedor?') }), 'Coloque na agenda ligar ao fornecedor');
+    assert.ok(first.messages.at(-1).metadata.pending_write);
+    const ai = provider([{ name: 'create_task', args: { title: 'Ligar ao fornecedor', date: 'amanhã', time: '09:00' } }]);
+    const result = await createAgent({ repository: repo, config, clock, provider: ai }).send({ message: detail, conversation_id: first.conversation.id, request_id: randomUUID() });
+    assert.equal(result.actions[0].status, detail === 'amanhã às 9' ? 'executed' : 'failed');
+    assert.equal((await repo.read()).state.agenda?.length || 0, detail === 'amanhã às 9' ? 1 : 0);
+  }
+});
+
+test('pergunta educativa e negação não autorizam escrita e promessa sem ferramenta é corrigida', async () => {
+  for (const phrase of ['Como criar uma tarefa?', 'Não crie uma tarefa amanhã.']) {
+    const repo = memoryRepository();
+    const reply = await send(createAgent({ repository: repo, config, clock, provider: provider([{ name: 'create_task', args: { title: 'Não autorizada', date: 'amanhã' } }]) }), phrase);
+    assert.equal(reply.actions[0].status, 'failed'); assert.equal((await repo.read()).state.agenda, undefined);
+  }
+  const repo = memoryRepository();
+  const reply = await send(createAgent({ repository: repo, config, clock, provider: provider([], 'Pronto, agendado!') }), 'Marque uma reunião amanhã');
+  assert.match(reply.messages.at(-1).content, /Ainda não gravei/); assert.equal((await repo.read()).state.agenda, undefined);
+});
+
+test('notícias usam busca separada sem histórico privado, persistem fontes e retry não repete busca', async () => {
+  const repo = memoryRepository('A', { financeiro: [{ nome: 'SEGREDO_EMPRESARIAL', valor: 200 }] });
+  const bulletin = 'Notícia verificada em 30/09/2026.';
+  const calls = [];
+  const ai = { responses: { create: async body => {
+    calls.push(structuredClone(body));
+    if (body.tools.some(t => t.type === 'web_search')) return { status: 'completed', output: [{ type: 'web_search_call', status: 'completed' }, { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: bulletin, annotations: [{ type: 'url_citation', start_index: 0, end_index: bulletin.length, url: 'https://agenciabrasil.ebc.com.br/noticia', title: 'Fonte de teste' }] }] }], usage: { input_tokens: 40, output_tokens: 20 } };
+    return { output: [{ type: 'function_call', name: 'get_daily_news', arguments: '{"category":"technology"}', call_id: 'news' }] };
+  } } };
+  const agent = createAgent({ repository: repo, config, provider: ai, clock }), body = { message: 'Quais as notícias de tecnologia de hoje?', request_id: randomUUID() };
+  const result = await agent.send(body), last = result.messages.at(-1);
+  assert.equal(last.content, bulletin); assert.equal(last.metadata.news.sources[0].title, 'Fonte de teste');
+  assert.equal(calls.length, 2); assert.doesNotMatch(JSON.stringify(calls[1]), /SEGREDO_EMPRESARIAL/);
+  assert.equal(typeof calls[1].input, 'string'); assert.equal(calls[1].tools.length, 1);
+  await agent.send(body); assert.equal(calls.length, 2);
+  assert.deepEqual((await agent.conversation(result.conversation.id)).messages.at(-1).metadata, last.metadata);
+  assert.equal((await repo.read()).jarvis.news_metrics[0].search_calls, 1);
+  assert.equal(result.state_changed, false);
+});
+
+test('notícias desativadas ou falha de busca não geram manchetes inventadas', async () => {
+  for (const enabled of [false, true]) {
+    const repo = memoryRepository(), ai = provider([{ name: 'get_daily_news', args: {} }], 'Notícia inventada');
+    const result = await send(createAgent({ repository: repo, config: { ...config, newsEnabled: enabled }, provider: ai, clock }), 'Notícias de hoje');
+    assert.equal(result.actions[0].status, 'failed'); assert.doesNotMatch(result.messages.at(-1).content, /Notícia inventada/);
+    assert.equal(result.messages.at(-1).metadata.news, undefined);
+    if (!enabled) assert.ok(!ai.requests[0].tools.some(t => t.name === 'get_daily_news'));
+  }
+});

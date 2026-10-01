@@ -66,7 +66,7 @@ function createHandler(dependencies = {}) {
       }
       if (path === '/usage' && req.method === 'GET') {
         const { jarvis } = await repository.read();
-        return send(200, { metrics: jarvis.metrics, voice_metrics: jarvis.voice_metrics || [] });
+        return send(200, { metrics: jarvis.metrics, voice_metrics: jarvis.voice_metrics || [], news_metrics: jarvis.news_metrics || [] });
       }
       if (req.method === 'POST') {
         if (!/^application\/json(?:;|$)/i.test(req.headers['content-type'] || '')) throw new JarvisError('Use application/json.', 415);

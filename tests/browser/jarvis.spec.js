@@ -26,7 +26,7 @@ async function jarvisMock(page,options={}){
       if(options.messageGate)await options.messageGate;
       if(api.messageFailures-->0)return respond({error:'Falha temporária de rede. Tente novamente.'},503);
       api.history=[conversation];
-      api.messages=[{id:'m1',role:'user',content:body.message},{id:'m2',role:'assistant',content:options.reply||'Neste mês, as saídas pagas somam R$ 480,25.'}];
+      api.messages=[{id:'m1',role:'user',content:body.message},{id:'m2',role:'assistant',content:options.reply||'Neste mês, as saídas pagas somam R$ 480,25.',metadata:options.replyMetadata}];
       if(options.pendingExpense)api.actions=[structuredClone(pendingAction)];
       return respond({conversation,messages:api.messages,actions:api.actions,state_changed:false});
     }
@@ -56,6 +56,24 @@ async function openJarvis(page){
   await expect(page.getByLabel('Mensagem para o JARVIS')).toBeEnabled();
 }
 async function send(page,message){await page.getByLabel('Mensagem para o JARVIS').fill(message);await page.getByRole('button',{name:'Enviar',exact:false}).click();}
+
+test('news links remain safe, readable and persisted on mobile',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  const reply='Notícia verificada hoje.\n\nSegundo destaque do dia.';
+  const source={url:'https://agenciabrasil.ebc.com.br/noticia',title:'Agência Brasil: notícia do dia'};
+  await jarvisMock(page,{config:{newsEnabled:true},reply,replyMetadata:{news:{as_of:'2026-09-29',citations:[{...source,start_index:0,end_index:23}],sources:[source,{url:'javascript:alert(1)',title:'Inválido'}]}}});await openJarvis(page);
+  await page.getByRole('button',{name:'+ Notícias',exact:true}).click();
+  await expect(page.getByLabel('Mensagem para o JARVIS')).toHaveValue('Quais as principais notícias de hoje?');
+  await page.getByRole('button',{name:'Enviar',exact:false}).click();
+  await expect(page.locator('.jarvis-citation')).toHaveAttribute('href',source.url);
+  await expect(page.locator('.jarvis-news-sources')).toContainText('29/09/2026');
+  await expect(page.locator('.jarvis-news-sources a')).toHaveCount(1);
+  await expect(page.locator('.jarvis-news-sources a')).toHaveAttribute('rel','noopener noreferrer');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.screenshot({path:'test-results/jarvis-news-mobile.png',fullPage:true});
+  await page.reload();await openJarvis(page);await page.getByLabel('Histórico de conversas').selectOption(conversationId);
+  await expect(page.locator('.jarvis-citation')).toHaveAttribute('href',source.url);
+});
 
 test('Jarvis desktop uses real summary contract and preserves the legacy data of removed modules',async({page})=>{
   const legacy={...seed,clientes:[{id:'old-client',nome:'Cliente anterior'}],mensalidades:[{id:'old-monthly',nome:'Mensalidade anterior'}],projetos:[{id:'old-project',nome:'Projeto anterior'}],marketing:[{id:'old-marketing',nome:'Campanha anterior'}],rh:[{id:'old-team',nome:'Equipe anterior'}]};
@@ -195,11 +213,13 @@ test('uncertain message retries the original request while preserving a differen
   await expect(input).toHaveValue('Quanto gastei este mês?');
 });
 
-test('a history refresh failure after acknowledgment never offers to repeat the message',async({page})=>{
+test('acknowledgment updates history without a redundant request or a write retry',async({page})=>{
   const api=await jarvisMock(page,{historyFailsAfterMessage:true});await openJarvis(page);
   await send(page,'Salva uma ideia: programa de indicação');
   await expect(page.locator('.jarvis-message.assistant')).toBeVisible();
-  await expect(page.locator('.jarvis-error')).toContainText('Resposta recebida.');
+  await expect(page.locator('.jarvis-error')).toHaveCount(0);
+  await expect(page.getByLabel('Histórico de conversas')).toHaveValue(conversationId);
+  expect(api.requests.filter(r=>r.path==='/conversations')).toHaveLength(1);
   await expect(page.getByRole('button',{name:'Tentar novamente',exact:true})).toHaveCount(0);
   await expect(page.locator('.jarvis-message.pending')).toHaveCount(0);
   expect(api.requests.filter(r=>r.path==='/message')).toHaveLength(1);

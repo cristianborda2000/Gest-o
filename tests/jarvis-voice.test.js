@@ -98,7 +98,7 @@ test('emissão usa SDK GA com TTL curto, PTT, transcrição, nenhuma ferramenta 
   assert.equal(body.session.audio.input.turn_detection, null);
   assert.deepEqual(body.session.audio.input.transcription, { model: 'gpt-4o-mini-transcribe', language: 'pt' });
   assert.deepEqual(body.session.audio.input.noise_reduction, { type: 'near_field' });
-  assert.equal(body.session.audio.output.voice, 'marin');
+  assert.equal(body.session.audio.output.voice, 'cedar');
   assert.deepEqual(body.session.tools, []);
   assert.equal(body.session.tool_choice, 'none');
   assert.deepEqual(body.session.output_modalities, ['audio']);

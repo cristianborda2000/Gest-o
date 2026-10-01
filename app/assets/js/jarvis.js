@@ -5,6 +5,7 @@
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const mic = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></svg>';
   const toolNames = { get_today_summary: 'Resumo do dia consultado', list_tasks: 'Tarefas consultadas', get_agenda: 'Agenda consultada', get_financial_summary: 'Financeiro consultado', create_task: 'Tarefa criada', create_agenda_event: 'Compromisso criado', update_task: 'Tarefa atualizada', complete_task: 'Tarefa concluída', save_idea: 'Ideia salva', search_ideas: 'Ideias consultadas', register_expense: 'Registrar despesa', register_income: 'Registrar entrada', save_memory: 'Memória salva', search_memories: 'Memórias consultadas' };
+  toolNames.get_daily_news = 'Notícias consultadas';
   let host, dialog, account = null, generation = 0, initialized = false;
   let config = null, summary = null, conversations = [], messages = [], actions = [], memories = [], conversation = null;
   let busy = false, loading = false, ready = false, error = '', draft = '', retry = null, pendingMessage = null, activity = '';
@@ -12,6 +13,38 @@
   const voiceTurns = new Map();
   const voiceCapturing = () => ['connecting', 'listening', 'transcribing'].includes(voiceState.status);
   const money = cents => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((cents || 0) / 100);
+  const cleanCitations = text => String(text).replace(/\uE200[^\uE201]*\uE201/g, '');
+  function sourceUrl(value) {
+    try {
+      const url = new URL(value);
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || !url.hostname.includes('.') || /(^|\.)(localhost|local|internal)$/.test(url.hostname) || /^[\d.]+$/.test(url.hostname)) return null;
+      return url.href;
+    } catch { return null; }
+  }
+  function renderNewsSources() {
+    host.querySelectorAll('.jarvis-message:not(.pending)').forEach((article, index) => {
+      const message = messages[index], news = message?.metadata?.news;
+      if (message?.role !== 'assistant' || !news) return;
+      const text = String(message.content), paragraph = article.querySelector('p');
+      const citations = (news.citations || []).filter(c => sourceUrl(c.url) && Number.isSafeInteger(c.end_index) && c.end_index > 0 && c.end_index <= text.length).sort((a, b) => a.end_index - b.end_index);
+      paragraph.replaceChildren(); let cursor = 0;
+      const link = (source, label) => {
+        const a = document.createElement('a'); a.href = sourceUrl(source.url); a.textContent = label; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.title = String(source.title || 'Fonte da notícia'); return a;
+      };
+      citations.forEach((citation, i) => {
+        paragraph.append(document.createTextNode(cleanCitations(text.slice(cursor, citation.end_index))));
+        const a = link(citation, ` [${i + 1}]`); a.className = 'jarvis-citation'; a.setAttribute('aria-label', `Fonte ${i + 1}: ${citation.title || 'Notícia'}`); paragraph.append(a); cursor = citation.end_index;
+      });
+      paragraph.append(document.createTextNode(cleanCitations(text.slice(cursor))));
+      const sources = (news.sources || []).filter(s => sourceUrl(s.url)).slice(0, 10);
+      if (!sources.length) return;
+      const section = document.createElement('div'); section.className = 'jarvis-news-sources';
+      const label = document.createElement('small'); label.textContent = `Fontes consultadas${/^\d{4}-\d{2}-\d{2}$/.test(news.as_of) ? ` em ${news.as_of.split('-').reverse().join('/')}` : ''}`; section.append(label);
+      const list = document.createElement('ul');
+      sources.forEach(source => { const li = document.createElement('li'); li.append(link(source, String(source.title || new URL(source.url).hostname))); list.append(li); });
+      section.append(list); article.append(section);
+    });
+  }
   async function api(path, options = {}) {
     const { data } = await supabaseClient.auth.getSession();
     if (!data.session?.access_token) throw new Error('Sua sessão expirou. Entre novamente.');
@@ -154,7 +187,7 @@
       ${loading ? '<p class="jarvis-notice" role="status">Carregando seu espaço…</p>' : ''}${config && (!config.enabled || !config.configured) ? `<p class="jarvis-notice">${esc(config.reason)}</p>` : ''}
       <div class="jarvis-feed" role="log" aria-label="Conversa com o JARVIS" aria-live="polite">${messages.length ? messages.map(m => `<article class="jarvis-message ${m.role === 'user' ? 'user' : 'assistant'}"><span>${m.role === 'user' ? 'Você' : 'JARVIS'}</span><p>${esc(m.content)}</p></article>`).join('') : pendingMessage ? '' : homeMarkup()}${pendingMessage ? `<article class="jarvis-message user pending" data-pending-request="${esc(pendingMessage.request_id)}"><span>Você</span><p>${esc(pendingMessage.message)}</p><small>${pendingMessage.status === 'sending' ? 'Enviando…' : 'Resposta não recebida'}</small></article>` : ''}${actions.length ? `<section class="jarvis-actions" aria-label="Ações desta conversa">${actions.map(actionCard).join('')}</section>` : ''}${busy ? `<p class="jarvis-thinking" role="status"><span></span> ${esc(activity || 'JARVIS está processando…')}</p>` : ''}</div>
       ${error ? `<div class="jarvis-error" role="alert"><p>${esc(error)}</p>${retry ? '<button class="ceo-button" data-retry>Tentar novamente</button>' : ''}</div>` : ''}
-      <div class="jarvis-quick" aria-label="Ações rápidas">${[['Tarefa', 'Crie uma tarefa para '], ['Despesa', 'Registra uma despesa de R$ '], ['Entrada', 'Registra uma entrada de R$ '], ['Ideia', 'Salva uma ideia: ']].map(([label, prompt]) => `<button class="ceo-button" data-draft="${esc(prompt)}">+ ${label}</button>`).join('')}</div>
+      <div class="jarvis-quick" aria-label="Ações rápidas">${[['Tarefa', 'Crie uma tarefa para '], ['Despesa', 'Registra uma despesa de R$ '], ['Entrada', 'Registra uma entrada de R$ '], ['Ideia', 'Salva uma ideia: '], ...(config?.newsEnabled ? [['Notícias', 'Quais as principais notícias de hoje?']] : [])].map(([label, prompt]) => `<button class="ceo-button" data-draft="${esc(prompt)}">+ ${label}</button>`).join('')}</div>
       <form class="jarvis-composer"><label class="sr-only" for="jarvisInput">Mensagem para o JARVIS</label><textarea id="jarvisInput" rows="2" maxlength="4000" placeholder="Como posso ajudar?" aria-describedby="jarvisComposerHint">${esc(draft)}</textarea><p class="jarvis-composer-hint" id="jarvisComposerHint" role="status">${esc(composerHint)}</p><div class="jarvis-composer-actions"><small>Horário de Brasília · Português e espanhol</small><div class="jarvis-voice-control"><button class="jarvis-microphone" type="button" data-mic data-voice-state="${esc(voiceState.status)}" aria-label="${microphoneLabel}" title="${microphoneLabel}" ${microphoneDisabled ? 'disabled' : ''}>${mic}</button><small>${config?.voiceEnabled ? voiceState.status === 'listening' ? 'Enviar áudio' : 'Toque para falar' : 'Voz indisponível'}</small></div><button class="ceo-button primary" type="submit" ${canSend && draft.trim() ? '' : 'disabled'}>Enviar <span aria-hidden="true">↑</span></button></div></form>
       ${voicePanelMarkup()}
       <p class="jarvis-footnote">Consulte os registros para decisões importantes. Movimentações financeiras exigem confirmação.</p>
@@ -174,6 +207,7 @@
     host.querySelector('[data-retry]')?.addEventListener('click', () => send(retry, retryVoice));
     host.querySelectorAll('[data-confirm],[data-cancel]').forEach(button => button.onclick = () => resolveAction(button.dataset.confirm || button.dataset.cancel, Boolean(button.dataset.confirm)));
     host.querySelectorAll('[data-forget]').forEach(button => button.onclick = async () => { try { await api(`/memories/${encodeURIComponent(button.dataset.forget)}`, { method: 'DELETE' }); await loadHome(); } catch (failure) { error = failure.message; paint(); } });
+    renderNewsSources();
     resizeInput(input);
     if (focused) { input.focus({ preventScroll: true }); input.setSelectionRange(...selection); }
     const feed = host.querySelector('.jarvis-feed');
@@ -207,16 +241,16 @@
       const data = await api('/message', { method: 'POST', body }); if (gen !== generation) return;
       received = true;
       conversation = data.conversation; messages = data.messages; actions = data.actions; pendingMessage = null;
+      conversations = [conversation, ...conversations.filter(c => c.id !== conversation.id)];
       activity = 'Atualizando a conversa…'; paint();
       if (fromVoice) {
         const answer = [...messages].reverse().find(message => message.role === 'assistant');
-        if (answer?.content) await voice?.speak(answer.content);
+        if (answer?.content) await voice?.speak(answer.metadata?.news ? cleanCitations(answer.content).replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') + ' As fontes estão na tela.' : answer.content);
         else voice?.stop();
       }
       // Auxiliary refresh errors must never offer to repeat an already acknowledged write.
       if (data.state_changed) await syncState();
-      const history = await api('/conversations'); if (gen !== generation) return; conversations = history.conversations;
-      if (config?.memoryEnabled) { const saved = await api('/memories'); if (gen !== generation) return; memories = saved.memories; }
+      if (config?.memoryEnabled && actions.some(a => a.request_id === body.request_id && a.tool_name === 'save_memory' && a.status === 'executed')) { const saved = await api('/memories'); if (gen !== generation) return; memories = saved.memories; }
     } catch (failure) {
       if (gen === generation) {
         error = received ? `Resposta recebida. Não foi possível atualizar os dados da tela: ${failure.message}` : failure.message;

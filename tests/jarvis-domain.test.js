@@ -23,6 +23,9 @@ test('datas relativas e períodos respeitam São Paulo na virada do dia e PT/ES'
   assert.equal(resolveDate('el próximo viernes', midnight), '2026-10-02');
   assert.equal(resolveDate('semana que vem', midnight), '2026-10-05');
   assert.equal(resolveDate('01/10/2026', midnight), '2026-10-01');
+  assert.equal(resolveDate('1/10/2026', midnight), '2026-10-01');
+  assert.equal(resolveDate('sexta-feira da semana que vem', midnight), '2026-10-09');
+  assert.equal(resolveDate('daqui a 3 dias', midnight), '2026-10-03');
   assert.deepEqual(resolvePeriod({ period: 'current_week' }, midnight), { from: '2026-09-28', to: '2026-10-04' });
   assert.deepEqual(resolvePeriod({ period: 'current_month' }, midnight), { from: '2026-09-01', to: '2026-09-30' });
   assert.deepEqual(resolvePeriod({ period: 'last_month' }, midnight), { from: '2026-08-01', to: '2026-08-31' });

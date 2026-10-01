@@ -10,8 +10,18 @@ const summary = { date: '2026-09-29', tasks: { total: 0, tasks: [] }, overdue: {
 const pendingAction = { id: actionId, tool_name: 'register_expense', status: 'pending', requires_confirmation: true, input: { amount: 350, description: 'Anúncios', category: 'Marketing', date: '2026-09-29', due_date: '2026-09-29', status: 'paid' }, result: {}, created_at: '2026-09-29T15:00:00Z' };
 
 async function mediaFixture(page, options = {}) {
-  await page.addInitScript(({ denied, blockedPlayback }) => {
-    const harness = window.voiceHarness = { requests: 0, peers: [], tracks: [], constraints: [], sent: [], playCalls: 0, blockedPlayback };
+  await page.addInitScript(({ denied, blockedPlayback, audioSessionSupported, incompatibleConstraints }) => {
+    const harness = window.voiceHarness = { requests: 0, peers: [], tracks: [], constraints: [], sent: [], playCalls: 0, blockedPlayback,
+      audioModes: [], captureModes: [], devices: [{ kind: 'audioinput', deviceId: 'fixture-input' }] };
+    if (audioSessionSupported) {
+      class FakeAudioSession extends EventTarget {
+        constructor() { super(); this.currentType = 'auto'; this.state = 'inactive'; }
+        get type() { return this.currentType; }
+        set type(value) { this.currentType = value; harness.audioModes.push(value); }
+        changeState(value) { this.state = value; this.dispatchEvent(new Event('statechange')); }
+      }
+      Object.defineProperty(navigator, 'audioSession', { configurable: true, value: new FakeAudioSession() });
+    }
     class FakeChannel extends EventTarget {
       constructor() { super(); this.readyState = 'connecting'; this.label = 'oai-events'; }
       send(data) { harness.sent.push(JSON.parse(data)); }
@@ -34,13 +44,16 @@ async function mediaFixture(page, options = {}) {
       fail() { this.connectionState = this.iceConnectionState = 'failed'; this.dispatchEvent(new Event('connectionstatechange')); this.onconnectionstatechange?.(new Event('connectionstatechange')); }
     }
     Object.defineProperty(window, 'RTCPeerConnection', { configurable: true, value: FakePeer });
-    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: async constraints => {
+    const mediaDevices = Object.assign(new EventTarget(), { enumerateDevices: async () => harness.devices, getUserMedia: async constraints => {
       harness.requests++; harness.constraints.push(constraints);
+      harness.captureModes.push(navigator.audioSession?.type || null);
       if (denied) throw new DOMException('Permission denied by fixture', 'NotAllowedError');
-      const track = { kind: 'audio', enabled: true, readyState: 'live', stop() { this.readyState = 'ended'; this.enabled = false; }, getSettings() { return {}; }, addEventListener() {}, removeEventListener() {} };
+      if (incompatibleConstraints && constraints.audio !== true) throw new DOMException('Unsupported headset processing constraints', 'OverconstrainedError');
+      const track = Object.assign(new EventTarget(), { kind: 'audio', enabled: true, readyState: 'live', stop() { this.readyState = 'ended'; this.enabled = false; }, getSettings() { return { deviceId: 'fixture-input' }; }, end() { this.stop(); this.dispatchEvent(new Event('ended')); } });
       harness.tracks.push(track);
       return { id: 'fixture-stream', getTracks: () => [track], getAudioTracks: () => [track], getVideoTracks: () => [] };
-    } } });
+    } });
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: mediaDevices });
     Object.defineProperty(HTMLMediaElement.prototype, 'srcObject', { configurable: true, get() { return this.fixtureStream; }, set(value) { this.fixtureStream = value; } });
     HTMLMediaElement.prototype.play = function () { harness.playCalls++; return harness.blockedPlayback ? Promise.reject(new DOMException('Autoplay blocked', 'NotAllowedError')) : Promise.resolve(); };
     HTMLMediaElement.prototype.pause = function () {};
@@ -61,7 +74,7 @@ async function mediaFixture(page, options = {}) {
       harness.receive({ type: 'output_audio_buffer.stopped', response_id: 'voice-answer-1' });
       harness.receive({ type: 'response.done', response: { id: 'voice-answer-1', status: 'completed', metadata } });
     };
-  }, { denied: Boolean(options.denied), blockedPlayback: Boolean(options.blockedPlayback) });
+  }, { denied: Boolean(options.denied), blockedPlayback: Boolean(options.blockedPlayback), audioSessionSupported: Boolean(options.audioSessionSupported), incompatibleConstraints: Boolean(options.incompatibleConstraints) });
 }
 
 async function voiceMock(page, options = {}) {
@@ -160,6 +173,7 @@ test('denied microphone permission explains how to proceed and leaves text usabl
   await expect(page.locator('.jarvis-message.assistant')).toContainText('480,25');
   expect(api.requests.filter(r => r.path === '/message')).toHaveLength(1);
   expect(await page.evaluate(() => voiceHarness.peers.length)).toBe(0);
+  expect(await page.evaluate(() => voiceHarness.requests)).toBe(1);
 });
 
 test('transcribed audio uses the authenticated text endpoint once and speaks only its acknowledged answer', async ({ page }) => {
@@ -267,4 +281,67 @@ test('blocked playback regenerates only narration on explicit click, never the b
   const responses = await page.evaluate(() => voiceHarness.sent.filter(event => event.type === 'response.create'));
   expect(responses[1].response.input).toEqual(responses[0].response.input);
   expect(api.requests.filter(request => request.path === '/message')).toHaveLength(1);
+});
+
+test('Safari audio session returns to playback after capture and restores the original mode on exit', async ({ page }) => {
+  await voiceMock(page, { audioSessionSupported: true }); await openVoice(page); await record(page);
+  expect(await page.evaluate(() => voiceHarness.captureModes)).toEqual(['play-and-record']);
+  await transcribe(page, 'Como está meu dia?');
+  await expect(page.locator('.jarvis-message.assistant')).toBeVisible();
+  expect(await page.evaluate(() => navigator.audioSession.type)).toBe('playback');
+  expect(await page.evaluate(() => voiceHarness.tracks.every(track => track.readyState === 'ended'))).toBe(true);
+  await page.getByRole('button', { name: 'Desligar voz', exact: true }).click();
+  expect(await page.evaluate(() => navigator.audioSession.type)).toBe('auto');
+  // A later phone call cannot affect an already closed JARVIS session.
+  await page.evaluate(() => navigator.audioSession.changeState('interrupted'));
+  await expect(page.getByRole('button', { name: 'Falar com o JARVIS', exact: true })).toBeEnabled();
+});
+
+test('headset processing incompatibility retries with the system default microphone without pinning a device', async ({ page }) => {
+  await voiceMock(page, { incompatibleConstraints: true }); await openVoice(page); await record(page);
+  expect(await page.evaluate(() => voiceHarness.requests)).toBe(2);
+  const constraints = await page.evaluate(() => voiceHarness.constraints);
+  expect(constraints[1]).toEqual({ audio: true });
+  expect(JSON.stringify(constraints)).not.toContain('deviceId');
+  await page.getByRole('button', { name: 'Desligar voz', exact: true }).click();
+  expect(await page.evaluate(() => voiceHarness.tracks.every(track => track.readyState === 'ended'))).toBe(true);
+});
+
+test('a removed headset cancels recording and requires a new explicit click to use the current input', async ({ page }) => {
+  const api = await voiceMock(page); await openVoice(page); await record(page);
+  // Adding an unrelated device must not discard a healthy recording.
+  await page.evaluate(() => navigator.mediaDevices.dispatchEvent(new Event('devicechange')));
+  await expect(page.getByRole('button', { name: 'Enviar áudio', exact: true })).toBeEnabled();
+  await page.evaluate(() => {
+    voiceHarness.devices = [{ kind: 'audioinput', deviceId: 'built-in-input' }];
+    navigator.mediaDevices.dispatchEvent(new Event('devicechange'));
+  });
+  await expect(page.locator('.jarvis-voice-status')).toContainText('fone foi desconectado');
+  expect(await page.evaluate(() => voiceHarness.tracks.every(track => track.readyState === 'ended'))).toBe(true);
+  expect(await page.evaluate(() => voiceHarness.requests)).toBe(1);
+  expect(api.requests.filter(request => request.path === '/message')).toHaveLength(0);
+  await record(page);
+  expect(await page.evaluate(() => voiceHarness.requests)).toBe(2);
+});
+
+test('a system audio interruption stops capture and never resumes listening automatically', async ({ page }) => {
+  const api = await voiceMock(page, { audioSessionSupported: true }); await openVoice(page); await record(page);
+  await page.evaluate(() => navigator.audioSession.changeState('interrupted'));
+  await expect(page.locator('.jarvis-voice-status')).toContainText('outro aplicativo');
+  expect(await page.evaluate(() => voiceHarness.tracks.every(track => track.readyState === 'ended'))).toBe(true);
+  expect(await page.evaluate(() => voiceHarness.peers.every(peer => peer.connectionState === 'closed'))).toBe(true);
+  await page.evaluate(() => { navigator.audioSession.changeState('active'); voiceHarness.transcribe('Pedido interrompido'); });
+  expect(await page.evaluate(() => voiceHarness.requests)).toBe(1);
+  expect(api.requests.filter(request => request.path === '/message')).toHaveLength(0);
+});
+
+test('a changed playback route resumes only audio and never repeats the business request', async ({ page }) => {
+  const api = await voiceMock(page); await openVoice(page); await record(page); await transcribe(page, 'Como está meu dia?');
+  await expect.poll(() => page.evaluate(() => voiceHarness.sent.some(event => event.type === 'response.create'))).toBe(true);
+  await page.evaluate(() => voiceHarness.startAnswer());
+  const playCalls = await page.evaluate(() => voiceHarness.playCalls);
+  await page.evaluate(() => navigator.mediaDevices.dispatchEvent(new Event('devicechange')));
+  await expect.poll(() => page.evaluate(() => voiceHarness.playCalls)).toBe(playCalls + 1);
+  expect(api.requests.filter(request => request.path === '/message')).toHaveLength(1);
+  expect(await page.evaluate(() => voiceHarness.requests)).toBe(1);
 });

@@ -1,4 +1,64 @@
-# JARVIS — texto e voz
+# JARVIS — texto, voz e notícias
+
+## Atualização: agendamento, fluidez e fones Apple
+
+O servidor reconhece pedidos explícitos como “coloca na agenda”, “marca uma
+reunião” e “me lembra amanhã”, também em espanhol. A resposta a uma pergunta de
+esclarecimento pode completar o pedido anterior durante até 30 minutos e quatro
+detalhes consecutivos. Perguntas educativas, cancelamento e “sim” isolado não
+autorizam uma criação. A confirmação financeira continua exclusivamente no botão.
+
+Criações simples respondem com um recibo dos dados gravados (título, dia, horário
+e recorrência), eliminando a segunda chamada à IA que apenas redigia o sucesso.
+O frontend atualiza o seletor com a conversa já recebida, sem buscar o histórico
+novamente após cada envio. Não foi medido um tempo de resposta na conta real;
+rede, transcrição, modelo e busca externa ainda influenciam a espera.
+
+A voz padrão agora é Cedar. Se `OPENAI_JARVIS_VOICE` já existir na Vercel, seu
+valor prevalece: use `cedar`, publique novamente e toque em **Desligar voz** antes
+de iniciar outra sessão. Nenhuma mudança de chave é necessária.
+
+Para Safari/iPhone e AirPods, o cliente usa `navigator.audioSession` quando
+disponível para alternar captura/reprodução, restaura o modo anterior ao sair e
+trata interrupção por outros apps, desconexão de fone e constraints incompatíveis.
+Não mantém o microfone aberto para preservar a rota Bluetooth. A seleção de saída
+permanece com o sistema operacional; não controla Siri ou o botão físico do fone.
+Valide com o fone conectado antes de abrir o microfone, teste ouvir/gravar duas
+vezes, retirar/reconectar o fone e voltar de outra aplicação. Testes automatizados
+simulam essas condições; não substituem o teste físico em iPhone/AirPods.
+
+## Notícias do dia
+
+Use o atalho **Notícias** ou pergunte “Quais as notícias de hoje?” e “Notícias de
+tecnologia”. A ferramenta de leitura `get_daily_news` aceita apenas categorias
+geral, Brasil, mundo, economia/negócios ou tecnologia. Faz uma chamada Responses
+com `web_search` obrigatório, data de São Paulo, até duas chamadas de busca e
+resumo de até três notícias. O conteúdo mantém as citações verificadas, exibidas
+como links junto ao texto e como lista de fontes; ficam salvas no histórico.
+
+A busca recebe somente categoria pública fixa, data e horário. Não recebe o
+histórico privado, financeiro, agenda, memórias ou uma consulta livre. Páginas
+externas não voltam ao ciclo de ferramentas empresariais: o boletim é anexado ao
+final, preservando suas citações. Sem busca concluída e fontes válidas, retorna
+erro explícito, sem notícias fictícias. A voz narra o texto; os links ficam na tela.
+
+Não há cache de notícias nem envio automático. A busca usa a chave existente,
+precisa de acesso ao `web_search` no modelo configurado e gera consumo adicional
+na OpenAI. `/api/jarvis/usage` inclui `news_metrics`: requests, erros, tokens,
+chamadas de busca e latência mensais por modelo, separados das métricas do chat.
+Esse contador não é uma fatura nem estima o custo de busca/áudio.
+
+Arquivos novos desta atualização: `services/jarvis/intent.js`,
+`services/jarvis/news.js`, `tests/jarvis-news.test.js`. Alterados: agente, tools,
+configuração e HTTP em `services/jarvis`, cliente de chat e voz em `app/assets/js`,
+CSS do JARVIS, versão dos assets em `app/index.html`, testes de backend/banco e
+browser, `.env.example`, script de testes e este documento. Nenhuma migration ou
+biblioteca adicional: os campos privados de auditoria e métricas usam a estrutura
+JSON e as permissões existentes.
+
+Referências: [OpenAI — busca na web](https://developers.openai.com/api/docs/guides/tools-web-search),
+[OpenAI — vozes Realtime](https://developers.openai.com/api/docs/guides/realtime-conversations),
+[MDN — AudioSession](https://developer.mozilla.org/en-US/docs/Web/API/AudioSession).
 
 O JARVIS foi acrescentado ao projeto existente. O código usa a API oficial da
 OpenAI e o Supabase real; não há respostas, usuários ou registros fictícios como
@@ -152,7 +212,9 @@ configure os valores por um editor seguro. Nunca coloque chaves no chat, no
 | `JARVIS_MEMORY_ENABLED` | `true` para permitir memórias explícitas; padrão desativado |
 | `JARVIS_VOICE_ENABLED` | `true` para habilitar voz após configurar modelo; padrão `false` |
 | `OPENAI_JARVIS_VOICE_MODEL` | Modelo Realtime disponível no projeto OpenAI, por exemplo `gpt-realtime` |
-| `OPENAI_JARVIS_VOICE` | Voz opcional; padrão `marin` |
+| `OPENAI_JARVIS_VOICE` | Voz opcional; padrão `cedar`. Encerre a sessão de voz anterior após alterar. |
+| `JARVIS_NEWS_ENABLED` | Notícias com busca pública; padrão `true`. `false` desativa. |
+| `OPENAI_JARVIS_NEWS_MODEL` | Opcional: modelo Responses com `web_search`; usa o modelo de texto quando vazio. |
 | `OPENAI_JARVIS_TRANSCRIPTION_MODEL` | Transcrição opcional; padrão `gpt-4o-mini-transcribe` |
 | `JARVIS_VOICE_REQUESTS_PER_MINUTE` | Emissões de credenciais por conta/minuto; padrão 3, teto 10 |
 | `JARVIS_VOICE_REQUESTS_PER_DAY` | Emissões por conta/janela de 24 horas; padrão 30, teto 200 |
@@ -182,7 +244,7 @@ mas não valida credenciais, migration ou uma conversa autenticada com a OpenAI.
 
 | Grupo | Tools disponíveis |
 | --- | --- |
-| Leitura | `get_today_summary`, `list_tasks`, `get_agenda`, `get_financial_summary`, `search_ideas` |
+| Leitura | `get_today_summary`, `list_tasks`, `get_agenda`, `get_financial_summary`, `search_ideas`, `get_daily_news` (quando habilitada) |
 | Escrita | `create_task`, `create_agenda_event`, `update_task`, `complete_task`, `save_idea` |
 | Com confirmação | `register_expense`, `register_income` |
 | Memória opcional | `save_memory`, `search_memories` |
