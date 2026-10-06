@@ -17,6 +17,9 @@
     let editingId = null;
     let formPanelOpen = false;
     let cloudChangesChannel = null;
+    let sessionGeneration = 0;
+    let appLoadPromise = null;
+    let appLoadUserId = null;
 
     const appShell = document.querySelector(".app");
     const authScreen = document.getElementById("authScreen");
@@ -71,9 +74,6 @@
     const logoutBtn = document.getElementById("logoutBtn");
     const userEmail = document.getElementById("userEmail");
     const cloudStatus = document.getElementById("cloudStatus");
-    const newUserEmail = document.getElementById("newUserEmail");
-    const createUserBtn = document.getElementById("createUserBtn");
-    const createUserStatus = document.getElementById("createUserStatus");
     const settingsBtn = document.getElementById("settingsBtn");
     const settingsPanel = document.getElementById("settingsPanel");
     const settingsBackdrop = document.getElementById("settingsBackdrop");
@@ -139,7 +139,9 @@
     confirmOkBtn.addEventListener("click", () => closeConfirmDialog(true));
 
     function openSettings() {
+      if (typeof setCeoMenu === "function") setCeoMenu(false);
       fillCompanyForm();
+      if (typeof ZamaWorkspace !== "undefined") ZamaWorkspace.render();
       settingsPanel.hidden = false;
       settingsBackdrop.hidden = false;
     }
@@ -150,6 +152,7 @@
     }
 
     function showAuth(message = "") {
+      clearSessionView();
       if (typeof ZamaJarvis !== "undefined") ZamaJarvis.reset();
       loginForm.hidden = false;
       resetPasswordForm.hidden = true;
@@ -159,6 +162,32 @@
       appShell.hidden = true;
       loginPassword.value = "";
       setAuthLoading(false);
+    }
+
+    function clearSessionView({ keepWorkspace = false, resetPush = true } = {}) {
+      if (typeof setCeoMenu === "function") setCeoMenu(false, false);
+      sessionGeneration++;
+      appLoadPromise = null;
+      appLoadUserId = null;
+      if (typeof ZamaAgenda !== "undefined") ZamaAgenda.stopReminders();
+      if (typeof ZamaJarvis !== "undefined") ZamaJarvis.reset();
+      if (typeof ZamaFinance !== "undefined") ZamaFinance.reset?.();
+      if (!keepWorkspace && typeof ZamaWorkspace !== "undefined") ZamaWorkspace.reset();
+      if (resetPush && typeof ZamaPushReminders !== "undefined") ZamaPushReminders.reset?.();
+      if (typeof unsubscribeFromCloudChanges === "function") void unsubscribeFromCloudChanges();
+      if (typeof resetAccountState === "function") resetAccountState();
+      else state = null;
+      editingId = null; formPanelOpen = false; activeModule = "dashboard"; financeView = "movimentacoes";
+      userEmail.textContent = "";
+      document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
+      closeSettings(); closeConfirmDialog(false); closeDetailPanel();
+      onboardingPanel.hidden = onboardingBackdrop.hidden = true;
+      document.getElementById('ceoWorkspace').innerHTML = "";
+      tableArea.innerHTML = recordForm.innerHTML = detailContent.innerHTML = "";
+      toastStack.innerHTML = "";
+      companyForm.reset?.();
+      appShell.hidden = true;
+      navButtons.forEach(item => item.classList.toggle("active", item.dataset.module === "dashboard"));
     }
 
     function setAuthLoading(isLoading) {
@@ -214,17 +243,21 @@
       return "";
     }
 
-    async function inviteAccessByEmail(email) {
-      return supabaseClient.auth.signInWithOtp({
-        email,
-        options: {
-          shouldCreateUser: true,
-          emailRedirectTo: window.location.origin + window.location.pathname
-        }
+    function showApp(session, options = {}) {
+      if (!session?.user?.id) { showAuth(); return Promise.resolve(); }
+      if (!options.force && appLoadPromise && appLoadUserId === session.user.id) return appLoadPromise;
+      if (!options.force && state && typeof cloudUserId !== "undefined" && cloudUserId === session.user.id && !appShell.hidden) return Promise.resolve();
+      const previousUserId = appLoadUserId || (typeof cloudUserId !== "undefined" ? cloudUserId : null);
+      clearSessionView({ keepWorkspace: Boolean(options.keepWorkspace), resetPush: Boolean(previousUserId && previousUserId !== session.user.id) });
+      const generation = sessionGeneration;
+      appLoadUserId = session.user.id;
+      appLoadPromise = loadApp(session, generation, options).finally(() => {
+        if (generation === sessionGeneration) appLoadPromise = null;
       });
+      return appLoadPromise;
     }
 
-    async function showApp(session) {
+    async function loadApp(session, generation, options) {
       authScreen.hidden = true;
       appShell.hidden = false;
       userEmail.textContent = session?.user?.email || "";
@@ -236,14 +269,20 @@
         ceoArea.innerHTML = '<div class="ceo-loading" role="status">Carregando os dados da sua conta…</div>';
       }
       try {
-        state = await loadState();
+        if (!options.keepWorkspace && typeof ZamaWorkspace !== "undefined") await ZamaWorkspace.init(session.user);
+        if (generation !== sessionGeneration) return;
+        const loaded = await loadState();
+        if (generation !== sessionGeneration) return;
+        state = loaded;
       } catch (error) {
+        if (generation !== sessionGeneration) return;
         if (!ceoArea) throw error;
         ceoArea.innerHTML = `<div class="ceo-card ceo-empty" role="alert"><h2>Não foi possível carregar seus dados</h2><p>${escapeHtml(error.message)}</p><button class="ceo-button primary" id="retryLoadBtn" type="button">Tentar novamente</button></div>`;
         document.getElementById("retryLoadBtn").onclick = () => showApp(session);
         return;
       }
       await subscribeToCloudChanges(session?.user);
+      if (generation !== sessionGeneration) return;
       editingId = null;
       fillCompanyForm();
       const requestedView = new URLSearchParams(window.location.search);
@@ -252,18 +291,20 @@
         navButtons.forEach(item => item.classList.toggle("active", item.dataset.module === "agenda"));
         if (ZamaAgenda.helpers.validDate(requestedView.get("day"))) ZamaAgenda.selectDay(requestedView.get("day"));
       }
-      if (requestedView.get("view") === "jarvis") {
+      if (requestedView.get("view") === "jarvis" && jarvisVisible) {
         activeModule = "jarvis";
         navButtons.forEach(item => item.classList.toggle("active", item.dataset.module === "jarvis"));
       }
       render();
-      maybeShowOnboarding();
+      if (typeof ZamaWorkspace === "undefined" || ZamaWorkspace.canEdit()) maybeShowOnboarding();
       try {
         const legacyButton = document.getElementById("legacyBackupBtn");
         if (legacyButton) legacyButton.hidden = !localStorage.getItem(storageKey);
       } catch {}
       if (typeof ZamaAgenda !== "undefined") ZamaAgenda.startReminders();
       if (typeof ZamaJarvis !== "undefined") ZamaJarvis.init(session?.user);
+      if (typeof ZamaWorkspace !== "undefined") ZamaWorkspace.render();
+      if (typeof ZamaPushReminders !== "undefined") void ZamaPushReminders.init();
     }
 
     function clearRecoveryUrl() {
@@ -274,6 +315,7 @@
     }
 
     function showPasswordReset() {
+      clearSessionView();
       recoveryActive = true;
       authScreen.hidden = false;
       appShell.hidden = true;
@@ -375,11 +417,25 @@
     });
 
     // Keep this callback synchronous: awaiting Auth calls here can deadlock the SDK.
-    supabaseClient?.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY") showPasswordReset();
+    supabaseClient?.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY") { showPasswordReset(); return; }
+      if (event === "SIGNED_OUT") { recoveryActive = false; showAuth("Sua sessão foi encerrada. Entre novamente para continuar."); return; }
+      if (event === "SIGNED_IN" && !recoveryActive && session?.user?.id !== appLoadUserId
+          && (typeof cloudUserId === "undefined" || session?.user?.id !== cloudUserId)) {
+        if (appLoadUserId || (typeof cloudUserId !== "undefined" && cloudUserId)) clearSessionView();
+        const generation = sessionGeneration;
+        window.setTimeout(async () => {
+          if (generation !== sessionGeneration || recoveryActive) return;
+          try {
+            const { data } = await supabaseClient.auth.getSession();
+            if (generation === sessionGeneration && data.session?.user?.id === session?.user?.id) await showApp(data.session);
+          } catch { if (generation === sessionGeneration) showAuth("Não foi possível verificar sua sessão."); }
+        }, 0);
+      }
     });
 
     async function initializeAuth() {
+      const generation = sessionGeneration;
       if (!supabaseClient) {
         showAuth("Não foi possível carregar o Supabase. Verifique sua conexão.");
         return;
@@ -387,6 +443,7 @@
 
       try {
         const { data, error } = await supabaseClient.auth.getSession();
+        if (generation !== sessionGeneration) return;
         if (authCallbackError || (recoveryActive && (error || !data.session))) {
           recoveryActive = false;
           clearRecoveryUrl();
@@ -403,12 +460,13 @@
           showAuth();
         }
       } catch {
-        showAuth("Não foi possível verificar sua sessão. Tente novamente.");
+        if (generation === sessionGeneration) showAuth("Não foi possível verificar sua sessão. Tente novamente.");
       }
     }
 
     loginForm.addEventListener("submit", async (event) => {
       event.preventDefault();
+      const generation = sessionGeneration;
       authError.textContent = "";
       authStatus.textContent = "";
       setAuthLoading(true);
@@ -418,6 +476,7 @@
           email: loginEmail.value.trim(),
           password: loginPassword.value
         });
+        if (generation !== sessionGeneration) return;
 
         if (error) {
           showAuth("E-mail ou senha inválidos.");
@@ -426,13 +485,14 @@
 
         await showApp(data.session);
       } catch {
-        showAuth("Não foi possível entrar agora. Verifique sua conexão.");
+        if (generation === sessionGeneration) showAuth("Não foi possível entrar agora. Verifique sua conexão.");
       } finally {
         setAuthLoading(false);
       }
     });
 
     signupBtn.addEventListener("click", async () => {
+      const generation = sessionGeneration;
       const email = loginEmail.value.trim();
       const password = loginPassword.value;
 
@@ -446,6 +506,7 @@
       setAuthLoading(true);
       try {
         const { data, error } = await createAccessWithEmail(email, password);
+        if (generation !== sessionGeneration) return;
 
         if (error) {
           showAuth(error.message || "Não foi possível criar este acesso.");
@@ -459,44 +520,9 @@
 
         showAuth("Acesso criado. Verifique o e-mail para confirmar a conta antes de entrar.");
       } catch {
-        showAuth("Não foi possível criar o acesso agora. Verifique sua conexão.");
+        if (generation === sessionGeneration) showAuth("Não foi possível criar o acesso agora. Verifique sua conexão.");
       } finally {
         setAuthLoading(false);
-      }
-    });
-
-    createUserBtn.addEventListener("click", async () => {
-      const email = newUserEmail.value.trim();
-      const validationError = validateEmailOnly(email);
-
-      createUserStatus.classList.remove("error", "success");
-      if (validationError) {
-        createUserStatus.textContent = validationError;
-        createUserStatus.classList.add("error");
-        return;
-      }
-
-      createUserBtn.disabled = true;
-      createUserBtn.textContent = "Enviando...";
-      createUserStatus.textContent = "Enviando convite...";
-
-      try {
-        const { error } = await inviteAccessByEmail(email);
-        if (error) {
-          createUserStatus.textContent = error.message || "Nao foi possivel enviar este convite.";
-          createUserStatus.classList.add("error");
-          return;
-        }
-
-        newUserEmail.value = "";
-        createUserStatus.textContent = "Convite enviado. O usuario recebera um link de acesso por e-mail.";
-        createUserStatus.classList.add("success");
-      } catch {
-        createUserStatus.textContent = "Nao foi possivel enviar o convite agora. Verifique sua conexao.";
-        createUserStatus.classList.add("error");
-      } finally {
-        createUserBtn.disabled = false;
-        createUserBtn.textContent = "Enviar convite";
       }
     });
 
@@ -561,6 +587,7 @@
     });
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
+        if (typeof setCeoMenu === "function") setCeoMenu(false);
         document.body.classList.remove("menu-open");
         document.getElementById("ceoMenuBtn")?.setAttribute("aria-expanded", "false");
         closeSettings();
@@ -570,13 +597,17 @@
     });
 
     document.getElementById("resetBtn").addEventListener("click", async () => {
+      if (typeof ZamaWorkspace !== "undefined" && !ZamaWorkspace.isOwner()) {
+        showToast("Acesso restrito", "Somente o proprietário pode limpar a empresa.", "error"); return;
+      }
+      const generation = sessionGeneration;
       const confirmed = await requestConfirmation({
         eyebrow: "Ação permanente",
         title: "Limpar todos os dados?",
         message: "Esta ação apaga os dados locais e da nuvem desta conta.",
         confirmText: "APAGAR"
       });
-      if (!confirmed) return;
+      if (!confirmed || generation !== sessionGeneration) return;
 
       state = createInitialState();
       if (!await persist()) return;
@@ -604,40 +635,32 @@
     });
 
     document.getElementById("exportBtn").addEventListener("click", () => {
-      downloadStateBackup("dados-zama-completo.json", state);
+      try {
+        downloadStateBackup(`backup-zama-completo-${todayIso()}.json`, state);
+        showToast("Backup completo baixado", "Guarde o arquivo em um local seguro para restaurar esta conta.");
+      } catch (error) { showToast("Não foi possível gerar o backup", error.message, "error"); }
     });
 
     document.getElementById("legacyBackupBtn")?.addEventListener("click", () => {
       try {
         const data = JSON.parse(localStorage.getItem(storageKey));
         if (!data) throw new Error();
-        downloadStateBackup("zama-backup-local-anterior.json", data);
+        ZamaAdminData.parseBackup(data);
+        // Keep the original format: absent modern collections must remain distinguishable from empty ones.
+        ZamaAdminData.download("zama-backup-local-anterior.json", data);
         showToast("Backup anterior baixado", "Confira os registros antes de importar para esta conta.");
       } catch { showToast("Backup indisponível", "Não foi possível ler a cópia anterior deste navegador.", "error"); }
     });
 
     monthlyBackupBtn.addEventListener("click", () => {
-      const monthKey = financeMonth || todayIso().slice(0, 7);
-      const backup = {
-        geradoEm: new Date().toISOString(),
-        mes: monthKey,
-        empresa: state.companyProfile,
-        financeiro: state.financeiro.filter((row) => rowMatchesMonth(row, monthKey)),
-        gastosFixos: getActiveFixedExpenses(),
-        mensalidades: state.mensalidades.filter((row) => rowMatchesMonth(row, monthKey)),
-        totais: getFinancialTotalsForMonth(monthKey)
-      };
-      downloadStateBackup(`backup-zama-${monthKey}.json`, backup);
+      const monthKey = (activeModule === "financeiro" && typeof ZamaFinance.reportMonth === "function" ? ZamaFinance.reportMonth() : "")
+        || (typeof overviewMonth !== "undefined" ? overviewMonth : "") || todayIso().slice(0, 7);
+      closeSettings();
+      ZamaAdminData.openReports(() => state, monthKey);
     });
 
     function downloadStateBackup(filename, data) {
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      link.click();
-      URL.revokeObjectURL(url);
+      ZamaAdminData.download(filename, ZamaAdminData.makeBackup(data));
     }
 
     companyForm.addEventListener("submit", async (event) => {
@@ -668,32 +691,44 @@
       if (!file) return;
 
       try {
-        const importedState = JSON.parse(await file.text());
-        if (!importedState || typeof importedState !== "object" || Array.isArray(importedState) || !Object.keys(modules).some(key => Array.isArray(importedState[key]))) throw new Error("Backup inválido");
-        const confirmed = await requestConfirmation({ title: "Substituir os dados desta conta?", message: `O arquivo ${file.name} substituirá os registros atuais. Exporte um backup antes de continuar.`, confirmText: "IMPORTAR" });
-        if (!confirmed) return;
-        Object.keys(modules).forEach((key) => {
-          if (!Array.isArray(importedState[key])) importedState[key] = [];
+        if (file.size > ZamaAdminData.MAX_BYTES) throw new Error("O arquivo excede o limite de 10 MB.");
+        const userId = cloudUserId, ownerId = cloudOwnerId, sessionEpoch = cloudEpoch;
+        const backup = ZamaAdminData.parseBackup(await file.text());
+        if (!state || !userId || cloudUserId !== userId || cloudOwnerId !== ownerId || cloudEpoch !== sessionEpoch) throw new Error("A conta ou o espaço de trabalho mudou. Selecione o arquivo novamente antes de restaurar.");
+        closeSettings();
+        ZamaAdminData.openRestore(backup, file.name, () => state, async (selectedBackup) => {
+          if (!state || cloudUserId !== userId || cloudOwnerId !== ownerId || cloudEpoch !== sessionEpoch) throw new Error("A conta ou o espaço de trabalho mudou. Selecione o arquivo novamente antes de restaurar.");
+          const saved = await ceoCommit(draft => {
+            const candidate = prepareState(ZamaAdminData.restoredState(selectedBackup, draft));
+            const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+            downloadStateBackup(`backup-zama-antes-restauracao-${timestamp}.json`, draft);
+            Object.keys(draft).forEach(key => { delete draft[key]; });
+            Object.assign(draft, candidate);
+          }, "Backup restaurado com sucesso.");
+          if (saved) {
+            editingId = null;
+            formPanelOpen = false;
+            fillCompanyForm();
+            render();
+          }
+          return saved;
         });
-        state = prepareState(importedState);
-        if (!await persist()) return;
-        editingId = null;
-        render();
-        showToast("Dados importados", "O backup foi carregado com sucesso.");
       } catch (error) {
-        showToast("Importação falhou", "Verifique se o arquivo foi exportado pelo sistema ZAMA.", "error");
+        showToast("Restauração não iniciada", error.message || "Escolha um backup completo exportado pela ZAMA.", "error");
       } finally {
         importInput.value = "";
       }
     });
 
     logoutBtn.addEventListener("click", async () => {
-      if (typeof ZamaAgenda !== "undefined") ZamaAgenda.stopReminders();
-      await unsubscribeFromCloudChanges();
-      await supabaseClient.auth.signOut();
-      state = null;
-      closeSettings();
-      showAuth();
+      logoutBtn.disabled = true;
+      try {
+        if (typeof ZamaPushReminders !== "undefined") await ZamaPushReminders.disconnect();
+        const { error } = await supabaseClient.auth.signOut();
+        if (error) throw error;
+        showAuth();
+      } catch { showToast("Não foi possível sair", "Verifique a conexão e tente novamente.", "error"); }
+      finally { logoutBtn.disabled = false; }
     });
 
     searchInput.addEventListener("input", renderTable);

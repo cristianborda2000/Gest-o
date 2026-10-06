@@ -1,5 +1,7 @@
 # ZAMA Admin
 
+Melhorias administrativas: [financeiro, backups, equipe, sessão e notificações](docs/ADMINISTRATIVO.md).
+
 JARVIS: veja [configuracao, migration, testes e limites da entrega](docs/JARVIS.md).
 
 A central de gestão e rotina reúne financeiro, investimentos, agenda e ideias,

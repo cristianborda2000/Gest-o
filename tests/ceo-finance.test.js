@@ -52,6 +52,18 @@ test("money parsing handles Brazilian amounts and legacy writes invalidate stale
   assert.equal(F.amountCents(old), 30011);
 });
 
+test("numeric cents from compatible backups survive normalization and reporting", () => {
+  const target = blank();
+  target.financeiro = [{ id: "cents-only", nome: "Backup", tipo: "Saída", valorCentavos: "12345", status: "Pago", pagoEm: "2026-09-03" }];
+  assert.equal(F.totals(target, september).expenseCents, 12345);
+  F.normalize(target);
+  assert.equal(target.financeiro[0].valorCentavos, 12345);
+  assert.equal(F.totals(target, september).expenseCents, 12345);
+  assert.equal(F.amountCents({ valorCentavos: "9007199254740992" }), 0);
+  assert.equal(F.amountCents({ valorCentavos: true }), 0);
+  assert.equal(F.amountCents({ valor: 0, valorCentavos: "12345" }), 0);
+});
+
 test("movement CRUD validates dates, positive cents, and retains additional legacy fields", () => {
   const target = blank();
   const created = F.saveMovement(target, movement());
@@ -164,4 +176,132 @@ test("filters select accounts payable and receivable without cancelled or settle
   assert.equal(payable[0].nome, "Marketing");
   const received = F.financeRows(target, { ...september, status: "Liquidado", query: "liquidada" });
   assert.equal(received.length, 1);
+});
+
+const fixedExpense = overrides => ({ nome: "Internet", categoria: "Sistema", dia: 31, valorCentavos: 19999, status: "Ativo", recurrenceStart: "2026-01", ...overrides });
+
+test("fixed expenses generate one immutable installment per month, including leap years and short months", () => {
+  const target = blank();
+  const fixed = F.saveFixedExpense(target, fixedExpense());
+  assert.equal(target.financeiro.length, 0, "Saving a template without the explicit checkbox creates no payable.");
+  F.generateFixedExpenses(target, "2026-02");
+  const original = structuredClone(target.financeiro[0]);
+  assert.equal(original.prazo, "2026-02-28");
+  assert.equal(original.id, `fixed:${fixed.id}:2026-02`);
+  F.generateFixedExpenses(target, "2026-02");
+  F.normalize(target);
+  assert.deepEqual(target.financeiro, [original]);
+  F.settleMovement(target, original.id, "2026-03-02");
+  F.saveFixedExpense(target, fixedExpense({ valorCentavos: 25000, dia: 15 }), fixed.id);
+  F.generateFixedExpenses(target, "2026-02");
+  F.generateFixedExpenses(target, "2026-03");
+  assert.equal(target.financeiro.length, 2);
+  assert.equal(target.financeiro[0].valorCentavos, 19999);
+  assert.equal(target.financeiro[0].pagoEm, "2026-03-02");
+  assert.equal(target.financeiro[1].prazo, "2026-03-15");
+  assert.equal(target.financeiro[1].valorCentavos, 25000);
+  assert.equal(F.fixedDueDate({ dia: 31 }, "2028-02"), "2028-02-29");
+  assert.equal(F.fixedDueDate({ dia: 31 }, "2026-04"), "2026-04-30");
+  assert.throws(() => F.fixedDueDate({ dia: 32 }, "2026-04"), /válidos/);
+});
+
+test("legacy fixed templates require explicit review and can reuse an already paid outgoing record", () => {
+  const target = blank();
+  target.gastosFixos = [{ id: "old-fixed", nome: "Internet", dia: 10, valor: -199.99, status: "Ativo", custom: "keep" }];
+  const paid = F.saveMovement(target, movement({ nome: "Internet já paga", tipo: "Saída", valorCentavos: 18000 }));
+  const before = structuredClone(paid);
+  F.normalize(target);
+  assert.equal(target.financeiro.length, 1);
+  F.generateFixedExpenses(target, "2026-09", { links: { "old-fixed": paid.id } });
+  assert.equal(target.financeiro.length, 1);
+  assert.equal(paid.fixedExpenseId, "old-fixed");
+  assert.equal(paid.competencia, "2026-09");
+  for (const key of ["valor", "valorCentavos", "pagoEm", "status", "nome", "prazo"]) assert.equal(paid[key], before[key]);
+  assert.equal(target.gastosFixos[0].custom, "keep");
+  assert.equal(target.gastosFixos[0].recurrenceStart, "2026-09");
+  assert.throws(() => F.saveInvestment(target, investment({ movementId: paid.id })), /disponível/);
+  assert.throws(() => F.removeMovement(target, paid.id), /competência/);
+  assert.throws(() => F.saveMovement(target, movement(), paid.id), /saída financeira/);
+});
+
+test("fixed generation rejects conflicting links before creating partial installments", () => {
+  const target = blank();
+  const first = F.saveFixedExpense(target, fixedExpense());
+  const second = F.saveFixedExpense(target, fixedExpense({ nome: "Aluguel" }));
+  const available = F.saveMovement(target, movement({ tipo: "Saída" }));
+  assert.throws(() => F.generateFixedExpenses(target, "2026-09", { links: { [first.id]: available.id, [second.id]: available.id } }), /diferente/);
+  assert.equal(target.financeiro.length, 1);
+  assert.equal(available.fixedExpenseId, undefined);
+  available.investmentId = "investment";
+  assert.throws(() => F.generateFixedExpenses(target, "2026-09", { links: { [first.id]: available.id } }), /disponível/);
+  assert.equal(target.financeiro.length, 1);
+});
+
+test("fixed generation rejects cancelled links and ID conflicts before changing any installment", () => {
+  const target = blank();
+  const first = F.saveFixedExpense(target, fixedExpense());
+  const second = F.saveFixedExpense(target, fixedExpense({ nome: "Aluguel" }));
+  const cancelled = F.saveMovement(target, movement({ tipo: "Saída", status: "Cancelado" }));
+  let before = structuredClone(target);
+  assert.throws(() => F.generateFixedExpenses(target, "2026-09", { links: { [first.id]: cancelled.id } }), /disponível/);
+  assert.deepEqual(target, before);
+  cancelled.id = `fixed:${second.id}:2026-09`;
+  before = structuredClone(target);
+  assert.throws(() => F.generateFixedExpenses(target, "2026-09"), /identificador conflitante/);
+  assert.deepEqual(target, before, "A late conflict must not leave an earlier expense generated.");
+});
+
+test("paused, cancelled and not-yet-started templates are not generated and cancelled installments are not recreated", () => {
+  const target = blank();
+  F.saveFixedExpense(target, fixedExpense({ status: "Pausado" }));
+  F.saveFixedExpense(target, fixedExpense({ status: "Cancelado" }));
+  F.saveFixedExpense(target, fixedExpense({ recurrenceStart: "2026-10" }));
+  const active = F.saveFixedExpense(target, fixedExpense());
+  F.generateFixedExpenses(target, "2026-09");
+  assert.equal(target.financeiro.length, 1);
+  assert.equal(target.financeiro[0].fixedExpenseId, active.id);
+  target.financeiro[0].status = "Cancelado";
+  F.generateFixedExpenses(target, "2026-09");
+  assert.equal(target.financeiro.length, 1);
+  assert.equal(F.totals(target, september).payableCents, 0);
+});
+
+test("summaries use the same category, direction, search, date and status filters as the visible ledger", () => {
+  const target = blank();
+  F.saveMovement(target, movement({ nome: "Servidor", tipo: "Saída", status: "Pendente", categoria: "Sistema", valorCentavos: 5010 }));
+  F.saveMovement(target, movement({ nome: "Servidor pago", tipo: "Saída", categoria: "Sistema", valorCentavos: 1234 }));
+  F.saveMovement(target, movement({ nome: "Anúncio", tipo: "Saída", status: "Pendente", categoria: "Marketing", valorCentavos: 90000 }));
+  F.saveMovement(target, movement({ nome: "Receita", tipo: "Entrada", categoria: "Sistema", valorCentavos: 40000 }));
+  const filters = { ...september, category: "Sistema", type: "Saída", query: "servidor", status: "Pendente" };
+  assert.deepEqual(F.totals(target, filters).rows, F.financeRows(target, filters));
+  assert.equal(F.totals(target, filters).payableCents, 5010);
+  assert.equal(F.totals(target, filters).expenseCents, 0);
+  assert.equal(F.totals(target, filters).incomeCents, 0);
+  filters.status = "Liquidado";
+  assert.equal(F.totals(target, filters).expenseCents, 1234);
+  assert.equal(F.totals(target, filters).payableCents, 0);
+});
+
+test("settlement uses its real payment month and repeated requests preserve the first confirmed payment", () => {
+  const target = blank();
+  const row = F.saveMovement(target, movement({ tipo: "Saída", status: "Pendente" }));
+  F.settleMovement(target, row.id, "2026-10-03");
+  F.settleMovement(target, row.id, "2026-10-04");
+  assert.equal(row.pagoEm, "2026-10-03");
+  assert.equal(F.totals(target, september).expenseCents, 0);
+  assert.equal(F.totals(target, { from: "2026-10-01", to: "2026-10-31" }).expenseCents, 10001);
+  assert.throws(() => F.settleMovement(target, row.id, "2026-02-30"), /data/);
+  row.status = "Cancelado";
+  assert.throws(() => F.settleMovement(target, row.id, "2026-10-03"), /cancelado/);
+  row.monthlyId = "historical";
+  assert.throws(() => F.settleMovement(target, row.id, "2026-10-03"), /origem/);
+});
+
+test("older overdue liabilities remain discoverable outside the selected period", () => {
+  const target = blank();
+  F.saveMovement(target, movement({ nome: "Pendente anterior", tipo: "Saída", status: "Pendente", prazo: "2020-08-12", data: "2020-08-01" }));
+  F.saveMovement(target, movement({ status: "Cancelado", prazo: "2020-08-12" }));
+  F.saveMovement(target, movement({ status: "Pago", prazo: "2020-08-12" }));
+  assert.equal(F.financeRows(target, september).some(row => row.nome === "Pendente anterior"), false);
+  assert.equal(F.overdueBefore(target, "2026-09-01").length, 1);
 });

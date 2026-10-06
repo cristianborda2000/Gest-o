@@ -1,0 +1,14 @@
+.workspace-badge{max-width:250px;padding:6px 10px;border:1px solid #e5e7eb;border-radius:999px;font-size:11px;color:#5b6572;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#fff}
+.workspace-field{display:grid;gap:7px;margin:12px 0;font-size:12px;font-weight:600;color:#414a56}
+.workspace-field input,.workspace-field select,.workspace-person select{box-sizing:border-box;width:100%;min-width:0;min-height:42px;border:1px solid #dfe3e8;border-radius:9px;background:#fff;color:#171b1e;padding:9px 11px;font:inherit}
+.workspace-invite{padding:14px;margin:14px 0;border:1px solid #e5e7eb;border-radius:12px;background:#f8f9fa}
+.workspace-invite p{font-size:12px;line-height:1.6;color:#667080}
+.workspace-roster{display:grid;gap:12px;margin-top:22px;font-size:12px}
+.workspace-person{display:grid;grid-template-columns:1fr auto;gap:8px;padding:12px 0;border-top:1px solid #eceef1;align-items:center}
+.workspace-person span{grid-column:1/-1;overflow-wrap:anywhere;color:#414a56}
+[data-access="viewer"] #ceoWorkspace [data-overview-new],
+[data-access="viewer"] #ceoWorkspace [data-overview-complete]{display:none}
+[data-access="viewer"] #ceoWorkspace :is([data-new],[data-edit],[data-delete],[data-settle],[data-new-fixed],[data-edit-fixed],[data-generate],[data-open-fixed],[data-toggle],[data-action="new"],[data-action="settings"],[data-action="convert"],[data-action="archive"],[data-action="restore"]){display:none}
+.workspace-field :focus-visible,.workspace-person :focus-visible{outline:2px solid #536a62;outline-offset:3px}
+@media(max-width:700px){.workspace-badge{max-width:135px;font-size:10px}.topbar .actions{flex-wrap:wrap;justify-content:flex-end}.workspace-person{grid-template-columns:1fr}.workspace-person button{width:100%}}
+@media print{.sidebar,.topbar,.settings-panel,.settings-backdrop,.toast-stack,.quick-add,.jarvis-launcher{display:none!important}}

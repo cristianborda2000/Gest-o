@@ -23,7 +23,7 @@ function ceoIcon(name) {
 function renderCeoModule() {
   ZamaJarvis.navigation();
   const isCeo = ['dashboard', 'investimentos', 'agenda', 'ideias', 'jarvis'].includes(activeModule)
-    || activeModule === 'financeiro' && financeView !== 'fixos';
+    || activeModule === 'financeiro';
   const container = document.getElementById('ceoWorkspace');
   container.hidden = !isCeo;
   workspace.hidden = isCeo;
@@ -35,7 +35,10 @@ function renderCeoModule() {
   moduleSubtitle.textContent = modules[activeModule].subtitle;
   if (activeModule === 'jarvis') ZamaJarvis.render(container);
   if (activeModule === 'dashboard') renderCeoOverview(container);
-  if (activeModule === 'financeiro') ZamaFinance.renderFinance(container);
+  if (activeModule === 'financeiro') {
+    if (financeView === 'fixos') ZamaFinance.renderFixedExpenses(container);
+    else ZamaFinance.renderFinance(container);
+  }
   if (activeModule === 'investimentos') ZamaFinance.renderInvestments(container);
   if (activeModule === 'agenda') ZamaAgenda.render(container);
   if (activeModule === 'ideias') ZamaIdeas.render(container);
@@ -110,10 +113,37 @@ function renderCeoChart(rows, period) {
   return `<div class="ceo-chart-legend"><span><i class="income"></i> Entradas recebidas</span><span><i class="expense"></i> Saídas pagas</span></div><div class="ceo-cash-chart" role="img" aria-label="Movimentações realizadas por dia no mês selecionado">${days.map(day => `<div title="${ZamaTime.label(day.date)}: entradas ${ZamaFinance.formatMoney(day.income)}, saídas ${ZamaFinance.formatMoney(day.expense)}"><i style="height:${Math.max(day.income ? 5 : 2,day.income/max*100)}%" class="income ${day.income ? '' : 'zero'}"></i><i style="height:${Math.max(day.expense ? 5 : 2,day.expense/max*100)}%" class="expense ${day.expense ? '' : 'zero'}"></i></div>`).join('')}</div><div class="ceo-chart-axis"><span>01</span><span>15</span><span>${period.to.slice(-2)}</span></div>`;
 }
 
-document.getElementById('ceoMenuBtn').addEventListener('click', event => {
-  const open = document.body.classList.toggle('menu-open');
-  event.currentTarget.setAttribute('aria-expanded', String(open));
+function setCeoMenu(open, restoreFocus = true) {
+  const sidebar = document.getElementById('ceoSidebar');
+  const button = document.getElementById('ceoMenuBtn');
+  open = Boolean(open && window.matchMedia('(max-width: 720px)').matches);
+  document.body.classList.toggle('menu-open', open);
+  document.getElementById('ceoMenuBackdrop').hidden = !open;
+  document.querySelector('.main').inert = open;
+  button.setAttribute('aria-expanded', String(open));
+  if (open) {
+    sidebar.setAttribute('role', 'dialog');
+    sidebar.setAttribute('aria-modal', 'true');
+    document.getElementById('ceoMenuCloseBtn').focus();
+  } else {
+    sidebar.removeAttribute('role');
+    sidebar.removeAttribute('aria-modal');
+    if (restoreFocus && sidebar.contains(document.activeElement)) button.focus();
+  }
+}
+document.getElementById('ceoMenuBtn').addEventListener('click', () => setCeoMenu(true));
+document.getElementById('ceoMenuCloseBtn').addEventListener('click', () => setCeoMenu(false));
+document.getElementById('ceoMenuBackdrop').addEventListener('click', () => setCeoMenu(false));
+document.getElementById('ceoSidebar').addEventListener('keydown', event => {
+  if (!document.body.classList.contains('menu-open')) return;
+  if (event.key === 'Escape') { event.preventDefault(); setCeoMenu(false); return; }
+  if (event.key !== 'Tab') return;
+  const items = [...event.currentTarget.querySelectorAll('button:not([hidden]), a[href]')].filter(el => el.getClientRects().length);
+  const first = items[0], last = items.at(-1);
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+  if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 });
+window.matchMedia('(max-width: 720px)').addEventListener('change', () => setCeoMenu(false, false));
 document.querySelector('.brand').addEventListener('click', event => { event.preventDefault(); goToModule('dashboard'); });
 if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', event => {
   if (event.data?.type !== 'zama-open-agenda' || !state) return;

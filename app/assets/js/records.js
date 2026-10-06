@@ -374,23 +374,30 @@
       targetState.agenda.forEach(normalizeAgendaRow);
     }
 
+    function legacyFinanceValue(row) {
+      if (row.valor !== undefined && row.valor !== null) return Number(row.valor || 0);
+      const cents = Number(row.valorCentavos);
+      return Number.isSafeInteger(cents) ? cents / 100 : 0;
+    }
+
     function normalizeFinanceRow(row) {
+      const value = legacyFinanceValue(row);
       if (!row.tipo) {
-        row.tipo = Number(row.valor || 0) < 0 || row.responsavel !== "Receita" ? "Saída" : "Entrada";
+        row.tipo = value < 0 || row.responsavel !== "Receita" ? "Saída" : "Entrada";
       }
 
       if (row.tipo === "Saída") {
         row.formaPagamento = row.formaPagamento || "Pix";
-        row.valor = -Math.abs(Number(row.valor || 0));
+        row.valor = -Math.abs(value);
       } else {
         row.formaPagamento = row.formaPagamento || "Pix";
-        row.valor = Math.abs(Number(row.valor || 0));
+        row.valor = Math.abs(value);
       }
     }
 
     function normalizeFixedExpenseRow(row) {
       row.tipo = "Saída";
-      row.valor = -Math.abs(Number(row.valor || 0));
+      row.valor = -Math.abs(legacyFinanceValue(row));
       row.dia = Math.min(31, Math.max(1, Number(row.dia || 1)));
     }
 
@@ -437,6 +444,8 @@
         }));
 
       const fixedExpenses = getActiveFixedExpenses()
+        .filter(row => (!row.recurrenceStart || row.recurrenceStart <= monthKey)
+          && !state.financeiro.some(movement => movement.fixedExpenseId === row.id && movement.competencia === monthKey))
         .map((row) => {
           const dueDate = fixedExpenseDate(row, monthKey);
           return {

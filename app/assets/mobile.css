@@ -1,0 +1,118 @@
+/* Phone layouts share the same data and actions as the desktop application. */
+.ceo-menu-close,.ceo-menu-backdrop{display:none}
+@media(max-width:720px){
+  html{scroll-padding-top:16px}
+  body{overflow-wrap:break-word}
+  .main{padding:calc(16px + env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
+  .topbar{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;gap:10px;margin-bottom:22px;align-items:start}
+  .topbar>div:first-of-type{grid-column:2;grid-row:1;min-width:0}
+  .topbar h1{font-size:24px;line-height:1.2;letter-spacing:-.7px;overflow-wrap:normal}
+  .topbar p{font-size:12px;line-height:1.5;max-width:none;margin-top:5px}
+  .topbar .actions{display:contents}
+  .topbar .settings-button{grid-column:3;grid-row:1;width:44px;height:44px}
+  .topbar .workspace-badge{grid-column:2 / -1;grid-row:2;justify-self:start;max-width:100%;font-size:11px;min-width:0}
+  .ceo-menu-button{grid-column:1;grid-row:1;display:grid;place-items:center;width:44px;height:44px;padding:0}
+  .menu-open .ceo-menu-button{position:static}
+  .ceo-sync{display:none}
+  body.menu-open{overflow:hidden}
+  .ceo-menu-backdrop{display:block;position:fixed;inset:0;z-index:79;background:#11182780;touch-action:none}
+  .sidebar{width:min(280px,calc(100vw - 48px));padding:calc(22px + env(safe-area-inset-top)) 16px calc(20px + env(safe-area-inset-bottom));overscroll-behavior:contain;transition:none}
+  .ceo-menu-close{display:grid;place-items:center;position:absolute;top:calc(12px + env(safe-area-inset-top));right:10px;width:44px;height:44px;border:1px solid #ffffff26;border-radius:9px;background:#ffffff0d;color:#fff;font-size:26px}
+  .sidebar .brand{padding:0 52px 22px 10px}
+  .sidebar .brand>strong{font-size:30px}
+  .sidebar .brand>span{font-size:8px;letter-spacing:2px;white-space:nowrap}
+  .sidebar .nav button{min-height:48px;font-size:14px}
+  .sidebar-footer{padding-top:16px}
+  .ceo-button,.ceo-icon-button,.za-task-actions .ceo-button,.ceo-idea-actions .ceo-button{min-height:44px;font-size:13px;white-space:normal;line-height:1.4;max-width:100%}
+  .ceo-icon-button{min-width:44px}
+  .ceo-field{min-width:0}
+  .ceo-field input:not([type=checkbox]),.ceo-field select,.ceo-field textarea,.ceo-form-grid input:not([type=checkbox]),.ceo-form-grid select,.ceo-form-grid textarea,.za-dialog .ceo-field input,.za-dialog .ceo-field select,.za-dialog .ceo-field textarea,.ceo-idea-move select{min-width:0;min-height:44px;font-size:16px}
+  .ceo-dialog,.za-dialog{width:calc(100% - 24px);max-height:calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));padding:20px 16px;overscroll-behavior:contain;scroll-padding-block:16px;box-sizing:border-box}
+  .ceo-dialog h2,.za-dialog-head h2{font-size:21px;line-height:1.3;overflow-wrap:anywhere}
+  .ceo-dialog-actions,.za-form-actions,.ceo-idea-dialog-footer{flex-wrap:wrap}
+  .ceo-dialog-actions>.ceo-button,.za-form-actions>.ceo-button,.ceo-idea-dialog-footer>.ceo-button{flex:1 1 110px}
+  .ceo-dialog .ceo-form-grid,.za-dialog form.za-task-form{grid-template-columns:minmax(0,1fr)}
+  .ceo-checkbox,.za-check{min-height:44px}
+  .ceo-checkbox input,.za-check input,.za-task-title input{width:24px;height:24px;min-width:24px;flex:none}
+  .ceo-overview-toolbar>.ceo-toolbar{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+  .ceo-period{font-size:12px;gap:10px;justify-content:space-between}
+  .ceo-period input{width:auto;min-width:0;min-height:44px;font-size:16px;flex:1}
+  .ceo-metric strong{font-size:clamp(18px,5.2vw,24px);white-space:normal;overflow-wrap:anywhere;letter-spacing:-.5px}
+  .ceo-metric small{font-size:11px;line-height:1.5}
+  .ceo-metric>span:not(.ceo-metric-icon){font-size:12px}
+  .ceo-card-head{flex-wrap:wrap;align-items:center}
+  .ceo-recent-ideas{grid-template-columns:minmax(0,1fr)}
+  .ceo-task-open{min-height:44px;min-width:0;flex:1}
+  .ceo-task-dot{width:24px;height:24px}
+  .ceo-today-row{gap:8px}
+  .ceo-today-row strong,.ceo-idea-preview>strong{font-size:14px;overflow-wrap:anywhere}
+  .ceo-today-row small,.ceo-idea-preview>p,.ceo-next-reminder strong{font-size:12px}
+  .ceo-next-reminder>span{min-width:0;overflow-wrap:anywhere}
+  .ceo-financial-overview .ceo-table{table-layout:fixed}
+  .ceo-financial-overview .ceo-table th:first-child{width:38%}
+  .ceo-financial-overview .ceo-table th:nth-child(2){width:30%}
+  .ceo-financial-overview .ceo-table th:last-child{width:32%}
+  .ceo-financial-overview .ceo-table td{overflow-wrap:anywhere;white-space:normal}
+  .ceo-financial-overview .ceo-table td small{font-size:11px}
+  .ceo-financial-overview .ceo-badge{font-size:10px;white-space:nowrap}
+  .ceo-finance-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .ceo-finance-metric{padding:14px 12px}
+  .ceo-finance-metric>strong{font-size:20px;overflow-wrap:anywhere}
+  .ceo-finance-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:18px}
+  .ceo-finance-filters .ceo-field{min-width:0}
+  .ceo-finance-filters .ceo-field:has([data-filter=query]),.ceo-finance-filters>[data-clear]{grid-column:1 / -1}
+  [data-module=financeiro] .ceo-row-actions{width:100%}
+  [data-module=financeiro] .ceo-row-actions .ceo-button{flex:1 1 100px}
+  .ceo-investment-card h3,.ceo-investment-card p{overflow-wrap:anywhere}
+  .ceo-investment-card .ceo-badge{white-space:normal;overflow-wrap:anywhere}
+  .ceo-finance-table,.ceo-finance-table tbody{display:block;width:100%}
+  .ceo-finance-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  .ceo-finance-table tbody{display:grid;gap:14px;margin-top:16px}
+  .ceo-finance-table tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;border:1px solid var(--line);border-radius:10px;background:white;overflow:hidden;margin:0}
+  .ceo-finance-table td{display:block;min-width:0;padding:12px!important;font-size:13px;overflow-wrap:anywhere;border:0;border-bottom:1px solid var(--line)}
+  .ceo-finance-table td::before{content:attr(data-label);display:block;font-size:11px;color:var(--muted);font-weight:500;margin-bottom:5px;text-transform:none}
+  .ceo-finance-table td:first-child,.ceo-finance-table td:last-child,.ceo-fixed-table td:nth-child(4){grid-column:1 / -1}
+  .ceo-finance-table td:first-child{background:#f8f9fb}
+  .ceo-finance-table td:first-child::before,.ceo-finance-table td:last-child::before{display:none}
+  .ceo-finance-table td:first-child strong{font-size:15px;line-height:1.5}
+  .ceo-finance-table td small{font-size:12px;line-height:1.5}
+  .ceo-finance-table .ceo-badge{font-size:12px;white-space:normal}
+  .ceo-finance-table td:last-child{border:0}
+  .za-calendar-toolbar{flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
+  .za-month-switch{display:grid;grid-template-columns:44px 44px minmax(0,1fr);gap:6px;flex:1;min-width:0}
+  .za-month-switch h2{font-size:16px;margin:0;line-height:1.3}
+  .za-calendar-toolbar .ceo-button,.za-month-switch .ceo-button{min-height:44px;min-width:44px;font-size:14px;padding:8px}
+  .za-month-switch .ceo-button{font-size:24px}
+  .za-day{min-height:66px;align-items:center;gap:4px;padding:6px 2px}
+  .za-day-number{width:26px;height:26px;font-size:13px}
+  .za-day-task{display:none}
+  .za-day-count{font-size:10px;line-height:1.2;text-align:center;overflow-wrap:normal}
+  .za-weekdays span{font-size:10px}
+  .za-task-actions{flex-wrap:wrap}
+  .za-task-actions .ceo-button{flex:1}
+  .za-task-meta,.za-task-reminder{font-size:12px}
+  .za-reminder-options{grid-template-columns:minmax(0,1fr);gap:14px;font-size:13px}
+  .za-reminder-options>div+div{border:0;padding:0}
+  .za-help{font-size:13px}
+  .zama-push-reminders .ceo-toolbar{align-items:stretch}
+  .zama-push-reminders button{width:100%}
+  .za-financial-dues>div{flex-wrap:wrap;gap:8px}
+  .ceo-idea-filters{grid-template-columns:minmax(0,1fr)}
+  .ceo-idea-actions .ceo-button{font-size:13px}
+  .settings-panel{inset:0;left:0;right:0;bottom:0;top:0;width:100%;height:100dvh;max-height:100dvh;border-radius:0;overscroll-behavior:contain;scroll-padding-block:100px 20px;background:#fff}
+  .settings-head{position:sticky;top:0;z-index:2;background:#fff;padding:calc(16px + env(safe-area-inset-top)) 16px 16px}
+  .settings-head .icon-button{min-width:44px;height:44px;flex:none}
+  .settings-content{padding:16px 16px calc(24px + env(safe-area-inset-bottom));min-width:0}
+  .settings-section,.workspace-roster,.workspace-person,.workspace-invite{min-width:0;overflow-wrap:anywhere}
+  .settings-grid{grid-template-columns:minmax(0,1fr)}
+  .settings-grid label{min-width:0}
+  .settings-panel input:not([type=hidden]),.settings-panel select,.auth-card input{font-size:16px;min-height:44px;min-width:0}
+  .settings-panel button,.auth-card button{min-height:44px;font-size:14px;white-space:normal}
+  .settings-actions{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+  .settings-panel #userEmail{overflow-wrap:anywhere}
+  .auth-screen{min-height:100dvh;height:auto;align-items:safe center;padding:calc(20px + env(safe-area-inset-top)) 16px calc(20px + env(safe-area-inset-bottom))}
+  .auth-card{min-width:0;padding:22px 18px}
+}
+@media(max-width:420px){
+  .ceo-finance-filters .ceo-field:has([data-filter=from]),.ceo-finance-filters .ceo-field:has([data-filter=to]){grid-column:1 / -1}
+}

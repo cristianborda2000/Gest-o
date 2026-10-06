@@ -10,21 +10,73 @@ const seed = {
   ideias:[{id:'idea',titulo:'Automatizar cobrança',descricao:'Estudar alternativas para as mensalidades.',categoria:'Financeiro',prioridade:'Alta',etapa:'avaliacao',data:'2026-09-29'}],
   investimentos:[],clientes:[],mensalidades:[],projetos:[],marketing:[],rh:[],gastosFixos:[]
 };
-function sdk(seed) {
-  const session={access_token:'test-access-token',user:{id:'test-account',email:'test@example.invalid'}};
+function sdk(seed, options = {}) {
+  let session={access_token:'test-access-token',user:{id:'test-account',email:'test@example.invalid'}};
+  const authListeners = [];
+  window.testAuthEvent = (event, user = null) => {
+    session = user ? { access_token:`test-token-${user.id}`,user } : null;
+    authListeners.forEach(listener => listener(event, session));
+  };
+  window.addEventListener('storage', event => {
+    if (event.key === 'test-auth-event' && event.newValue) {
+      const value = JSON.parse(event.newValue); window.testAuthEvent(value.event, value.user);
+    }
+  });
+  window.testDbReads = []; window.testDbWrites = []; window.testRpcCalls = [];
+  window.testPendingReads = []; window.testPendingWrites = [];
+  window.testPendingSessions = [];
+  window.testReleaseSessions = () => { window.testPendingSessions.splice(0).forEach(resolve => resolve()); };
+  window.testReleaseReads = () => { window.testPendingReads.splice(0).forEach(resolve => resolve()); };
+  window.testReleaseWrites = () => { window.testPendingWrites.splice(0).forEach(resolve => resolve()); };
+  window.testWorkspaceLists = options.workspaces || null;
+  window.testWorkspaceRoster = options.roster || { members: [], invites: [] };
   if(!localStorage.getItem('test-cloud')) localStorage.setItem('test-cloud',JSON.stringify({data:seed,updated_at:'initial'}));
+  for (const [id,data] of Object.entries(options.rows || {})) if (!localStorage.getItem(`test-cloud:${id}`)) localStorage.setItem(`test-cloud:${id}`,JSON.stringify({data,updated_at:'initial'}));
   window.supabase={createClient:()=>({
-    auth:{getSession:async()=>({data:{session}}),onAuthStateChange(){},signOut:async()=>({}),updateUser:async()=>({}),resetPasswordForEmail:async()=>({})},
+    auth:{getSession:async()=>{
+      const snapshot = session;
+      if(options.delayInitialSession){options.delayInitialSession=false;await new Promise(resolve=>window.testPendingSessions.push(resolve));}
+      return {data:{session:snapshot}};
+    },onAuthStateChange(listener){authListeners.push(listener);return {data:{subscription:{unsubscribe(){}}}};},signOut:async()=>{
+      window.testAuthEvent('SIGNED_OUT');
+      localStorage.setItem('test-auth-event',JSON.stringify({event:'SIGNED_OUT',nonce:Math.random()}));
+      return {};
+    },updateUser:async()=>({}),resetPasswordForEmail:async()=>({})},
+    ...(options.workspaces ? {rpc:async(name, params={}) => {
+      window.testRpcCalls.push({ name, params });
+      if(window.testFailRpc === name) return {error:{message:'Não foi possível atualizar. Tente novamente.'}};
+      const own = { owner_id:session.user.id,role:'owner',name:'Minha empresa' };
+      if(name==='zama_workspace_list') return {data:window.testWorkspaceLists[session.user.id] || [own]};
+      if(name==='zama_workspace_roster') return {data:structuredClone(window.testWorkspaceRoster)};
+      if(name==='zama_workspace_invite') {
+        const invite={id:'invite-1',email:params.p_email,role:params.p_role};
+        window.testWorkspaceRoster.invites.push(invite);
+        return {data:{...invite,token:'a'.repeat(64),expires_at:'2026-10-06T12:00:00Z'}};
+      }
+      if(name==='zama_workspace_accept') return {data:options.inviteOwner || 'shared-company'};
+      if(name==='zama_workspace_set_role') window.testWorkspaceRoster.members.find(member=>member.user_id===params.p_user).role=params.p_role;
+      if(name==='zama_workspace_revoke') window.testWorkspaceRoster.members=window.testWorkspaceRoster.members.filter(member=>member.user_id!==params.p_user);
+      if(name==='zama_workspace_cancel_invite') window.testWorkspaceRoster.invites=window.testWorkspaceRoster.invites.filter(invite=>invite.id!==params.p_id);
+      return {data:null};
+    }} : {}),
     from:()=>{ const filters={};let payload;
       return {select(){return this;},eq(k,v){filters[k]=v;return this;},update(p){payload=p;return this;},insert(p){payload=p;return this;},
         async maybeSingle(){
           if(window.testFailRead && !payload)return {error:{message:'offline'}};
-          const old=JSON.parse(localStorage.getItem('test-cloud'));
-          if(!payload)return {data:old};
+          const userId=filters.user_id || payload?.user_id || session?.user.id;
+          const key=userId==='test-account'?'test-cloud':`test-cloud:${userId}`;
+          const old=JSON.parse(localStorage.getItem(key));
+          if(!payload){
+            window.testDbReads.push({userId});
+            if(window.testDelayNextRead){window.testDelayNextRead=false;await new Promise(resolve=>window.testPendingReads.push(resolve));}
+            return {data:old};
+          }
+          window.testDbWrites.push({userId,data:structuredClone(payload.data)});
+          if(window.testDelayNextWrite){window.testDelayNextWrite=false;await new Promise(resolve=>window.testPendingWrites.push(resolve));}
           if(window.testFailWrite)return {error:{message:'offline'}};
-          if(filters.updated_at && old.updated_at!==filters.updated_at)return {data:null};
+          if(filters.updated_at && old?.updated_at!==filters.updated_at)return {data:null};
           const next={data:payload.data,updated_at:String(Number(localStorage.getItem('test-version')||0)+1)};
-          localStorage.setItem('test-version',next.updated_at);localStorage.setItem('test-cloud',JSON.stringify(next));
+          localStorage.setItem('test-version',next.updated_at);localStorage.setItem(key,JSON.stringify(next));
           return {data:{updated_at:next.updated_at}};
         }
       };
@@ -32,10 +84,11 @@ function sdk(seed) {
     channel:()=>({on(){return this;},subscribe(fn){fn('SUBSCRIBED');return this;}}),removeChannel:async()=>{}
   })};
 }
-async function mock(page, data = seed) {
+async function mock(page, data = seed, { jarvisVisible = false, ...sdkOptions } = {}) {
   await page.clock.install({time:new Date('2026-09-29T12:00:00-03:00')});
   await page.route('**/*.supabase.co/**',route=>route.abort());
-  await page.route('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',route=>route.fulfill({contentType:'text/javascript',body:`(${sdk.toString()})(${JSON.stringify(data)})`}));
+  await page.route('**/assets/js/env.js*', route => route.fulfill({contentType:'text/javascript',body:`window.ZAMA_CONFIG = ${JSON.stringify({cloudStateTable:'app_state',supabaseUrl:'https://test.supabase.co',supabaseAnonKey:'fixture-public-key',jarvisVisible})};`}));
+  await page.route('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',route=>route.fulfill({contentType:'text/javascript',body:`(${sdk.toString()})(${JSON.stringify(data)},${JSON.stringify(sdkOptions)})`}));
   await page.goto('/');
 }
 module.exports={mock,seed};

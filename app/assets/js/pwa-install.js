@@ -29,7 +29,7 @@
     section.querySelector('[data-pwa-status]').textContent = message || (done
       ? 'ZAMA já está aberta ou instalada como aplicativo neste navegador.'
       : requested ? 'Instalação solicitada. Aguarde o navegador e procure o ícone ZAMA nos seus aplicativos.'
-        : 'Abra a ZAMA pela tela inicial do celular, com acesso direto ao JARVIS.');
+        : 'Abra a ZAMA pela tela inicial do celular para acessar sua central de gestão.');
   }
 
   function closeHelp() {
@@ -42,7 +42,7 @@
       dialog = document.createElement('dialog');
       dialog.className = 'pwa-install-dialog';
       dialog.setAttribute('aria-labelledby', 'pwaInstallTitle');
-      dialog.innerHTML = '<div class="pwa-install-head"><h2 id="pwaInstallTitle">Instalar ZAMA</h2><button type="button" class="pwa-install-close" aria-label="Fechar instruções de instalação">×</button></div><div data-pwa-guide></div><p class="pwa-install-note">Depois, abra o ícone ZAMA e entre com sua conta. O JARVIS e a sincronização dos dados precisam de internet.</p><button type="button" class="pwa-install-button" data-pwa-done>Entendi</button>';
+      dialog.innerHTML = '<div class="pwa-install-head"><h2 id="pwaInstallTitle">Instalar ZAMA</h2><button type="button" class="pwa-install-close" aria-label="Fechar instruções de instalação">×</button></div><div data-pwa-guide></div><p class="pwa-install-note">Depois, abra o ícone ZAMA e entre com sua conta. A sincronização dos dados precisa de internet.</p><button type="button" class="pwa-install-button" data-pwa-done>Entendi</button>';
       document.body.append(dialog);
       dialog.querySelector('.pwa-install-close').addEventListener('click', closeHelp);
       dialog.querySelector('[data-pwa-done]').addEventListener('click', closeHelp);

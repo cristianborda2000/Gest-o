@@ -3,7 +3,7 @@
 (function (global) {
   "use strict";
   const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-  const settings = { finance: null, investments: null };
+  const settings = { finance: null, investments: null, fixedMonth: "" };
   const text = value => String(value == null ? "" : value);
   const safe = value => text(value).replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[character]));
   const word = value => text(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -26,7 +26,8 @@
 
   function amountCents(row) {
     // Legacy screens still write `valor`, so it is authoritative when available.
-    return Math.abs(row.valor !== undefined && row.valor !== null ? cents(row.valor) : Number.isSafeInteger(row.valorCentavos) ? row.valorCentavos : 0);
+    const storedCents = typeof row.valorCentavos === "number" || typeof row.valorCentavos === "string" ? Number(row.valorCentavos) : NaN;
+    return Math.abs(row.valor !== undefined && row.valor !== null ? cents(row.valor) : Number.isSafeInteger(storedCents) ? storedCents : 0);
   }
   function direction(row) {
     if (word(row.tipo).startsWith("entrada")) return "Entrada";
@@ -43,6 +44,7 @@
   function normalize(target) {
     if (!Array.isArray(target.financeiro)) target.financeiro = [];
     if (!Array.isArray(target.investimentos)) target.investimentos = [];
+    if (!Array.isArray(target.gastosFixos)) target.gastosFixos = [];
     target.financeiro.forEach(row => {
       if (!row.id) row.id = uid();
       row.valorCentavos = amountCents(row);
@@ -51,13 +53,17 @@
       if (!row.id) row.id = uid();
       row.valorCentavos = amountCents(row);
     });
+    target.gastosFixos.forEach(row => {
+      if (!row.id) row.id = uid();
+      row.valorCentavos = amountCents(row);
+    });
     return target;
   }
 
   function totals(target, range = {}) {
     const result = { incomeCents: 0, expenseCents: 0, balanceCents: 0, investmentCents: 0, receivableCents: 0, payableCents: 0, rows: [] };
-    (target.financeiro || []).forEach(row => {
-      if (isCancelled(row) || !inPeriod(effectiveDate(row), range)) return;
+    financeRows(target, range).forEach(row => {
+      if (isCancelled(row)) return;
       result.rows.push(row);
       const incoming = direction(row) === "Entrada";
       result[isSettled(row) ? (incoming ? "incomeCents" : "expenseCents") : (incoming ? "receivableCents" : "payableCents")] += amountCents(row);
@@ -82,6 +88,82 @@
     return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
   }
 
+  const validMonth = value => /^\d{4}-(0[1-9]|1[0-2])$/.test(text(value)) && Number(value.slice(0, 4)) >= 1900;
+  const activeFixed = row => !["pausado", "cancelado"].includes(word(row.status));
+  const monthLabel = month => validMonth(month) ? `${month.slice(5)}/${month.slice(0, 4)}` : "Sem competência";
+  function fixedDueDate(row, month) {
+    if (!validMonth(month) || !Number.isInteger(Number(row.dia)) || Number(row.dia) < 1 || Number(row.dia) > 31) throw new Error("Informe uma competência e um dia de vencimento válidos.");
+    const [year, value] = month.split("-").map(Number);
+    return `${month}-${String(Math.min(Number(row.dia), new Date(Date.UTC(year, value, 0)).getUTCDate())).padStart(2, "0")}`;
+  }
+  function fixedMovement(target, id, month) {
+    return (target.financeiro || []).find(row => row.fixedExpenseId === id && row.competencia === month);
+  }
+  function createFixedMovement(target, fixed, month) {
+    const existing = fixedMovement(target, fixed.id, month);
+    if (existing) return existing;
+    const date = fixedDueDate(fixed, month), stamp = new Date().toISOString();
+    const record = { id: `fixed:${fixed.id}:${month}`, fixedExpenseId: fixed.id, competencia: month, source: "gasto-fixo", nome: fixed.nome, categoria: category(fixed), responsavel: category(fixed), tipo: "Saída", valorCentavos: amountCents(fixed), valor: -amountCents(fixed) / 100, data: date, prazo: date, status: "Pendente", pagoEm: "", observacoes: fixed.observacoes || "", createdAt: stamp, updatedAt: stamp };
+    if (target.financeiro.some(row => row.id === record.id)) throw new Error("Há um lançamento com identificador conflitante. Revise o backup antes de gerar a competência.");
+    target.financeiro.push(record);
+    return record;
+  }
+  function saveFixedExpense(target, input, id) {
+    normalize(target);
+    const existing = target.gastosFixos.find(row => row.id === id);
+    if (id && !existing) throw new Error("Este gasto fixo não está mais disponível.");
+    if (!text(input.nome).trim()) throw new Error("Informe a descrição do gasto fixo.");
+    if (!Number.isSafeInteger(input.valorCentavos) || input.valorCentavos <= 0 || input.valorCentavos > 999999999999) throw new Error("Informe um valor mensal maior que zero.");
+    if (!Number.isInteger(Number(input.dia)) || Number(input.dia) < 1 || Number(input.dia) > 31) throw new Error("O vencimento deve ser um dia entre 1 e 31.");
+    if (!["Ativo", "Pausado", "Cancelado"].includes(input.status)) throw new Error("Selecione uma situação válida.");
+    if (!validMonth(input.recurrenceStart)) throw new Error("Informe a competência inicial da recorrência.");
+    if (existing?.recurrenceStart && input.recurrenceStart !== existing.recurrenceStart) throw new Error("A competência inicial de uma recorrência já ativada deve ser preservada.");
+    const record = { ...existing, ...input, id: existing?.id || uid(), nome: input.nome.trim(), dia: Number(input.dia), categoria: text(input.categoria).trim() || "Outro", responsavel: text(input.categoria).trim() || "Outro", tipo: "Saída", valor: -input.valorCentavos / 100, updatedAt: new Date().toISOString() };
+    delete record.generateCurrent;
+    if (!existing) record.createdAt = record.updatedAt;
+    const index = target.gastosFixos.findIndex(row => row.id === record.id);
+    if (index < 0) target.gastosFixos.push(record); else target.gastosFixos[index] = record;
+    const month = today().slice(0, 7);
+    if (input.generateCurrent && activeFixed(record) && record.recurrenceStart <= month) createFixedMovement(target, record, month);
+    return record;
+  }
+  function generateFixedExpenses(target, month, { links = {} } = {}) {
+    if (!validMonth(month)) throw new Error("Selecione a competência das contas a pagar.");
+    normalize(target);
+    const eligible = target.gastosFixos.filter(row => activeFixed(row) && (!row.recurrenceStart || row.recurrenceStart <= month) && !fixedMovement(target, row.id, month));
+    const claimed = new Set();
+    // Validate the entire review before mutating any financial record.
+    eligible.forEach(row => {
+      fixedDueDate(row, month);
+      if (amountCents(row) <= 0) throw new Error(`Informe o valor mensal de ${row.nome}.`);
+      const link = links[row.id];
+      if (!link) {
+        if (target.financeiro.some(item => item.id === `fixed:${row.id}:${month}`)) throw new Error("Há um lançamento com identificador conflitante. Revise o backup antes de gerar a competência.");
+        return;
+      }
+      const movement = target.financeiro.find(item => item.id === link);
+      if (!movement || direction(movement) !== "Saída" || isCancelled(movement) || movement.monthlyId || movement.investmentId || movement.fixedExpenseId || claimed.has(link)) throw new Error("Cada gasto fixo deve usar uma saída disponível e diferente.");
+      claimed.add(link);
+    });
+    eligible.forEach(row => {
+      const movement = links[row.id] && target.financeiro.find(item => item.id === links[row.id]);
+      if (movement) Object.assign(movement, { fixedExpenseId: row.id, competencia: month, source: "gasto-fixo", updatedAt: new Date().toISOString() });
+      else createFixedMovement(target, row, month);
+      row.recurrenceStart ||= month;
+    });
+    return eligible.length;
+  }
+  function settleMovement(target, id, paidOn) {
+    if (!validDate(paidOn)) throw new Error("Informe a data do recebimento ou pagamento.");
+    const row = (target.financeiro || []).find(item => item.id === id);
+    if (!row) throw new Error("Esta movimentação não está mais disponível.");
+    if (row.investmentId || row.monthlyId) throw new Error("Registre a liquidação no módulo de origem.");
+    if (isCancelled(row)) throw new Error("Reabra o lançamento cancelado antes de registrar a baixa.");
+    if (isSettled(row)) return row;
+    Object.assign(row, { status: "Pago", pagoEm: paidOn, updatedAt: new Date().toISOString() });
+    return row;
+  }
+
   function saveMovement(target, input, id) {
     normalize(target);
     validateMovement(input);
@@ -89,6 +171,7 @@
     if (id && !existing) throw new Error("Esta movimentação não está mais disponível. Atualize a página.");
     if (existing?.investmentId) throw new Error("Edite esta saída no investimento vinculado.");
     if (existing?.monthlyId) throw new Error("Este recebimento pertence ao histórico de mensalidades, módulo desativado. O vínculo foi preservado.");
+    if (existing?.fixedExpenseId && input.tipo !== "Saída") throw new Error("Uma parcela de gasto fixo deve permanecer como saída financeira.");
     const record = { ...existing, ...input, id: existing?.id || uid(), nome: input.nome.trim(), categoria: text(input.categoria).trim() || "Outro", responsavel: text(input.categoria).trim() || "Outro", valor: input.valorCentavos / 100 * (input.tipo === "Saída" ? -1 : 1), status: isSettled(input) ? "Pago" : input.status, pagoEm: isSettled(input) ? input.pagoEm : "", updatedAt: new Date().toISOString() };
     if (!existing) record.createdAt = record.updatedAt;
     const index = target.financeiro.findIndex(row => row.id === record.id);
@@ -113,7 +196,7 @@
     if (investment.geraSaida === false) { detachInvestment(target, investment); return investment; }
     const linked = target.financeiro.filter(row => row.investmentId === investment.id);
     let movement = target.financeiro.find(row => row.id === investment.movementId) || linked[0];
-    if (movement && (direction(movement) !== "Saída" || movement.monthlyId || (movement.investmentId && movement.investmentId !== investment.id))) throw new Error("A saída escolhida já possui outro vínculo ou não é uma saída financeira.");
+    if (movement && (direction(movement) !== "Saída" || movement.monthlyId || movement.fixedExpenseId || (movement.investmentId && movement.investmentId !== investment.id))) throw new Error("A saída escolhida já possui outro vínculo ou não é uma saída financeira.");
     if (!movement) {
       movement = { id: uid(), createdAt: new Date().toISOString(), investmentGenerated: true };
       target.financeiro.push(movement);
@@ -150,7 +233,7 @@
     const existing = target.investimentos.find(row => row.id === id);
     if (id && !existing) throw new Error("Este investimento não está mais disponível. Atualize a página.");
     const selected = input.movementId && target.financeiro.find(row => row.id === input.movementId);
-    if (input.geraSaida !== false && input.movementId && (!selected || direction(selected) !== "Saída" || selected.monthlyId || selected.investmentId && selected.investmentId !== id)) throw new Error("A saída escolhida não está disponível para este investimento.");
+    if (input.geraSaida !== false && input.movementId && (!selected || direction(selected) !== "Saída" || selected.monthlyId || selected.fixedExpenseId || selected.investmentId && selected.investmentId !== id)) throw new Error("A saída escolhida não está disponível para este investimento.");
     const record = { ...existing, ...input, id: existing?.id || uid(), nome: input.nome.trim(), categoria: text(input.categoria).trim() || "Outro", valor: input.valorCentavos / 100, updatedAt: new Date().toISOString() };
     if (!existing) record.createdAt = record.updatedAt;
     if (existing && (existing.movementId !== record.movementId || record.geraSaida === false)) detachInvestment(target, existing);
@@ -163,6 +246,7 @@
   function removeMovement(target, id) {
     const record = target.financeiro.find(row => row.id === id);
     if (record?.investmentId || record?.monthlyId) throw new Error("Exclua o registro na origem para manter os vínculos do sistema.");
+    if (record?.fixedExpenseId) throw new Error("Cancele esta parcela para preservar a competência e impedir a geração em duplicidade.");
     target.financeiro = target.financeiro.filter(row => row.id !== id);
   }
 
@@ -182,7 +266,7 @@
   }
   function field(label, body, extra = "") {
     const labelled = body.replace(/<(input|select|textarea)(?=[\s>])/, `<$1 aria-label="${safe(label)}"`);
-    return `<label class="ceo-field ${extra} ${extra.includes("ceo-field-wide") ? "wide" : ""}"><span>${label}</span>${labelled}</label>`;
+    return `<label class="ceo-field ${extra} ${extra.includes("ceo-field-wide") ? "wide" : ""}"><span>${safe(label)}</span>${labelled}</label>`;
   }
   function dateInput(name, value) { return `<input type="date" name="${name}" value="${safe(value)}" required>`; }
   function input(name, value, extra = "") { return `<input name="${name}" value="${safe(value)}" ${extra}>`; }
@@ -203,6 +287,21 @@
       <button class="ceo-button" type="button" data-clear>Limpar filtros</button>
     </div>`;
   }
+  function prepareMobileTable(container) {
+    const table = container.querySelector('.ceo-table');
+    if (!table) return;
+    const headings = [...table.querySelectorAll('th')];
+    table.classList.add('ceo-finance-table');
+    table.classList.toggle('ceo-fixed-table', headings.length === 5);
+    table.setAttribute('role', 'table');
+    table.querySelectorAll('thead, tbody').forEach(group => group.setAttribute('role', 'rowgroup'));
+    table.querySelectorAll('tr').forEach(row => row.setAttribute('role', 'row'));
+    headings.forEach(heading => heading.setAttribute('role', 'columnheader'));
+    table.querySelectorAll('tbody tr').forEach(row => [...row.cells].forEach((cell, index) => {
+      cell.dataset.label = headings[index].textContent;
+      cell.setAttribute('role', 'cell');
+    }));
+  }
   function financeRows(target, filters) {
     return (target.financeiro || []).filter(row => {
       if (!inPeriod(effectiveDate(row), filters)) return false;
@@ -215,6 +314,9 @@
       if (filters.status && !["Liquidado", "Pendente", "Atrasado"].includes(filters.status) && row.status !== filters.status) return false;
       return true;
     }).sort((a, b) => effectiveDate(b).localeCompare(effectiveDate(a)) || text(b.createdAt).localeCompare(text(a.createdAt)));
+  }
+  function overdueBefore(target, before) {
+    return (target.financeiro || []).filter(row => !isSettled(row) && !isCancelled(row) && row.prazo && row.prazo < today() && (!before || row.prazo < before));
   }
   function metric(label, value, tone = "") { return `<article class="ceo-card ceo-finance-metric"><span>${label}</span><strong class="${tone}">${formatMoney(value)}</strong></article>`; }
   function wireFilters(container, filters, renderFn) {
@@ -230,17 +332,72 @@
     const target = current(); normalize(target);
     const filters = settings.finance ||= defaultFilters();
     const sum = totals(target, filters), rows = financeRows(target, filters);
+    const older = filters.from ? overdueBefore(target, filters.from) : [];
     container.innerHTML = `<div class="ceo-toolbar"><div><h2>Movimentações financeiras</h2><p>Entradas, saídas e compromissos da ZAMA.</p></div><div class="ceo-row-actions"><button class="ceo-button" data-fixed>Gastos fixos</button><button class="ceo-button primary" data-new>＋ Nova movimentação</button></div></div>
       <div class="ceo-grid ceo-finance-summary">${metric("Entradas recebidas", sum.incomeCents, "money-positive")}${metric("Saídas pagas", sum.expenseCents, "money-negative")}${metric("Saldo do período", sum.balanceCents)}${metric("A receber", sum.receivableCents)}${metric("A pagar", sum.payableCents)}</div>
+      ${older.length ? `<section class="ceo-card ceo-toolbar"><div><strong>${older.length} ${older.length === 1 ? "pendência vencida anterior" : "pendências vencidas anteriores"} ao período</strong><p>${formatMoney(older.filter(row => direction(row) === "Saída").reduce((sum, row) => sum + amountCents(row), 0))} a pagar · ${formatMoney(older.filter(row => direction(row) === "Entrada").reduce((sum, row) => sum + amountCents(row), 0))} a receber</p></div><button class="ceo-button" data-overdue>Ver todas as vencidas</button></section>` : ""}
       <section class="ceo-card"><div class="ceo-toolbar"><button class="ceo-button" data-account="all" aria-pressed="${!filters.type && !filters.status}">Todas as movimentações</button><button class="ceo-button" data-account="payable" aria-pressed="${filters.type === "Saída" && filters.status === "Pendente"}">Contas a pagar</button><button class="ceo-button" data-account="receivable" aria-pressed="${filters.type === "Entrada" && filters.status === "Pendente"}">Contas a receber</button></div>
-      ${filterMarkup(filters, target.financeiro, false)}<p class="ceo-muted">Saldo considera apenas valores recebidos e pagos na data da liquidação. Pendências usam o vencimento; registros antigos sem liquidação usam a data disponível.</p>
-      ${rows.length ? `<div class="ceo-table-wrap ceo-table-scroll"><table class="ceo-table"><thead><tr><th>Descrição / categoria</th><th>Tipo</th><th>Data / vencimento</th><th>Situação</th><th>Valor</th><th>Ações</th></tr></thead><tbody>${rows.map(row => `<tr><td><strong>${safe(row.nome || "Sem descrição")}</strong><br><small>${safe(category(row))}${row.investmentId ? " · Investimento vinculado" : row.monthlyId ? " · Mensalidade vinculada" : ""}</small></td><td>${safe(direction(row))}</td><td>${dateLabel(row.data || row.prazo)}<br><small>Vence ${dateLabel(row.prazo)}${isSettled(row) ? `<br>Liquidado ${dateLabel(effectiveDate(row))}` : ""}</small></td><td>${badge(row)}</td><td class="${direction(row) === "Entrada" ? "money-positive" : "money-negative"}">${direction(row) === "Entrada" ? "+" : "−"} ${formatMoney(amountCents(row))}</td><td><div class="ceo-row-actions"><button class="ceo-button" data-edit="${safe(row.id)}" aria-label="Editar ${safe(row.nome)}">Editar</button><button class="ceo-button" data-delete="${safe(row.id)}" aria-label="Excluir ${safe(row.nome)}">Excluir</button></div></td></tr>`).join("")}</tbody></table></div>` : '<div class="ceo-empty"><strong>Nenhuma movimentação neste período</strong><p>Cadastre uma entrada ou saída, ou ajuste os filtros.</p></div>'}</section>`;
+      ${filterMarkup(filters, target.financeiro, false)}<p class="ceo-muted">Os indicadores acompanham todos os filtros abaixo. Valores liquidados usam a data do pagamento ou recebimento; pendências usam o vencimento. ${rows.length} ${rows.length === 1 ? "movimentação encontrada" : "movimentações encontradas"}.</p>
+      ${rows.length ? `<div class="ceo-table-wrap ceo-table-scroll"><table class="ceo-table"><thead><tr><th>Descrição / categoria</th><th>Tipo</th><th>Data / vencimento</th><th>Situação</th><th>Valor</th><th>Ações</th></tr></thead><tbody>${rows.map(row => `<tr><td><strong>${safe(row.nome || "Sem descrição")}</strong><br><small>${safe(category(row))}${row.investmentId ? " · Investimento vinculado" : row.monthlyId ? " \u00b7 Mensalidade vinculada" : row.fixedExpenseId ? ` \u00b7 Gasto fixo \u00b7 ${monthLabel(row.competencia)}` : ""}</small></td><td>${safe(direction(row))}</td><td>${dateLabel(row.data || row.prazo)}<br><small>Vence ${dateLabel(row.prazo)}${isSettled(row) ? `<br>Liquidado ${dateLabel(effectiveDate(row))}` : ""}</small></td><td>${badge(row)}</td><td class="${direction(row) === "Entrada" ? "money-positive" : "money-negative"}">${direction(row) === "Entrada" ? "+" : "−"} ${formatMoney(amountCents(row))}</td><td><div class="ceo-row-actions">${!isSettled(row) && !isCancelled(row) && !row.investmentId && !row.monthlyId ? `<button class="ceo-button" data-settle="${safe(row.id)}" aria-label="Registrar baixa de ${safe(row.nome)}">Registrar baixa</button>` : ""}<button class="ceo-button" data-edit="${safe(row.id)}" aria-label="Editar ${safe(row.nome)}">Editar</button><button class="ceo-button" data-delete="${safe(row.id)}" aria-label="${row.fixedExpenseId ? "Cancelar parcela de" : "Excluir"} ${safe(row.nome)}">${row.fixedExpenseId ? "Cancelar parcela" : "Excluir"}</button></div></td></tr>`).join("")}</tbody></table></div>` : '<div class="ceo-empty"><strong>Nenhuma movimentação neste período</strong><p>Cadastre uma entrada ou saída, ou ajuste os filtros.</p></div>'}</section>`;
+    prepareMobileTable(container);
     wireFilters(container, filters, renderFinance);
     container.querySelector("[data-new]").onclick = () => openMovement();
     container.querySelector("[data-fixed]").onclick = () => goToModule("financeiro", { financeView: "fixos" });
+    container.querySelector("[data-overdue]")?.addEventListener("click", () => { Object.assign(filters, { from: "", to: "", type: "", category: "", query: "", status: "Atrasado" }); renderFinance(container); });
     container.querySelectorAll("[data-account]").forEach(button => button.onclick = () => { filters.type = button.dataset.account === "payable" ? "Saída" : button.dataset.account === "receivable" ? "Entrada" : ""; filters.status = button.dataset.account === "all" ? "" : "Pendente"; renderFinance(container); });
     container.querySelectorAll("[data-edit]").forEach(button => button.onclick = () => openMovement(button.dataset.edit));
     container.querySelectorAll("[data-delete]").forEach(button => button.onclick = () => deleteMovementUI(button.dataset.delete));
+    container.querySelectorAll("[data-settle]").forEach(button => button.onclick = () => openSettlement(button.dataset.settle));
+  }
+
+  function renderFixedExpenses(container) {
+    const target = current(); normalize(target);
+    const month = settings.fixedMonth ||= today().slice(0, 7);
+    const rows = target.gastosFixos;
+    const eligible = rows.filter(row => activeFixed(row) && (!row.recurrenceStart || row.recurrenceStart <= month));
+    const pending = eligible.filter(row => !fixedMovement(target, row.id, month));
+    const generated = target.financeiro.filter(row => row.fixedExpenseId && row.competencia === month);
+    container.innerHTML = `<div class="ceo-toolbar"><div><h2>Gastos fixos</h2><p>Organize as despesas recorrentes e gere as contas de cada mês.</p></div><div class="ceo-row-actions"><button class="ceo-button" data-back>Voltar ao financeiro</button><button class="ceo-button primary" data-new-fixed>＋ Novo gasto fixo</button></div></div>
+      <div class="ceo-grid ceo-finance-summary">${metric("Total mensal ativo", rows.filter(activeFixed).reduce((sum, row) => sum + amountCents(row), 0))}${metric("A pagar na competência", generated.filter(row => !isSettled(row) && !isCancelled(row)).reduce((sum, row) => sum + amountCents(row), 0))}${metric("Pago na competência", generated.filter(isSettled).reduce((sum, row) => sum + amountCents(row), 0))}</div>
+      <section class="ceo-card"><div class="ceo-toolbar">${field("Competência", `<input type="month" data-fixed-month value="${safe(month)}" required>`)}<button class="ceo-button primary" data-generate ${pending.length ? "" : "disabled"}>Gerar contas do mês (${pending.length})</button></div><p class="ceo-muted">Revise os lançamentos existentes antes de gerar. Cada gasto tem uma única parcela por competência. Pagamentos são registrados no financeiro. Alterar um cadastro afeta apenas as próximas parcelas.</p>
+      ${rows.length ? `<div class="ceo-table-scroll"><table class="ceo-table"><thead><tr><th>Despesa / categoria</th><th>Vencimento</th><th>Valor mensal</th><th>Cadastro / competência</th><th>Ações</th></tr></thead><tbody>${rows.map(row => { const movement = fixedMovement(target, row.id, month); return `<tr><td><strong>${safe(row.nome)}</strong><br><small>${safe(category(row))}</small></td><td>Dia ${safe(row.dia)}<br><small>${dateLabel(fixedDueDate(row, month))}</small></td><td>${formatMoney(amountCents(row))}</td><td><span class="ceo-badge ${activeFixed(row) ? "green" : "muted"}">${safe(row.status || "Ativo")}</span><br><small>${movement ? isSettled(movement) ? "Parcela paga" : isCancelled(movement) ? "Parcela cancelada" : "Conta a pagar gerada" : row.recurrenceStart > month ? `Início em ${monthLabel(row.recurrenceStart)}` : activeFixed(row) ? "Aguardando geração" : "Geração suspensa"}</small></td><td><div class="ceo-row-actions"><button class="ceo-button" data-edit-fixed="${safe(row.id)}" aria-label="Editar gasto fixo ${safe(row.nome)}">Editar cadastro</button>${movement ? `<button class="ceo-button" data-open-fixed="${safe(movement.id)}">Ver parcela</button>` : ""}</div></td></tr>`; }).join("")}</tbody></table></div>` : '<div class="ceo-empty"><strong>Nenhum gasto fixo cadastrado</strong><p>Cadastre aluguel, ferramentas, assinaturas e outras despesas mensais.</p></div>'}</section>`;
+    prepareMobileTable(container);
+    container.querySelector("[data-back]").onclick = () => goToModule("financeiro", { financeView: "movimentacoes" });
+    container.querySelector("[data-new-fixed]").onclick = () => openFixedExpense();
+    container.querySelector("[data-fixed-month]").onchange = event => { if (validMonth(event.target.value)) { settings.fixedMonth = event.target.value; renderFixedExpenses(container); } };
+    container.querySelector("[data-generate]").onclick = () => openFixedGeneration(month);
+    container.querySelectorAll("[data-edit-fixed]").forEach(button => button.onclick = () => openFixedExpense(button.dataset.editFixed));
+    container.querySelectorAll("[data-open-fixed]").forEach(button => button.onclick = () => openMovement(button.dataset.openFixed));
+  }
+
+  function openFixedExpense(id) {
+    const row = current().gastosFixos.find(item => item.id === id);
+    const data = { nome: "", categoria: "Outro", dia: 5, status: "Ativo", recurrenceStart: today().slice(0, 7), ...row };
+    return dialog(row ? "Editar gasto fixo" : "Novo gasto fixo", `<p>Gere as parcelas mensais na competência desejada. Pausar ou cancelar o cadastro suspende novas parcelas e preserva o histórico.</p><div class="ceo-form-grid">
+      ${field("Descrição", input("nome", data.nome, 'required maxlength="180"'))}${field("Valor mensal (R$)", amountInput(row ? amountCents(row) : 0))}
+      ${field("Categoria", input("categoria", row ? category(row) : data.categoria, 'required maxlength="80"'))}${field("Dia do vencimento", input("dia", data.dia, 'type="number" min="1" max="31" step="1" required') + '<small>Dias 29, 30 e 31 são ajustados ao último dia do mês.</small>')}
+      ${field("Situação", `<select name="status">${options(["Ativo", "Pausado", "Cancelado"], data.status)}</select>`)}${field("Competência inicial", `<input type="month" name="recurrenceStart" value="${safe(data.recurrenceStart)}" ${row?.recurrenceStart ? "readonly" : ""} required>`)}
+      ${field("Observações", `<textarea name="observacoes" rows="3" maxlength="5000">${safe(data.observacoes || "")}</textarea>`, "ceo-field-wide")}
+      ${!row ? `<label class="ceo-field ceo-field-wide ceo-checkbox"><input type="checkbox" name="generateCurrent" checked><span>Gerar a conta do mês atual ao salvar, se a competência inicial já tiver começado.</span></label>` : '<p class="ceo-field-wide ceo-muted">As parcelas já geradas mantêm o valor, o vencimento e a situação originais. Para ajustar uma parcela, use “Ver parcela”.</p>'}</div>`, "Salvar gasto fixo", values => {
+        const record = { ...values, dia: Number(values.dia), valorCentavos: cents(values.amount), generateCurrent: values.generateCurrent === "on" }; delete record.amount;
+        return ceoCommit(draft => saveFixedExpense(draft, record, id), "Gasto fixo salvo.");
+      });
+  }
+
+  function openFixedGeneration(month) {
+    const target = current();
+    const rows = target.gastosFixos.filter(row => activeFixed(row) && (!row.recurrenceStart || row.recurrenceStart <= month) && !fixedMovement(target, row.id, month));
+    const available = target.financeiro.filter(row => direction(row) === "Saída" && !row.fixedExpenseId && !row.investmentId && !row.monthlyId && !isCancelled(row));
+    return dialog(`Gerar contas de ${monthLabel(month)}`, `<p>Se a despesa já foi lançada, vincule o registro existente para evitar duplicidade. O valor e o pagamento desse registro serão preservados.</p><div class="ceo-form-grid">${rows.map((row, index) => field(`${row.nome} · ${formatMoney(amountCents(row))}`, `<select name="link-${index}"><option value="">Criar nova conta a pagar · ${dateLabel(fixedDueDate(row, month))}</option>${available.map(item => `<option value="${safe(item.id)}">Vincular: ${safe(item.nome)} · ${formatMoney(amountCents(item))} · ${dateLabel(item.prazo || item.data)} · ${safe(item.status)}</option>`).join("")}</select>`, "ceo-field-wide")).join("")}</div>`, "Confirmar geração", values => {
+      const links = Object.fromEntries(rows.map((row, index) => [row.id, values[`link-${index}`] || ""]));
+      return ceoCommit(draft => generateFixedExpenses(draft, month, { links }), "Contas do mês geradas.");
+    });
+  }
+
+  function openSettlement(id) {
+    const row = current().financeiro.find(item => item.id === id);
+    if (!row) return;
+    return dialog(direction(row) === "Entrada" ? "Registrar recebimento" : "Registrar pagamento", `<p><strong>${safe(row.nome)}</strong> · ${formatMoney(amountCents(row))}</p>${field("Data do recebimento / pagamento", dateInput("pagoEm", today()))}`, "Confirmar baixa", values => ceoCommit(draft => settleMovement(draft, id, values.pagoEm), "Baixa registrada."));
   }
 
   function renderInvestments(container) {
@@ -286,6 +443,11 @@
     if (!row) return;
     if (row.investmentId) return openInvestment(row.investmentId);
     if (row.monthlyId) return monthlyDialog();
+    if (row.fixedExpenseId) return dialog("Cancelar parcela?", `<p>A parcela de ${safe(monthLabel(row.competencia))} será cancelada e mantida no histórico. Ela não será gerada novamente. As próximas competências continuam conforme o cadastro.</p>`, "Confirmar cancelamento", () => ceoCommit(draft => {
+      const movement = draft.financeiro.find(item => item.id === id);
+      if (!movement) throw new Error("Esta parcela não está mais disponível.");
+      movement.status = "Cancelado"; movement.pagoEm = ""; movement.updatedAt = new Date().toISOString();
+    }, "Parcela cancelada."));
     confirmAction("Excluir movimentação?", `“${row.nome}” será excluída e os indicadores serão recalculados.`, draft => removeMovement(draft, id), "Movimentação excluída.");
   }
   function openMovement(id) {
@@ -318,7 +480,7 @@
     const target = current(); normalize(target);
     const row = target.investimentos.find(item => item.id === id);
     const data = { data: today(), status: "Planejado", categoria: "Marketing", geraSaida: true, ...row };
-    const available = target.financeiro.filter(item => direction(item) === "Saída" && !item.monthlyId && (!item.investmentId || item.investmentId === id));
+    const available = target.financeiro.filter(item => direction(item) === "Saída" && !item.monthlyId && !item.fixedExpenseId && (!item.investmentId || item.investmentId === id));
     const element = dialog(row ? "Editar investimento" : "Novo investimento", `<div class="ceo-form-grid">
       ${field("Nome", input("nome", data.nome || "", 'required maxlength="180"'))}
       ${field("Valor (R$)", amountInput(row ? amountCents(row) : 0))}
@@ -346,6 +508,8 @@
     return element;
   }
 
-  global.ZamaFinance = { normalize, totals, cents, amountCents, direction, isSettled, isCancelled, isRealized, effectiveDate, formatMoney, validDate, saveMovement, removeMovement, saveInvestment, removeInvestment, syncInvestment, financeRows, renderFinance, renderInvestments, openMovement, openInvestment };
+  function reset() { settings.finance = null; settings.investments = null; settings.fixedMonth = ""; }
+  function reportMonth() { return (settings.finance?.from || settings.finance?.to || today()).slice(0, 7); }
+  global.ZamaFinance = { normalize, totals, cents, amountCents, direction, isSettled, isCancelled, isRealized, effectiveDate, formatMoney, validDate, saveMovement, removeMovement, saveInvestment, removeInvestment, syncInvestment, financeRows, renderFinance, renderInvestments, openMovement, openInvestment, saveFixedExpense, generateFixedExpenses, fixedDueDate, fixedMovement, settleMovement, overdueBefore, renderFixedExpenses, openFixedExpense, reset, reportMonth };
   if (typeof module !== "undefined" && module.exports) module.exports = global.ZamaFinance;
 })(typeof window !== "undefined" ? window : globalThis);

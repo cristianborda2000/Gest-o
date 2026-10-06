@@ -7,11 +7,14 @@
     "build:css": "node ./node_modules/tailwindcss/lib/cli.js -i ./app/assets/styles.input.css -o ./app/assets/styles.css --minify",
     "dev:css": "node ./node_modules/tailwindcss/lib/cli.js -i ./app/assets/styles.input.css -o ./app/assets/styles.css --watch",
     "serve": "node scripts/dev.mjs",
-    "test": "node tests/rules.test.js && node tests/auth-recovery.test.js && node tests/ceo-finance.test.js && node tests/ceo-agenda.test.js && node tests/ceo-ideas.test.js && node tests/ceo-persistence.test.js && node tests/reminder-delivery.test.js && npm run test:jarvis",
+    "test": "node tests/rules.test.js && node tests/auth-recovery.test.js && node tests/ceo-finance.test.js && node tests/ceo-agenda.test.js && node tests/ceo-ideas.test.js && node tests/ceo-persistence.test.js && node tests/reminder-delivery.test.js && npm run test:admin && npm run test:jarvis",
     "test:jarvis": "node --test tests/jarvis-domain.test.js tests/jarvis-agent.test.js tests/jarvis-database.test.js tests/jarvis-voice.test.js tests/jarvis-news.test.js",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "test:admin": "node --test tests/admin-data.test.js tests/workspaces-database.test.js tests/push-reminders.test.js tests/push-reminders-client.test.js tests/push-reminders-worker.test.js"
   },
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
     "@playwright/test": "^1.63.0",
@@ -23,6 +26,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
     "openai": "^7.25.0",
+    "web-push": "^3.6.7",
     "zod": "^4.6.5"
   }
 }

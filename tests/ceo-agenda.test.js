@@ -190,4 +190,14 @@ test("vencimentos financeiros legados aparecem separados e excluem quitados/canc
   assert.equal(dues[1].dueKind, "Gasto fixo previsto");
 });
 
+test("parcelas de gastos fixos substituem previsões, inclusive pagas/canceladas, e respeitam início", () => {
+  const data = { gastosFixos:[{id:'aluguel',dia:31,status:'Ativo',recurrenceStart:'2026-09',valor:500}], financeiro:[] };
+  assert.equal(h.financialDues(data,'2026-08-31').length,0);
+  assert.equal(h.financialDues(data,'2026-09-30').length,1);
+  data.financeiro.push({id:'parcela',fixedExpenseId:'aluguel',competencia:'2026-09',prazo:'2026-09-30',tipo:'Saída',status:'Pendente',valor:-500});
+  assert.equal(h.financialDues(data,'2026-09-30').length,1);
+  assert.equal(h.financialDues(data,'2026-09-30')[0].dueKind,'A pagar');
+  for (const status of ['Pago','Cancelado']) { data.financeiro[0].status=status; assert.equal(h.financialDues(data,'2026-09-30').length,0); }
+});
+
 console.log(`${count} testes da agenda passaram.`);

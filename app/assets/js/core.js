@@ -8,8 +8,23 @@
     let cloudUserId = null;
     let cloudSnapshot = null;
     let cloudWritePending = false;
+    let cloudOwnerId = null;
+    let cloudEpoch = 0;
 
-    function userStorageKey() { return `${storageKey}:${cloudUserId || "signed-out"}`; }
+    function resetAccountState() {
+      cloudEpoch++;
+      cloudUserId = cloudOwnerId = cloudRevision = cloudSnapshot = null;
+      cloudWritePending = false;
+      state = null;
+    }
+
+    function requireWriteAccess() {
+      if (typeof ZamaWorkspace !== "undefined" && !ZamaWorkspace.canEdit()) {
+        throw new Error("Seu acesso a esta empresa é somente leitura.");
+      }
+    }
+
+    function userStorageKey() { return `${storageKey}:${cloudUserId || "signed-out"}${cloudOwnerId && cloudOwnerId !== cloudUserId ? `:${cloudOwnerId}` : ""}`; }
     function cacheCloudState(value) {
       try { localStorage.setItem(userStorageKey(), JSON.stringify(value)); } catch {}
     }
@@ -72,26 +87,35 @@
     }
 
     async function loadCloudState() {
+      const epoch = cloudEpoch;
       const user = await getCurrentUser();
+      if (epoch !== cloudEpoch) throw new Error("A sessão mudou. Entre novamente.");
       if (!supabaseClient || !user) throw new Error("Sua sessão expirou. Entre novamente.");
       cloudUserId = user.id;
+      const ownerId = typeof ZamaWorkspace !== "undefined" ? ZamaWorkspace.ownerId(user.id) : user.id;
+      cloudOwnerId = ownerId;
       const { data, error } = await supabaseClient.from(cloudStateTable)
-        .select("data,updated_at").eq("user_id", user.id).maybeSingle();
+        .select("data,updated_at").eq("user_id", ownerId).maybeSingle();
+      if (epoch !== cloudEpoch || cloudUserId !== user.id || cloudOwnerId !== ownerId) throw new Error("A sessão mudou. Entre novamente.");
       if (error) throw new Error("Não foi possível carregar seus dados. Verifique a conexão e tente novamente.");
+      if (!data && ownerId !== user.id) throw new Error("Esta empresa não está disponível. Seu acesso pode ter sido removido.");
       cloudRevision = data?.updated_at || null;
       return data?.data ? prepareState(data.data) : null;
     }
 
     async function saveCloudState(candidate = state) {
+      const epoch = cloudEpoch, ownerId = cloudOwnerId || cloudUserId;
+      requireWriteAccess();
       const user = await getCurrentUser();
-      if (!supabaseClient || !user || user.id !== cloudUserId || !candidate) {
+      if (epoch !== cloudEpoch || !supabaseClient || !user || user.id !== cloudUserId || !candidate) {
         throw new Error("Sua sessão expirou. Entre novamente para salvar.");
       }
-      const payload = { user_id: user.id, data: candidate, updated_at: new Date().toISOString() };
+      const payload = { user_id: ownerId, data: candidate, updated_at: new Date().toISOString() };
       const query = cloudRevision
-        ? supabaseClient.from(cloudStateTable).update(payload).eq("user_id", user.id).eq("updated_at", cloudRevision)
+        ? supabaseClient.from(cloudStateTable).update(payload).eq("user_id", ownerId).eq("updated_at", cloudRevision)
         : supabaseClient.from(cloudStateTable).insert(payload);
       const { data, error } = await query.select("updated_at").maybeSingle();
+      if (epoch !== cloudEpoch || user.id !== cloudUserId) throw new Error("A sessão mudou durante o salvamento.");
       if (error || !data) {
         if ((!data && !error) || error?.code === "23505") {
           throw new Error("Os dados foram alterados em outro dispositivo. Atualize a página antes de tentar novamente.");
@@ -106,6 +130,8 @@
     }
 
     async function resetCloudState() {
+      requireWriteAccess();
+      if (cloudOwnerId && cloudOwnerId !== cloudUserId) throw new Error("Somente o proprietário pode limpar os dados da empresa.");
       const user = await getCurrentUser();
       if (!supabaseClient || !user) return false;
 
@@ -126,19 +152,21 @@
 
     async function subscribeToCloudChanges(user) {
       if (!supabaseClient || !user) return;
-
+      const epoch = cloudEpoch, ownerId = cloudOwnerId || user.id;
       await unsubscribeFromCloudChanges();
+      if (epoch !== cloudEpoch || cloudUserId !== user.id) return;
       cloudChangesChannel = supabaseClient
-        .channel(`app-state-${user.id}`)
+        .channel(`app-state-${ownerId}`)
         .on(
           "postgres_changes",
           {
             event: "*",
             schema: "public",
             table: cloudStateTable,
-            filter: `user_id=eq.${user.id}`
+            filter: `user_id=eq.${ownerId}`
           },
           (payload) => {
+            if (epoch !== cloudEpoch || cloudUserId !== user.id) return;
             if (cloudWritePending) return;
             if (payload.new?.updated_at && payload.new.updated_at === cloudRevision) return;
             if (document.querySelector("dialog[open]") || formPanelOpen) {
@@ -161,18 +189,21 @@
           }
         )
         .subscribe((status) => {
-          if (status === "SUBSCRIBED") setCloudStatus("Sincronizado", "");
+          if (epoch === cloudEpoch && status === "SUBSCRIBED") setCloudStatus("Sincronizado", "");
         });
     }
 
     async function unsubscribeFromCloudChanges() {
       if (!supabaseClient || !cloudChangesChannel) return;
-      await supabaseClient.removeChannel(cloudChangesChannel);
+      const channel = cloudChangesChannel;
       cloudChangesChannel = null;
+      await supabaseClient.removeChannel(channel);
     }
 
     async function loadState() {
+      const epoch = cloudEpoch;
       const loaded = await loadCloudState();
+      if (epoch !== cloudEpoch) throw new Error("A sessão mudou. Entre novamente.");
       const result = loaded || createInitialState();
       cloudSnapshot = structuredClone(result);
       cacheCloudState(result);
@@ -181,47 +212,57 @@
 
     async function persist() {
       if (cloudWritePending) return false;
+      const epoch = cloudEpoch;
       cloudWritePending = true;
       setCloudStatus("Salvando...", "saving");
       try {
         return await saveCloudState();
       } catch (error) {
+        if (epoch !== cloudEpoch) return false;
         if (cloudSnapshot) state = structuredClone(cloudSnapshot);
         setCloudStatus(error.message, "error");
         showToast("Alteração não salva", error.message, "error");
         return false;
-      } finally { cloudWritePending = false; }
+      } finally { if (epoch === cloudEpoch) cloudWritePending = false; }
     }
 
     async function ceoCommit(mutator, message = "Alterações salvas") {
-      if (cloudWritePending) return false;
+      if (cloudWritePending || !state) return false;
+      const epoch = cloudEpoch;
       cloudWritePending = true;
       setCloudStatus("Salvando...", "saving");
       const draft = structuredClone(state);
       try {
+        requireWriteAccess();
         await mutator(draft);
+        if (epoch !== cloudEpoch) return false;
         await saveCloudState(draft);
+        if (epoch !== cloudEpoch) return false;
         state = draft;
         render();
         showToast(message, "Salvo na sua conta.");
         return true;
       } catch (error) {
+        if (epoch !== cloudEpoch) return false;
         setCloudStatus(error.message, "error");
         showToast("Alteração não salva", error.message, "error");
         return false;
-      } finally { cloudWritePending = false; }
+      } finally { if (epoch === cloudEpoch) cloudWritePending = false; }
     }
 
     // Claim delivery in the existing user-owned JSON row. The revision filter makes
     // two devices compete for a single receipt without requiring a new SQL table.
     async function claimCloudReminder(key, now = Date.now()) {
       if (cloudWritePending) return false;
+      if (typeof ZamaWorkspace !== "undefined" && !ZamaWorkspace.canEdit()) return false;
+      const epoch = cloudEpoch, ownerId = cloudOwnerId || cloudUserId;
       cloudWritePending = true;
       try {
         const user = await getCurrentUser();
-        if (!user || user.id !== cloudUserId) return false;
+        if (epoch !== cloudEpoch || !user || user.id !== cloudUserId) return false;
         const { data: remote, error } = await supabaseClient.from(cloudStateTable)
-          .select("data,updated_at").eq("user_id", user.id).maybeSingle();
+          .select("data,updated_at").eq("user_id", ownerId).maybeSingle();
+        if (epoch !== cloudEpoch) return false;
         if (error || !remote?.data || !remote.updated_at) return false;
         const receipts = { ...(remote.data.reminderReceipts || {}) };
         if (receipts[key]) return false;
@@ -233,7 +274,8 @@
         const payload = { ...remote.data, reminderReceipts: receipts };
         const { data: result, error: writeError } = await supabaseClient.from(cloudStateTable)
           .update({ data: payload, updated_at: new Date().toISOString() })
-          .eq("user_id", user.id).eq("updated_at", remote.updated_at).select("updated_at").maybeSingle();
+          .eq("user_id", ownerId).eq("updated_at", remote.updated_at).select("updated_at").maybeSingle();
+        if (epoch !== cloudEpoch) return false;
         if (writeError || !result) return false;
         if (cloudRevision === remote.updated_at) {
           cloudRevision = result.updated_at;
@@ -243,7 +285,7 @@
         }
         return reminder;
       } catch { return false; }
-      finally { cloudWritePending = false; }
+      finally { if (epoch === cloudEpoch) cloudWritePending = false; }
     }
 
     function setCloudStatus(text, statusClass = "") {
@@ -277,7 +319,7 @@
 
     // Troca de aba no menu lateral e permite abrir sub-abas como financeiro/fixos.
     function goToModule(module, options = {}) {
-      if (!['dashboard', 'financeiro', 'investimentos', 'agenda', 'ideias', 'jarvis'].includes(module)) module = 'dashboard';
+      if (!['dashboard', 'financeiro', 'investimentos', 'agenda', 'ideias', 'jarvis'].includes(module) || module === 'jarvis' && !jarvisVisible) module = 'dashboard';
       activeModule = module;
       if (options.financeView) financeView = options.financeView;
       if (options.agendaView) agendaView = options.agendaView;
@@ -288,13 +330,15 @@
       document.querySelector(".nav").classList.remove("expanded");
       document.body.classList.remove("menu-open");
       document.getElementById("ceoMenuBtn")?.setAttribute("aria-expanded", "false");
+      if (typeof setCeoMenu === "function") setCeoMenu(false);
       closeDetailPanel();
       render();
+      if (window.matchMedia("(max-width: 720px)").matches) window.scrollTo(0, 0);
     }
 
     function render() {
       if (!state) return;
-      if (!['dashboard', 'financeiro', 'investimentos', 'agenda', 'ideias', 'jarvis'].includes(activeModule)) activeModule = 'dashboard';
+      if (!['dashboard', 'financeiro', 'investimentos', 'agenda', 'ideias', 'jarvis'].includes(activeModule) || activeModule === 'jarvis' && !jarvisVisible) activeModule = 'dashboard';
       if (typeof renderCeoModule === "function" && renderCeoModule()) return;
       // Renderizacao central: sempre que dados/modulo mudam, esta funcao redesenha a tela.
       const module = modules[activeModule];

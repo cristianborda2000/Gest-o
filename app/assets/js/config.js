@@ -5,6 +5,7 @@
 */
 
     const appConfig = window.ZAMA_CONFIG || {};
+    const jarvisVisible = appConfig.jarvisVisible === true;
     const storageKey = appConfig.storageKey || "admin-simples-v1";
     const cloudStateTable = appConfig.cloudStateTable || "app_state";
     const supabaseUrl = appConfig.supabaseUrl || "";

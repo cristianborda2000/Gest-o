@@ -5,6 +5,7 @@ npm-debug.log*
 .npm-cache/
 .playwright/
 test-results/
+test-results-*/
 playwright-report/
 .env
 .env.*

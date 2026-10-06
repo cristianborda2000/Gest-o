@@ -47,7 +47,7 @@ async function jarvisMock(page,options={}){
     if(path===`/actions/${actionId}/cancel`){api.actions=api.actions.map(a=>({...a,status:'cancelled'}));return respond({action:api.actions[0],state_changed:false});}
     return respond({error:`Endpoint de teste inesperado: ${path}`},404);
   });
-  await mock(page,options.seed||seed);
+  await mock(page,options.seed||seed,{jarvisVisible:true});
   return api;
 }
 async function openJarvis(page){

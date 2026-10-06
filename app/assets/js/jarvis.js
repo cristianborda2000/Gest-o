@@ -61,6 +61,7 @@
     if (dialog?.open) dialog.close(); host?.remove(); host = null;
   }
   async function init(user) {
+    if (!jarvisVisible) return;
     if (account?.id !== user?.id) reset(); account = user;
     if (initialized) return; initialized = true; await loadHome();
   }
@@ -133,10 +134,12 @@
     return host;
   }
   function render(container) {
+    if (!jarvisVisible) return;
     if (!container.contains(ensureHost())) container.replaceChildren(host);
     paint();
   }
   function open() {
+    if (!jarvisVisible) return;
     if (typeof state === 'undefined' || !state) return;
     if (activeModule === 'jarvis') { host?.querySelector('textarea')?.focus(); return; }
     if (!dialog) {
@@ -271,5 +274,6 @@
     finally { if (gen === generation) { busy = false; activity = ''; paint(); } }
   }
   global.ZamaJarvis = { init, reset, render, open, navigation };
+  document.querySelectorAll('.nav [data-module="jarvis"], #jarvisLauncher').forEach(element => { element.hidden = !jarvisVisible; });
   document.getElementById('jarvisLauncher')?.addEventListener('click', open);
 })(window);

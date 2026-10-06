@@ -35,6 +35,18 @@ async function run() {
   };
   vm.createContext(sandbox);
   vm.runInContext(['config','core','records'].map(name=>fs.readFileSync(`app/assets/js/${name}.js`,'utf8')).join('\n')+'\nlet state=null; render=()=>{};',sandbox);
+  const centsOnly = vm.runInContext(`prepareState({
+    financeiro: [
+      { id: 'incoming', tipo: 'Entrada', valorCentavos: 12345 },
+      { id: 'outgoing', tipo: 'Saída', valorCentavos: '6789' },
+      { id: 'zero', tipo: 'Entrada', valor: 0, valorCentavos: 9999 }
+    ],
+    gastosFixos: [{ id: 'fixed', valorCentavos: '40025', dia: 31 }]
+  })`, sandbox);
+  assert.equal(centsOnly.financeiro[0].valor, 123.45, 'loading cents-only income must preserve its amount');
+  assert.equal(centsOnly.financeiro[1].valor, -67.89, 'loading cents-only expenses must preserve their direction');
+  assert.equal(centsOnly.financeiro[2].valor, 0, 'an explicit legacy amount remains authoritative');
+  assert.equal(centsOnly.gastosFixos[0].valor, -400.25, 'loading cents-only fixed expenses must preserve their amount');
   await vm.runInContext('loadState().then(value => { state=value; })',sandbox);
   assert.equal(vm.runInContext('state.financeiro[0].id',sandbox),'old');
   assert.equal(vm.runInContext('state.customLegacy.keep',sandbox),true);

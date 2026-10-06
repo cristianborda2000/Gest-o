@@ -109,7 +109,7 @@ async function voiceMock(page, options = {}) {
     }
     return respond({ error: `Endpoint de teste inesperado: ${path}` }, 404);
   });
-  await mock(page);
+  await mock(page,undefined,{jarvisVisible:true});
   return api;
 }
 

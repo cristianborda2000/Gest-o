@@ -157,3 +157,122 @@ test('financial filters and forms remain contained on a phone viewport', async (
   await expect(form).not.toBeVisible();
   await expect(financeRow(page, 'Cadastro pelo celular')).toContainText('1.250,51');
 });
+
+test('fixed expenses create a unique monthly payable, preserve its payment, and generate the next month on demand', async ({ page }) => {
+  await mock(page);
+  await navigate(page, 'financeiro');
+  await page.getByRole('button', { name: 'Gastos fixos', exact: true }).click();
+  await page.getByRole('button', { name: 'Novo gasto fixo' }).click();
+  const form = page.getByRole('dialog');
+  await form.getByLabel('Descrição', { exact: true }).fill('Internet recorrente');
+  await form.getByLabel('Valor mensal (R$)', { exact: true }).fill('199,99');
+  await form.getByLabel('Dia do vencimento', { exact: true }).fill('31');
+  await form.getByLabel('Categoria', { exact: true }).fill('Sistema');
+  await form.getByRole('button', { name: 'Salvar gasto fixo' }).click();
+  await expect(form).not.toBeVisible();
+  await expect(financeRow(page, 'Internet recorrente')).toContainText('30/09/2026');
+  await expect(page.getByRole('button', { name: 'Gerar contas do mês (0)', exact: true })).toBeDisabled();
+  let stored = await cloud(page);
+  const fixedId = stored.gastosFixos[0].id;
+  expect(stored.financeiro.filter(row => row.fixedExpenseId === fixedId)).toHaveLength(1);
+
+  await page.getByRole('button', { name: 'Voltar ao financeiro' }).click();
+  await financeRow(page, 'Internet recorrente').getByRole('button', { name: 'Registrar baixa de Internet recorrente' }).click();
+  await page.getByRole('dialog').getByLabel('Data do recebimento / pagamento', { exact: true }).fill('2026-09-29');
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirmar baixa' }).click();
+  await expect(page.getByRole('dialog')).not.toBeVisible();
+  await expect(financeRow(page, 'Internet recorrente')).toContainText('Pago');
+  await page.reload();
+  await navigate(page, 'financeiro');
+  await page.getByRole('button', { name: 'Gastos fixos', exact: true }).click();
+  await expect(financeRow(page, 'Internet recorrente')).toContainText('Parcela paga');
+  await page.getByLabel('Competência', { exact: true }).fill('2026-10');
+  await page.getByRole('button', { name: 'Gerar contas do mês (1)', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('Gerar contas de 10/2026');
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirmar geração' }).click();
+  await expect(page.getByRole('dialog')).not.toBeVisible();
+  stored = await cloud(page);
+  const linked = stored.financeiro.filter(row => row.fixedExpenseId === fixedId);
+  expect(linked).toHaveLength(2);
+  expect(linked.find(row => row.competencia === '2026-09').status).toBe('Pago');
+  expect(linked.find(row => row.competencia === '2026-10').prazo).toBe('2026-10-31');
+  expect(linked.find(row => row.competencia === '2026-10').status).toBe('Pendente');
+  await expect(page.getByRole('button', { name: 'Gerar contas do mês (0)', exact: true })).toBeDisabled();
+});
+
+test('legacy fixed expenses can link an existing paid expense without duplicating its balance', async ({ page }) => {
+  const data = structuredClone(seed);
+  data.gastosFixos = [{ id: 'legacy-system', nome: 'Ferramentas e serviços', valor: -480.25, dia: 5, responsavel: 'Sistema', status: 'Ativo' }];
+  await mock(page, data);
+  await navigate(page, 'financeiro');
+  await page.getByRole('button', { name: 'Gastos fixos', exact: true }).click();
+  await expect(financeRow(page, 'Ferramentas e serviços')).toContainText('Aguardando geração');
+  await page.getByRole('button', { name: 'Gerar contas do mês (1)', exact: true }).click();
+  const form = page.getByRole('dialog');
+  await form.locator('[name="link-0"]').selectOption('expense');
+  await form.getByRole('button', { name: 'Confirmar geração' }).click();
+  await expect(form).not.toBeVisible();
+  const stored = await cloud(page);
+  expect(stored.financeiro).toHaveLength(seed.financeiro.length);
+  expect(stored.financeiro.find(row => row.id === 'expense')).toMatchObject({ fixedExpenseId: 'legacy-system', competencia: '2026-09', pagoEm: '2026-09-05', valor: -480.25, status: 'Pago' });
+  await expect(financeRow(page, 'Ferramentas e serviços')).toContainText('Parcela paga');
+});
+
+test('fixed expense generation renders imported descriptions as text', async ({ page }) => {
+  const data = structuredClone(seed);
+  const name = '<img src=x onerror="window.fixedNameExecuted=true">';
+  data.gastosFixos = [{ id: 'fixed-text', nome: name, valor: -50, dia: 5, responsavel: 'Sistema', status: 'Ativo' }];
+  await mock(page, data);
+  await navigate(page, 'financeiro');
+  await page.getByRole('button', { name: 'Gastos fixos', exact: true }).click();
+  await page.getByRole('button', { name: 'Gerar contas do mês (1)', exact: true }).click();
+  const form = page.getByRole('dialog');
+  await expect(form.locator('label').filter({ hasText: name })).toBeVisible();
+  await expect(form.locator('img')).toHaveCount(0);
+  expect(await page.evaluate(() => window.fixedNameExecuted)).toBeUndefined();
+  await form.getByRole('button', { name: 'Confirmar geração' }).click();
+  await expect(form).not.toBeVisible();
+  expect((await cloud(page)).financeiro.find(row => row.fixedExpenseId === 'fixed-text').nome).toBe(name);
+});
+
+test('older overdue liabilities are visible on demand and summary cards follow the selected filters', async ({ page }) => {
+  const data = structuredClone(seed);
+  data.financeiro.push({ id: 'old-debt', nome: 'Fornecedor do mês anterior', tipo: 'Saída', responsavel: 'Fornecedor', valor: -777.11, status: 'Pendente', prazo: '2026-08-15' });
+  await mock(page, data);
+  await navigate(page, 'financeiro');
+  await expect(page.getByText('1 pendência vencida anterior ao período', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Contas a receber', exact: true }).click();
+  await expect(page.locator('.ceo-table tbody tr')).toHaveCount(1);
+  await expect(page.locator('.ceo-finance-summary')).toContainText('300,00');
+  await expect(page.locator('.ceo-finance-summary')).not.toContainText('4.200,00');
+  await page.getByRole('button', { name: 'Ver todas as vencidas', exact: true }).click();
+  await expect(financeRow(page, 'Fornecedor do mês anterior')).toBeVisible();
+  await expect(page.locator('.ceo-table tbody tr')).toHaveCount(1);
+  await expect(page.locator('.ceo-finance-summary')).toContainText('777,11');
+  await expect(page.getByLabel('De', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel('Situação', { exact: true })).toHaveValue('Atrasado');
+});
+
+test('fixed expense creation remains contained on phone screens and failed writes keep form data', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mock(page);
+  await page.locator('#ceoMenuBtn').click();
+  await navigate(page, 'financeiro');
+  await page.getByRole('button', { name: 'Gastos fixos', exact: true }).click();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+  await page.getByRole('button', { name: 'Novo gasto fixo' }).click();
+  const form = page.getByRole('dialog');
+  await form.getByLabel('Descrição', { exact: true }).fill('Assinatura móvel');
+  await form.getByLabel('Valor mensal (R$)', { exact: true }).fill('89,90');
+  await page.evaluate(() => { window.testFailWrite = true; });
+  await form.getByRole('button', { name: 'Salvar gasto fixo' }).click();
+  await expect(form.locator('[role="alert"]')).toContainText('Não foi possível salvar');
+  await expect(form.getByLabel('Descrição', { exact: true })).toHaveValue('Assinatura móvel');
+  expect(await form.evaluate(element => element.scrollWidth <= element.clientWidth)).toBeTruthy();
+  expect((await cloud(page)).gastosFixos).toHaveLength(0);
+  await page.evaluate(() => { window.testFailWrite = false; });
+  await form.getByRole('button', { name: 'Salvar gasto fixo' }).click();
+  await expect(form).not.toBeVisible();
+  await expect(financeRow(page, 'Assinatura móvel')).toContainText('89,90');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+});

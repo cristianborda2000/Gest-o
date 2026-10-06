@@ -1,5 +1,14 @@
 # JARVIS — texto, voz e notícias
 
+## Visibilidade na central administrativa
+
+O JARVIS fica oculto por padrão: menu, botão flutuante e abertura por
+`?view=jarvis` ficam indisponíveis, e o frontend não inicia consultas ao assistente.
+A instalação da ZAMA abre a Visão geral. Código e dados do JARVIS são preservados.
+Para voltar a exibir o projeto, defina `jarvisVisible: true` em `window.ZAMA_CONFIG`
+no arquivo `app/assets/js/env.js`. Essa opção controla a interface; a ativação da
+API continua sendo controlada separadamente por `JARVIS_ENABLED` no servidor.
+
 ## Atualização: agendamento, fluidez e fones Apple
 
 ### Lembrete individual solicitado ao JARVIS
