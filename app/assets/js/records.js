@@ -5,67 +5,6 @@
   normalizar dados, calcular vencimentos da agenda e totais do dashboard.
 */
 
-    // Salva o formulario atual. Depois aplica sincronizacoes conforme o modulo.
-    async function saveRecord(event) {
-      event.preventDefault();
-      const data = Object.fromEntries(new FormData(recordForm).entries());
-      data.valor = Number(data.valor || 0);
-      if ("implantacao" in data) {
-        data.implantacao = Number(data.implantacao || 0);
-      }
-      const rowsKey = getCurrentRowsKey();
-      const validationError = validateRecordData(data, getCurrentModuleConfig(), rowsKey);
-      if (validationError) {
-        if (typeof showToast === "function") {
-          showToast("Revise o formulário", validationError, "error");
-        }
-        return;
-      }
-
-      if (activeModule === "financeiro" && financeView === "fixos") {
-        normalizeFixedExpenseRow(data);
-      } else if (activeModule === "financeiro") {
-        normalizeFinanceRow(data);
-      } else if (activeModule === "agenda") {
-        normalizeAgendaRow(data);
-      }
-
-      if (editingId) {
-        state[rowsKey] = state[rowsKey].map((row) => row.id === editingId ? { ...row, ...data } : row);
-      } else {
-        const newRecord = { id: createId(), createdAt: new Date().toISOString(), ...data };
-        if (rowsKey === "clientes" || rowsKey === "agenda") {
-          state[rowsKey].unshift(newRecord);
-        } else {
-          state[rowsKey].push(newRecord);
-        }
-      }
-
-      if (activeModule === "mensalidades") {
-        const savedMonthly = editingId
-          ? state.mensalidades.find((row) => row.id === editingId)
-          : state.mensalidades[state.mensalidades.length - 1];
-        syncMonthlyFinance(savedMonthly, state);
-      }
-
-      if (activeModule === "clientes") {
-        const savedClient = editingId
-          ? state.clientes.find((row) => row.id === editingId)
-          : state.clientes[0];
-        syncClientMonthly(savedClient, state);
-      }
-
-      if (activeModule === "agenda" && data.prazo) {
-        calendarMonth = data.prazo.slice(0, 7);
-      }
-
-      if (!await persist()) return;
-      editingId = null;
-      recordForm.reset();
-      formPanelOpen = false;
-      render();
-    }
-
     function validateRecordData(data, module, rowsKey) {
       const requiredField = (module.fields || []).find((field) => field.required && !String(data[field.key] || "").trim());
       if (requiredField) return `Preencha o campo obrigatório: ${requiredField.label}.`;

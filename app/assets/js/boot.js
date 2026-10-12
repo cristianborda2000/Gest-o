@@ -42,9 +42,7 @@
     const moduleTitle = document.getElementById("moduleTitle");
     const moduleSubtitle = document.getElementById("moduleSubtitle");
     const listTitle = document.getElementById("listTitle");
-    const formTitle = document.getElementById("formTitle");
     const tableArea = document.getElementById("tableArea");
-    const recordForm = document.getElementById("recordForm");
     const searchInput = document.getElementById("searchInput");
     const financeTypeFilterInput = document.getElementById("financeTypeFilter");
     const statusFilterInput = document.getElementById("statusFilter");
@@ -52,9 +50,6 @@
     const clearFiltersBtn = document.getElementById("clearFiltersBtn");
     const viewToggleBtn = document.getElementById("viewToggleBtn");
     const workspace = document.getElementById("workspace");
-    const formPanel = document.getElementById("formPanel");
-    const formToggleBtn = document.getElementById("formToggleBtn");
-    const quickAddBtn = document.getElementById("quickAddBtn");
     const mobileMoreBtn = document.getElementById("mobileMoreBtn");
     const detailBackdrop = document.getElementById("detailBackdrop");
     const detailPanel = document.getElementById("detailPanel");
@@ -183,7 +178,7 @@
       closeSettings(); closeConfirmDialog(false); closeDetailPanel();
       onboardingPanel.hidden = onboardingBackdrop.hidden = true;
       document.getElementById('ceoWorkspace').innerHTML = "";
-      tableArea.innerHTML = recordForm.innerHTML = detailContent.innerHTML = "";
+      tableArea.innerHTML = detailContent.innerHTML = "";
       toastStack.innerHTML = "";
       companyForm.reset?.();
       appShell.hidden = true;
@@ -538,26 +533,6 @@
     settingsBtn.addEventListener("click", openSettings);
     settingsCloseBtn.addEventListener("click", closeSettings);
     settingsBackdrop.addEventListener("click", closeSettings);
-    formToggleBtn.addEventListener("click", () => {
-      formPanelOpen = !formPanelOpen;
-      if (!formPanelOpen) editingId = null;
-      render();
-    });
-    quickAddBtn.addEventListener("click", () => {
-      if (activeModule === "dashboard") {
-        activeModule = "agenda";
-        agendaView = "lista";
-        navButtons.forEach((item) => item.classList.toggle("active", item.dataset.module === "agenda"));
-      }
-      if (activeModule === "agenda" && agendaView === "calendario") {
-        agendaView = "lista";
-      }
-
-      editingId = null;
-      formPanelOpen = true;
-      render();
-      formPanel.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
     mobileMoreBtn.addEventListener("click", () => {
       document.querySelector(".nav").classList.toggle("expanded");
     });
@@ -751,6 +726,5 @@
       financeMonth = todayIso().slice(0, 7);
       render();
     });
-    recordForm.addEventListener("submit", saveRecord);
 
     initializeAuth();

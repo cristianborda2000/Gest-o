@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { createECDH, randomBytes, randomUUID } = require('node:crypto');
 const { readFileSync } = require('node:fs');
 const { PGlite } = require('@electric-sql/pglite');
-const { configuration, publicConfiguration, fingerprint } = require('../services/reminders/config');
+const { configuration, publicConfiguration, fingerprint, allowedOrigins } = require('../services/reminders/config');
 const { validateSubscription, validateEndpoint } = require('../services/reminders/validation');
 const { createHandler: createHttp } = require('../services/reminders/http');
 const { createHandler: createCron, dispatch } = require('../services/reminders/dispatcher');
@@ -19,7 +19,8 @@ const state = () => ({ agenda: [{ id: 'meeting', nome: 'Reunião', prazo: '2026-
 async function request(handler, { method = 'GET', path = 'subscription', headers = {}, body } = {}) {
   const req = { method, url: `/api/reminders?path=${path}`, headers, body };
   let response;
-  await handler(req, { setHeader() {}, set statusCode(value) { this.status = value; }, end(value) { response = { status: this.status, body: JSON.parse(value) }; } });
+  const responseHeaders = {};
+  await handler(req, { setHeader(name, value) { responseHeaders[name] = value; }, set statusCode(value) { this.status = value; }, end(value) { response = { status: this.status, body: value ? JSON.parse(value) : null, headers: responseHeaders }; } });
   return response;
 }
 const authHeaders = { authorization: 'Bearer valid-token', 'content-type': 'application/json', origin: config.origin };
@@ -29,6 +30,29 @@ test('opt-in configuration checks key pair and keeps all secrets out of public J
   assert.equal(configuration({ PUSH_REMINDERS_ENABLED: 'true' }).enabled, false);
   const publicJson = JSON.stringify(publicConfiguration(config));
   assert.ok(!publicJson.includes(config.privateKey)); assert.ok(!publicJson.includes('server-secret')); assert.ok(!publicJson.includes(config.cronSecret));
+});
+
+test('CORS permits only the configured origin and the verified ZAMA apex/www pair', async () => {
+  const api = createHttp({ config, authenticate: async () => ({ data: { user: { id: 'owner' } } }), repository: { status: async () => ({ registered: false }) } });
+  for (const origin of ['https://zam4.com', 'https://www.zam4.com']) {
+    const preflight = await request(api, { method: 'OPTIONS', headers: { origin } });
+    assert.equal(preflight.status, 204);
+    assert.equal(preflight.headers['Access-Control-Allow-Origin'], origin);
+    assert.equal(preflight.headers['Access-Control-Allow-Headers'], 'Authorization, Content-Type');
+    const status = await request(api, { headers: { ...authHeaders, origin } });
+    assert.equal(status.status, 200);
+    assert.equal(status.headers['Vary'], 'Origin');
+    assert.equal((await request(api, { headers: { origin } })).status, 401);
+  }
+  for (const origin of ['http://zam4.com', 'https://admin.zam4.com', 'https://www.zam4.com.attacker.test', 'null']) {
+    const response = await request(api, { method: 'OPTIONS', headers: { origin } });
+    assert.equal(response.status, 403);
+    assert.equal(response.headers['Access-Control-Allow-Origin'], undefined);
+  }
+  assert.deepEqual(allowedOrigins('https://another.example'), ['https://another.example']);
+  assert.deepEqual(allowedOrigins('https://zam4.com/'), []);
+  assert.deepEqual(allowedOrigins('http://zam4.com'), []);
+  assert.equal(publicConfiguration(config).appOrigin, config.origin);
 });
 test('push endpoints cannot reach arbitrary, internal, credential-bearing or deceptive URLs', () => {
   for (const endpoint of ['http://fcm.googleapis.com/a', 'https://fcm.googleapis.com:8443/a', 'https://fcm.googleapis.com.evil.test/a', 'https://fcm.googleapis.com@127.0.0.1/a', 'https://127.0.0.1/a', 'https://[::1]/a', 'https://169.254.169.254/latest/meta-data', 'https://web.push.apple.com/a#secret', 'https://user:pass@fcm.googleapis.com/a', 'https://evil.notify.windows.com.evil.test/a']) assert.throws(() => validateEndpoint(endpoint));

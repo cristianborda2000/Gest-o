@@ -31,7 +31,7 @@ test('mobile overview, calendar day expansion and ideas fit the viewport',async(
 test('empty account has no illustrative records',async({page})=>{
   const empty={...seed,financeiro:[],agenda:[],ideias:[]};await mock(page,empty);
   await expect(page.locator('.ceo-metrics')).toContainText('R$ 0,00');
-  await expect(page.locator('.ceo-today-overview')).toContainText('Seu dia está livre');
+  await expect(page.locator('.ceo-today-overview')).toContainText('Sua semana está livre');
   await expect(page.locator('#ceoWorkspace')).not.toContainText('Projeto entregue');
 });
 

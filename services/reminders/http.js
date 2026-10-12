@@ -1,6 +1,6 @@
 'use strict';
 const { createClient } = require('@supabase/supabase-js');
-const { configuration, publicConfiguration } = require('./config');
+const { configuration, publicConfiguration, allowedOrigins } = require('./config');
 const { createRepository } = require('./repository');
 const { ReminderError, validateSubscription, readBody } = require('./validation');
 function createHandler(dependencies = {}) {
@@ -11,10 +11,19 @@ function createHandler(dependencies = {}) {
       const config = dependencies.config || configuration();
       const url = new URL(req.url, 'http://localhost');
       const path = req.query?.path || url.searchParams.get('path') || url.pathname.replace(/^\/api\/reminders\/?/, '');
+      const origin = req.headers.origin;
+      res.setHeader('Vary', 'Origin');
+      if (origin) {
+        if (!allowedOrigins(config.origin).includes(origin)) throw new ReminderError('Este endereço não está autorizado para ativar lembretes. Abra a ZAMA pelo endereço oficial e tente novamente.', 403, 'ORIGIN_NOT_ALLOWED');
+        res.setHeader('Access-Control-Allow-Origin', origin);
+      }
+      if (path === 'subscription' && req.method === 'OPTIONS') {
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE');
+        res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+        res.statusCode = 204; res.end(); return;
+      }
       if (path === 'config' && req.method === 'GET') return send(200, publicConfiguration(config));
       if (path !== 'subscription' || !['GET', 'POST', 'DELETE'].includes(req.method)) throw new ReminderError('Endpoint não encontrado.', 404);
-      const origin = req.headers.origin;
-      if (origin && origin !== config.origin) throw new ReminderError('Origem não autorizada.', 403);
       const token = /^Bearer ([A-Za-z0-9._-]+)$/.exec(req.headers.authorization || '')?.[1];
       if (!token) throw new ReminderError('Entre na sua conta para configurar lembretes.', 401);
       if (!dependencies.authenticate && (!config.supabaseUrl || !config.supabaseKey)) throw new ReminderError('Serviço de lembretes indisponível.', 503);

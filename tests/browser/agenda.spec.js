@@ -92,7 +92,7 @@ test('agenda retains the form on persistence error and saves successfully after 
   await expect(taskCard(page, 'Não perder esta tarefa')).toBeVisible();
 });
 
-test('notifications request permission only on explicit activation and deduplicate after reload', async ({ page }) => {
+test('saving reminder preferences does not claim device permission; authorized foreground alerts deduplicate', async ({ page }) => {
   await page.addInitScript(() => {
     window.Notification = class Notification {
       constructor(title, options) {
@@ -117,7 +117,10 @@ test('notifications request permission only on explicit activation and deduplica
   await dialog(page).locator('[name="enabled"]').check();
   await dialog(page).getByRole('button', { name: 'Salvar preferências' }).click();
   await expect(dialog(page)).toHaveCount(0);
-  expect(await page.evaluate(() => localStorage.getItem('test-permission-requests'))).toBe('1');
+  expect(await page.evaluate(() => localStorage.getItem('test-permission-requests'))).toBeNull();
+  // Device activation has its own click/permission/subscription tests. This
+  // test exercises the foreground scheduler after that permission is granted.
+  await page.evaluate(() => localStorage.setItem('test-permission', 'granted'));
   await page.clock.fastForward(20000);
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('test-notifications') || '[]').length)).toBe(1);
   await page.clock.fastForward(20000);
@@ -126,7 +129,7 @@ test('notifications request permission only on explicit activation and deduplica
   await expect(page.locator('#ceoWorkspace')).toBeVisible();
   await page.clock.fastForward(20000);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('test-notifications')).length)).toBe(1);
-  expect(await page.evaluate(() => localStorage.getItem('test-permission-requests'))).toBe('1');
+  expect(await page.evaluate(() => localStorage.getItem('test-permission-requests'))).toBeNull();
 });
 
 test('agenda mobile expands the chosen day and task editor fits the screen', async ({ page }) => {

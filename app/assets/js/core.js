@@ -297,26 +297,6 @@
       cloudStatus.classList.toggle("error", statusClass === "error");
     }
 
-    function shouldCollapseFormByDefault(module) {
-      return module !== "dashboard";
-    }
-
-    function getFormToggleLabel() {
-      if (formPanelOpen) return editingId ? "Cancelar" : "Recolher";
-
-      const labels = {
-        projetos: "Adicionar projeto",
-        marketing: "Adicionar campanha",
-        clientes: "Adicionar cliente",
-        mensalidades: "Adicionar mensalidade",
-        agenda: "Adicionar tarefa",
-        rh: "Adicionar colaborador",
-        financeiro: financeView === "fixos" ? "Adicionar gasto" : "Adicionar lançamento"
-      };
-
-      return labels[activeModule] || "Adicionar";
-    }
-
     // Troca de aba no menu lateral e permite abrir sub-abas como financeiro/fixos.
     function goToModule(module, options = {}) {
       if (!['dashboard', 'financeiro', 'investimentos', 'agenda', 'ideias', 'jarvis'].includes(module) || module === 'jarvis' && !jarvisVisible) module = 'dashboard';
@@ -324,7 +304,7 @@
       if (options.financeView) financeView = options.financeView;
       if (options.agendaView) agendaView = options.agendaView;
       editingId = null;
-      formPanelOpen = !shouldCollapseFormByDefault(module);
+      formPanelOpen = false;
       searchInput.value = "";
       navButtons.forEach((item) => item.classList.toggle("active", item.dataset.module === module));
       document.querySelector(".nav").classList.remove("expanded");
@@ -339,37 +319,8 @@
     function render() {
       if (!state) return;
       if (!['dashboard', 'financeiro', 'investimentos', 'agenda', 'ideias', 'jarvis'].includes(activeModule) || activeModule === 'jarvis' && !jarvisVisible) activeModule = 'dashboard';
-      if (typeof renderCeoModule === "function" && renderCeoModule()) return;
-      // Renderizacao central: sempre que dados/modulo mudam, esta funcao redesenha a tela.
-      const module = modules[activeModule];
-      moduleTitle.textContent = module.title;
-      moduleSubtitle.textContent = module.subtitle;
-      const currentModule = getCurrentModuleConfig();
-      listTitle.textContent = currentModule.listTitle;
-      formTitle.textContent = editingId ? "Editar registro" : currentModule.formTitle;
-      const calendarOnlyMode = activeModule === "agenda" && agendaView === "calendario";
-      workspace.classList.toggle("dashboard-mode", activeModule === "dashboard");
-      workspace.classList.toggle("agenda-calendar-mode", calendarOnlyMode);
-      workspace.classList.toggle("form-collapsed", activeModule !== "dashboard" && !formPanelOpen);
-      formPanel.style.display = activeModule === "dashboard" || calendarOnlyMode ? "none" : "";
-      formPanel.classList.toggle("collapsed", activeModule !== "dashboard" && !formPanelOpen);
-      recordForm.hidden = calendarOnlyMode || (activeModule !== "dashboard" && !formPanelOpen);
-      formToggleBtn.textContent = getFormToggleLabel();
-      formToggleBtn.setAttribute("aria-expanded", String(formPanelOpen));
-      quickAddBtn.title = activeModule === "agenda" ? "Nova tarefa" : "Adicionar registro";
-      quickAddBtn.setAttribute("aria-label", quickAddBtn.title);
-      quickAddBtn.classList.toggle("agenda-context", activeModule === "agenda");
-      searchInput.style.display = activeModule === "dashboard" ? "none" : "";
-      renderListControls();
-
-      renderStats();
-      if (activeModule === "dashboard") {
-        renderDashboard();
-        return;
-      }
-
-      renderForm();
-      renderTable();
+      if (typeof renderCeoModule === "function") renderCeoModule();
+      else setCloudStatus("Não foi possível abrir a tela. Atualize a página.", "error");
     }
 
     function renderListControls() {

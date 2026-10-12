@@ -17,7 +17,8 @@
   <link rel="stylesheet" href="assets/pwa-install.css?v=20261001">
   <link rel="stylesheet" href="assets/admin.css?v=20261005">
   <link rel="stylesheet" href="assets/jarvis-voice.css?v=20261001">
-  <link rel="stylesheet" href="assets/mobile.css?v=20261006">
+  <link rel="stylesheet" href="assets/mobile.css?v=20261012-mobile">
+  <link rel="stylesheet" href="assets/overview-week.css?v=20261012-mobile">
 </head>
 <body>
 
@@ -153,7 +154,7 @@
       <section id="ceoWorkspace" class="ceo-workspace" hidden></section>
 
       <!-- Indicadores superiores, preenchidos em core.js pela funcao renderStats(). -->
-      <section class="stats" aria-label="Indicadores">
+      <section class="stats" aria-label="Indicadores" hidden>
         <div class="stat">
           <span>Total no módulo</span>
           <strong id="totalStat">0</strong>
@@ -172,8 +173,8 @@
         </div>
       </section>
 
-      <!-- Area central: lista/tabela do modulo e formulario lateral de cadastro. -->
-      <section class="workspace" id="workspace">
+      <!-- Estrutura de leitura legada; os módulos atuais usam ceoWorkspace. -->
+      <section class="workspace" id="workspace" hidden>
         <div class="panel">
           <div class="panel-head">
             <h2 id="listTitle">Lista de projetos</h2>
@@ -189,13 +190,6 @@
           <div class="table-wrap" id="tableArea"></div>
         </div>
 
-        <aside class="panel" id="formPanel">
-          <div class="panel-head">
-            <h2 id="formTitle">Novo registro</h2>
-            <button class="form-toggle" type="button" id="formToggleBtn" aria-expanded="true">Recolher</button>
-          </div>
-          <form class="form" id="recordForm"></form>
-        </aside>
       </section>
     </main>
     <div class="detail-backdrop" id="detailBackdrop" hidden></div>
@@ -227,7 +221,6 @@
       </form>
     </section>
     <button class="jarvis-launcher" id="jarvisLauncher" type="button" hidden aria-label="Abrir JARVIS"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 3v3m0 12v3M3 12h3m12 0h3M8 8h8v8H8V8Z"/></svg><span>JARVIS</span></button>
-    <button class="quick-add" type="button" id="quickAddBtn" aria-label="Adicionar registro">+</button>
   </div>
   <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="true"></div>
   <div class="confirm-backdrop" id="confirmBackdrop" hidden></div>
@@ -250,22 +243,23 @@
   <script src="assets/js/env.js?v=20260929-ceo"></script>
   <script src="assets/js/ceo-time.js?v=20260929-ceo"></script>
   <script src="assets/js/config.js?v=20261005-admin"></script>
-  <script src="assets/js/core.js?v=20261006-mobile"></script>
-  <script src="assets/js/forms.js?v=20260929-ceo"></script>
+  <script src="assets/js/core.js?v=20261012-mobile"></script>
+  <script src="assets/js/forms.js?v=20261012-mobile"></script>
   <script src="assets/js/dashboard.js?v=20260929-ceo"></script>
   <script src="assets/js/contracts.js?v=20260929-ceo"></script>
   <script src="assets/js/table.js?v=20260929-ceo"></script>
-  <script src="assets/js/records.js?v=20261005-admin"></script>
-  <script src="assets/js/ceo-finance.js?v=20261006-mobile"></script>
+  <script src="assets/js/records.js?v=20261012-mobile"></script>
+  <script src="assets/js/mobile-forms.js?v=20261012-mobile"></script>
+  <script src="assets/js/ceo-finance.js?v=20261012-mobile"></script>
   <script src="assets/js/admin-data.js?v=20261005"></script>
   <script src="assets/js/workspaces.js?v=20261005"></script>
-  <script src="assets/js/push-reminders.js?v=20261005"></script>
-  <script src="assets/js/ceo-agenda.js?v=20261006-mobile"></script>
-  <script src="assets/js/ceo-ideas.js?v=20260929-ceo"></script>
+  <script src="assets/js/push-reminders.js?v=20261012-mobile"></script>
+  <script src="assets/js/ceo-agenda.js?v=20261012-mobile"></script>
+  <script src="assets/js/ceo-ideas.js?v=20261012-mobile"></script>
   <script src="assets/js/jarvis-voice.js?v=20261001-apple"></script>
   <script src="assets/js/jarvis.js?v=20261004-admin"></script>
-  <script src="assets/js/ceo-shell.js?v=20261006-mobile"></script>
-  <script src="assets/js/boot.js?v=20261006-mobile"></script>
+  <script src="assets/js/ceo-shell.js?v=20261012-mobile"></script>
+  <script src="assets/js/boot.js?v=20261012-mobile"></script>
   <script src="assets/js/pwa-install.js?v=20261004-admin"></script>
 </body>
 </html>

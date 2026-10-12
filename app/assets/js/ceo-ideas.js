@@ -160,6 +160,7 @@
     dialog.querySelectorAll('label.ceo-field').forEach(label => {
       label.querySelector('input,select,textarea')?.setAttribute('aria-label', label.firstChild.textContent.trim());
     });
+    root.ZamaMobileForms?.prepare(dialog);
     document.body.appendChild(dialog);
     dialog.addEventListener("close", () => dialog.remove());
     dialog.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => dialog.close()));

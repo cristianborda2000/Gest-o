@@ -28,7 +28,6 @@ function renderCeoModule() {
   container.hidden = !isCeo;
   workspace.hidden = isCeo;
   document.querySelector('.stats').hidden = isCeo;
-  quickAddBtn.hidden = isCeo;
   document.body.dataset.module = activeModule;
   if (!isCeo) return false;
   moduleTitle.textContent = modules[activeModule].title;
@@ -45,11 +44,50 @@ function renderCeoModule() {
   return true;
 }
 
+function ceoOverviewWeek(targetState, today = ZamaTime.today()) {
+  const weekday = new Date(`${today}T12:00:00Z`).getUTCDay();
+  const from = ZamaTime.addDays(today, -((weekday + 6) % 7));
+  const tasks = [];
+  const days = Array.from({ length: 7 }, (_, offset) => {
+    const date = ZamaTime.addDays(from, offset);
+    const rows = ZamaAgenda.todayTasks(targetState, date).map(row => {
+      const index = tasks.length;
+      tasks.push(row);
+      return { row, index };
+    });
+    return { date, rows };
+  });
+  return { today, from, to: days[6].date, days, tasks };
+}
+
+function renderCeoWeek(week) {
+  const { isDone, isCancelled, taskStatus } = ZamaAgenda.helpers;
+  const done = week.tasks.filter(isDone).length;
+  const cancelled = week.tasks.filter(isCancelled).length;
+  const pending = week.tasks.length - done - cancelled;
+  const summary = `${pending} ${pending === 1 ? 'pendente' : 'pendentes'} · ${done} ${done === 1 ? 'concluída' : 'concluídas'}${cancelled ? ` · ${cancelled} ${cancelled === 1 ? 'cancelada' : 'canceladas'}` : ''}`;
+  const shortDate = date => ZamaTime.label(date, { year: undefined });
+  return `<section class="ceo-card ceo-today-overview ceo-week-overview" aria-labelledby="overviewWeekTitle">
+    <div class="ceo-card-head"><div><h2 id="overviewWeekTitle">Tarefas da semana</h2><p>${shortDate(week.from)} a ${shortDate(week.to)} · Seg a dom</p></div><button class="ceo-button primary" data-overview-new="agenda">+ Tarefa</button></div>
+    <p class="ceo-week-summary" aria-live="polite">${summary}</p>
+    ${!week.tasks.length ? '<div class="ceo-empty ceo-week-empty">Sua semana está livre.<small>Adicione sua próxima tarefa.</small></div>' : ''}
+    <div class="ceo-week-days">${week.days.map(day => `<section class="ceo-week-day ${day.date === week.today ? 'is-today' : ''}" data-overview-date="${day.date}">
+      <h3><span>${ZamaTime.label(day.date, { weekday: 'long', day: undefined, month: undefined, year: undefined })}</span><time datetime="${day.date}">${shortDate(day.date)}</time>${day.date === week.today ? '<span class="ceo-week-today">Hoje</span>' : ''}</h3>
+      ${day.rows.length ? day.rows.map(({ row, index }) => `<div class="ceo-week-task ${isDone(row) ? 'is-done' : ''} ${isCancelled(row) ? 'is-cancelled' : ''}">
+        <label class="ceo-week-check"><input type="checkbox" data-overview-complete="${index}" aria-label="${isDone(row) ? 'Reabrir' : 'Concluir'} ${escapeHtml(row.nome)}" ${isDone(row) ? 'checked' : ''} ${isCancelled(row) ? 'disabled' : ''}></label>
+        <button class="ceo-week-task-open" data-overview-task="${index}" aria-label="Editar ${escapeHtml(row.nome)} em ${shortDate(day.date)}"><strong>${escapeHtml(row.nome)}</strong><span class="ceo-week-task-meta"><time>${escapeHtml(row.hora || 'Dia todo')}</time><span class="${isDone(row) ? 'is-complete' : taskStatus(row) === 'Atrasada' ? 'is-overdue' : ''}">${escapeHtml(taskStatus(row))}</span></span></button>
+      </div>`).join('') : '<p class="ceo-week-day-empty">Sem tarefas</p>'}
+    </section>`).join('')}</div>
+    <button class="ceo-button ceo-full ceo-week-agenda" data-overview-go="agenda">Abrir agenda ↗</button>
+  </section>`;
+}
+
 function renderCeoOverview(container) {
   const period = ZamaTime.monthRange(overviewMonth);
   const total = ZamaFinance.totals(state, period);
   const money = ZamaFinance.formatMoney;
-  const tasks = ZamaAgenda.todayTasks(state);
+  const week = ceoOverviewWeek(state);
+  const tasks = week.tasks;
   const ideas = ZamaIdeas.recent(state, 4);
   const settled = total.rows.filter(ZamaFinance.isSettled);
   const latest = [...total.rows].sort((a,b) => ZamaFinance.effectiveDate(b).localeCompare(ZamaFinance.effectiveDate(a))).slice(0, 5);
@@ -63,8 +101,8 @@ function renderCeoOverview(container) {
     ['Saldo do mês', total.balanceCents, 'chart', 'neutral', 'Entradas menos saídas'],
     ['Investimentos', total.investmentCents, 'coins', 'sand', 'Realizados · saídas vinculadas']
   ];
-  const next = ZamaAgenda.nextReminder(state);
-  container.innerHTML = `
+  container.innerHTML = `<div class="ceo-overview-layout">
+    ${renderCeoWeek(week)}
     <div class="ceo-overview-toolbar"><span class="ceo-eyebrow">SEU NEGÓCIO EM PERSPECTIVA</span><div class="ceo-toolbar">
       <label class="ceo-period">Período <input type="month" id="overviewMonth" value="${overviewMonth}" aria-label="Período da visão geral"></label>
       <button class="ceo-button primary" data-overview-new="financeiro">${ceoIcon('plus')} Nova movimentação</button>
@@ -75,10 +113,6 @@ function renderCeoOverview(container) {
         ${renderCeoChart(settled, period)}
         ${latest.length ? `<div class="ceo-table-scroll"><table class="ceo-table"><thead><tr><th>Descrição</th><th>Situação</th><th class="ceo-number">Valor</th></tr></thead><tbody>${latest.map(row => `<tr><td><strong>${escapeHtml(row.nome)}</strong><small>${escapeHtml(row.responsavel || row.categoria || 'Sem categoria')} · ${ZamaTime.label(ZamaFinance.effectiveDate(row))}</small></td><td><span class="ceo-badge ${ZamaFinance.isSettled(row) ? 'green' : 'amber'}">${escapeHtml(row.status)}</span></td><td class="ceo-number ${ZamaFinance.direction(row) === 'Entrada' ? 'ceo-positive' : 'ceo-negative'}">${ZamaFinance.direction(row) === 'Entrada' ? '+' : '−'} ${money(ZamaFinance.amountCents(row))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="ceo-empty">Ainda não há movimentações neste período.<small>Registre uma entrada ou saída para começar.</small></div>'}
       </section>
-      <section class="ceo-card ceo-today-overview"><div class="ceo-card-head"><div><h2>Agenda de hoje</h2><p>${ZamaTime.label(ZamaTime.today(), { day: 'numeric', month: 'long' })}</p></div><button class="ceo-button" data-overview-new="agenda">+ Tarefa</button></div>
-        <div class="ceo-today-list">${tasks.length ? tasks.slice(0,5).map((row,index) => `<div class="ceo-today-row"><time>${escapeHtml(row.hora || 'Dia todo')}</time><input type="checkbox" class="ceo-task-dot" data-overview-complete="${index}" aria-label="${/conclu/i.test(row.status) ? 'Reabrir' : 'Concluir'} ${escapeHtml(row.nome)}" ${/conclu/i.test(row.status) ? 'checked' : ''} ${/cancel/i.test(row.status) ? 'disabled' : ''}><button class="ceo-task-open" data-overview-task="${index}"><strong>${escapeHtml(row.nome)}</strong><small>${escapeHtml(row.prioridade || 'Média')} · ${escapeHtml(ZamaAgenda.helpers.taskStatus(row))}</small></button></div>`).join('') : '<div class="ceo-empty">Seu dia está livre.<small>Adicione sua próxima tarefa.</small></div>'}</div>
-        <button class="ceo-next-reminder" data-overview-go="agenda">${ceoIcon('bell')}<span><small>Próximo lembrete</small><strong>${next ? `${ZamaTime.label(ZamaTime.nowParts(next.dueAt).date)} · ${ZamaTime.nowParts(next.dueAt).time} — ${escapeHtml(next.title)}` : 'Nenhum lembrete agendado'}</strong></span><span>↗</span></button>
-      </section>
       <section class="ceo-card ceo-invest-overview"><div class="ceo-card-head"><div><h2>Investimentos</h2><p>Crescimento da ZAMA</p></div><button class="ceo-icon-button" data-overview-go="investimentos" aria-label="Ver investimentos">↗</button></div>
         ${categories.length ? categories.map(([category, cents]) => `<div class="ceo-invest-category"><div><strong>${escapeHtml(category)}</strong><span>${money(cents)}</span></div><progress max="${Math.max(total.investmentCents, cents, 1)}" value="${cents}" aria-label="${escapeHtml(category)}"></progress></div>`).join('') : '<div class="ceo-empty">Um espaço para seu próximo passo.<small>Organize seus investimentos planejados e realizados.</small></div>'}
         <button class="ceo-button ceo-full" data-overview-new="investimentos">+ Novo investimento</button>
@@ -86,7 +120,7 @@ function renderCeoOverview(container) {
       <section class="ceo-card ceo-ideas-overview"><div class="ceo-card-head"><div><h2>Banco de ideias</h2><p>Boas ideias merecem um lugar</p></div><button class="ceo-button primary" data-overview-new="ideias">+ Nova ideia</button></div>
         <div class="ceo-recent-ideas">${ideas.length ? ideas.map(row => `<button class="ceo-idea-preview" data-overview-idea="${escapeHtml(row.id)}"><span class="ceo-idea-stage">${ceoIcon('bulb')} ${escapeHtml(ZamaIdeas.stageLabels[row.etapa] || row.etapa)}</span><strong>${escapeHtml(row.titulo)}</strong><p>${escapeHtml(row.descricao || 'Uma ideia esperando seu próximo passo.')}</p><span class="ceo-badge">${escapeHtml(row.categoria || 'Geral')}</span></button>`).join('') : '<div class="ceo-empty">O que você quer colocar em prática?<small>Capture uma ideia e acompanhe sua evolução.</small></div>'}</div>
       </section>
-    </div><p class="ceo-footnote">${ceoIcon('chart')} Dados da sua conta · Horário de Brasília</p>`;
+    </div><p class="ceo-footnote">${ceoIcon('chart')} Dados da sua conta · Horário de Brasília</p></div>`;
   container.querySelector('#overviewMonth').addEventListener('change', event => {
     if (/^\d{4}-\d{2}$/.test(event.target.value)) overviewMonth = event.target.value;
     render();

@@ -36,11 +36,15 @@ O escopo é a agenda pessoal. Trocar para uma empresa compartilhada desativa a i
 
 ## Uso no celular
 
+Na página inicial, as tarefas da semana aparecem primeiro no celular, agrupadas de segunda a domingo no horário de São Paulo. A lista inclui as ocorrências e exceções da agenda; editar ou concluir uma ocorrência preserva as demais. O seletor de mês financeiro não muda a semana exibida.
+
 O cabeçalho separa o nome da empresa do título da página. O menu lateral tem botão de fechar, fechamento ao tocar fora e navegação por teclado; o conteúdo ao fundo fica inativo enquanto o menu está aberto. Trocar de módulo retorna ao início da página.
 
 No financeiro, as movimentações e os gastos fixos aparecem como cartões no celular, com os mesmos valores e ações da tabela no computador. Campos de data, botões e formulários têm mais espaço. Configurações ocupa a tela e mantém o botão de fechar visível durante a rolagem. A agenda mostra a quantidade de tarefas no calendário e os detalhes no dia selecionado.
 
-Os testes `mobile-layout.spec.js` e `mobile-settings.spec.js` verificam larguras de 320, 390 e 430 pixels e formulários em telas de 360 pixels de altura, com contas simuladas no Chromium. Isso verifica o layout e os fluxos, sem substituir uma conferência no aparelho real com teclado virtual e notificações autorizadas.
+O formulário lateral da interface antiga e seu botão flutuante foram retirados. Os editores atuais de financeiro, investimentos, tarefas e ideias ocupam a tela do telefone: campos rolam em uma área própria, com cabeçalho e ações acessíveis. A altura acompanha o teclado pelo `visualViewport`. Falhas no salvamento mantêm os dados digitados para tentar novamente.
+
+Os testes `mobile-layout.spec.js`, `mobile-settings.spec.js`, `mobile-forms.spec.js` e `overview-week.spec.js` verificam larguras de 320, 390 e 430 pixels, formulários em telas de 360 pixels de altura e a semana em São Paulo, com contas simuladas no Chromium. Isso verifica o layout e os fluxos, sem substituir uma conferência no aparelho real com teclado virtual e notificações autorizadas.
 
 ## Validação e publicação
 

@@ -21,7 +21,9 @@ CRON_SECRET=
 
 4. Gere `CRON_SECRET` aleatório com pelo menos 32 caracteres e configure um agendador para chamar `GET /api/reminder-cron` **a cada minuto**, com o cabeçalho `Authorization: Bearer <CRON_SECRET>`. Use o gerenciador de segredos do agendador; o token não deve aparecer na URL. O código não instala um cron automaticamente. Em Vercel, confirme se o plano permite essa frequência; caso contrário, use um agendador externo. Cron diário não atende este recurso.
 5. Publique as funções `/api/reminders` e `/api/reminder-cron`, o worker e os scripts. Somente depois de validar a infraestrutura, mude `PUSH_REMINDERS_ENABLED=true` e faça o deploy correspondente. Configuração incompleta mantém o recurso indisponível, mesmo com a flag ligada.
-6. Entre na conta pessoal, ative as preferências em **Agenda → Configurar**, configure uma tarefa futura e clique **Ativar neste dispositivo** na agenda ou nas configurações da conta. Aceite a permissão do navegador. Faça a verificação de entrega com um dispositivo de teste autorizado, após a ativação real do ambiente.
+6. Entre na conta pessoal. Em **Agenda → Configurar**, marque **Ativar lembretes da agenda**, escolha os avisos e salve as preferências. Depois clique **Ativar neste dispositivo** na agenda ou nas configurações da conta e aceite a permissão do navegador. Salvar os horários não concede permissão ao aparelho. Configure uma tarefa futura para verificar a entrega no dispositivo autorizado.
+
+No iPhone, abra o ZAMA pelo ícone instalado na Tela de Início. O painel diferencia **Agenda pausada**, **Dispositivo não ativado**, **Permissão bloqueada** e **Servidor indisponível**; o botão **Configurar agenda** abre as preferências quando estão pausadas. O servidor aceita as duas origens verificadas `https://zam4.com` e `https://www.zam4.com` quando uma delas é a origem configurada. O cliente resolve o endereço público antes de enviar o token e recusa redirecionamentos nas chamadas autenticadas; outros domínios não recebem essa autorização.
 
 ## Comportamento e limites
 

@@ -1,5 +1,6 @@
 /* Phone layouts share the same data and actions as the desktop application. */
 .ceo-menu-close,.ceo-menu-backdrop{display:none}
+.mobile-form-fields{display:contents}
 @media(max-width:720px){
   html{scroll-padding-top:16px}
   body{overflow-wrap:break-word}
@@ -27,7 +28,19 @@
   .ceo-icon-button{min-width:44px}
   .ceo-field{min-width:0}
   .ceo-field input:not([type=checkbox]),.ceo-field select,.ceo-field textarea,.ceo-form-grid input:not([type=checkbox]),.ceo-form-grid select,.ceo-form-grid textarea,.za-dialog .ceo-field input,.za-dialog .ceo-field select,.za-dialog .ceo-field textarea,.ceo-idea-move select{min-width:0;min-height:44px;font-size:16px}
-  .ceo-dialog,.za-dialog{width:calc(100% - 24px);max-height:calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));padding:20px 16px;overscroll-behavior:contain;scroll-padding-block:16px;box-sizing:border-box}
+  html.mobile-form-open{overflow:hidden;overscroll-behavior:none}
+  .ceo-dialog,.za-dialog{position:fixed;inset:var(--mobile-form-top,0px) 0 auto;margin:0;width:100%;max-width:none;height:var(--mobile-form-height,100dvh);max-height:none;border:0;border-radius:0;padding:20px 16px;box-shadow:none;overscroll-behavior:contain;scroll-padding-block:16px;box-sizing:border-box;background:#fff}
+  .ceo-dialog.mobile-form-page[open],.za-dialog.mobile-form-page[open]{display:flex;flex-direction:column;padding:0;overflow:hidden}
+  .mobile-form-page .mobile-form-layout,.za-dialog form.za-task-form.mobile-form-layout{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0;gap:0;margin:0;overflow:hidden}
+  .mobile-form-page .mobile-form-header{display:flex;align-items:center;justify-content:space-between;flex:none;gap:12px;margin:0;padding:calc(12px + env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 12px max(16px,env(safe-area-inset-left));border-bottom:1px solid var(--line);background:#fff;min-width:0}
+  .mobile-form-page .mobile-form-header h2{margin:0;min-width:0;font-size:20px;line-height:1.3}
+  .mobile-form-header [data-close]{width:44px;height:44px;min-width:44px;flex:none;font-size:22px}
+  .mobile-form-page .mobile-form-fields{display:flex;flex-direction:column;flex:1;min-height:0;gap:18px;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:20px max(16px,env(safe-area-inset-right)) 24px max(16px,env(safe-area-inset-left));scroll-padding-block:16px}
+  .mobile-form-fields>*{flex-shrink:0;min-width:0}
+  .za-task-form>.mobile-form-fields{display:grid;grid-template-columns:minmax(0,1fr);align-content:start;gap:15px}
+  .mobile-form-page .mobile-form-actions{display:flex;flex:none;gap:10px;flex-wrap:wrap;margin:0;padding:12px max(16px,env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));border-top:1px solid var(--line);background:#fff}
+  .mobile-form-actions>.ceo-button{min-height:48px;flex:1 1 120px;margin:0}
+  .mobile-form-fields :is(input,textarea,select){scroll-margin-block:16px}
   .ceo-dialog h2,.za-dialog-head h2{font-size:21px;line-height:1.3;overflow-wrap:anywhere}
   .ceo-dialog-actions,.za-form-actions,.ceo-idea-dialog-footer{flex-wrap:wrap}
   .ceo-dialog-actions>.ceo-button,.za-form-actions>.ceo-button,.ceo-idea-dialog-footer>.ceo-button{flex:1 1 110px}

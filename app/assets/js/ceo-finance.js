@@ -419,6 +419,7 @@
     const titleId = uid(); element.setAttribute("aria-labelledby", titleId);
     element.innerHTML = `<form class="ceo-finance-form"><div class="ceo-toolbar"><h2 id="${safe(titleId)}">${safe(title)}</h2><button type="button" class="ceo-button" data-close aria-label="Fechar">✕</button></div>${content}<p class="ceo-form-error" role="alert" hidden></p><div class="ceo-toolbar ceo-dialog-actions"><button class="ceo-button" type="button" data-close>Cancelar</button><button class="ceo-button primary" type="submit">${safe(submitLabel)}</button></div></form>`;
     const previousFocus = document.activeElement;
+    global.ZamaMobileForms?.prepare(element);
     document.body.appendChild(element);
     element.querySelectorAll("[data-close]").forEach(button => button.onclick = () => element.close());
     element.addEventListener("close", () => { element.remove(); if (previousFocus?.isConnected) previousFocus.focus(); });

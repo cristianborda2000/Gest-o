@@ -3,10 +3,20 @@
   'use strict';
   let generation = 0, userId = '', config = null, subscription = null, registered = false, busy = false, failure = '', observer;
   let registrationRef = null, pendingCleanup = Promise.resolve(), activeOperation = null;
+  let apiOrigin = '';
   const regions = new Set();
   const ownWorkspace = () => typeof cloudOwnerId === 'undefined' || !cloudOwnerId || cloudOwnerId === userId;
   const supported = () => Boolean(global.isSecureContext && global.navigator?.serviceWorker && global.PushManager && global.Notification);
   const workerUrl = () => new URL('notification-worker.js', global.location.href);
+  const preferences = () => typeof state !== 'undefined' && state ? state.agendaSettings || {} : {};
+  const agendaPaused = () => !preferences().enabled || (preferences().dailyEnabled === false && preferences().taskEnabled === false);
+  function trustedOrigin(value) {
+    try {
+      const candidate = new URL(value), current = new URL(global.location.href);
+      const firstParty = ['https://zam4.com', 'https://www.zam4.com'];
+      return candidate.origin === current.origin || (firstParty.includes(current.origin) && firstParty.includes(candidate.origin)) ? candidate.origin : '';
+    } catch { return ''; }
+  }
   async function session() {
     if (typeof supabaseClient === 'undefined') return null;
     const { data } = await supabaseClient.auth.getSession(); return data?.session || null;
@@ -25,9 +35,16 @@
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     const controller = new AbortController(), timeout = global.setTimeout(() => controller.abort(), 10000);
     try {
-      const response = await global.fetch(`/api/reminders?path=${path}`, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: controller.signal, cache: 'no-store' });
+      const response = await global.fetch(`${apiOrigin}/api/reminders?path=${path}`, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: controller.signal, cache: 'no-store', redirect: path === 'config' ? 'follow' : 'error' });
       let result; try { result = await response.json(); } catch { throw new Error('Serviço de lembretes ainda não disponível.'); }
       if (!response.ok) throw new Error(result.error || 'Não foi possível configurar os lembretes.');
+      // Resolve the public request first. Authenticated requests go directly to
+      // that verified origin, so a www/apex redirect cannot strip the token.
+      if (path === 'config') {
+        const origin = trustedOrigin(response.url || result.appOrigin || global.location.href);
+        if (!origin) throw new Error('Endereço do serviço de lembretes não reconhecido.');
+        apiOrigin = origin;
+      }
       return result;
     } finally { global.clearTimeout(timeout); }
   }
@@ -39,8 +56,9 @@
     if (!config) return 'Verificando disponibilidade dos lembretes…';
     if (!config.enabled) return config.reason;
     if (global.Notification.permission === 'denied') return 'Notificações bloqueadas. Libere a permissão nas configurações deste site no navegador.';
-    if (registered) return 'Ativado neste navegador. O servidor usa os horários da sua agenda pessoal em São Paulo. Mantenha os lembretes da agenda ativados; a entrega depende da conexão e das permissões do dispositivo.';
-    return 'Receba avisos mesmo com a página fechada. A ativação requer sua permissão e usa as preferências da agenda pessoal. Cada lembrete chega ao último dispositivo ativado ou ao aplicativo aberto.';
+    if (registered && agendaPaused()) return 'Este dispositivo está autorizado, mas os lembretes da agenda estão pausados. Em “Configurar agenda”, ative os lembretes e escolha os avisos que deseja receber.';
+    if (registered) return 'Ativado neste dispositivo. Os lembretes seguem sua agenda pessoal no horário de São Paulo. A entrega depende da conexão e das permissões do dispositivo.';
+    return `Este dispositivo ainda não foi ativado. Toque em “Ativar neste dispositivo” e permita as notificações.${agendaPaused() ? ' Depois, use “Configurar agenda” para ativar os horários e tipos de aviso.' : ''}`;
   }
   function paint() {
     for (const region of regions) {
@@ -53,15 +71,18 @@
       const deactivate = region.querySelector('[data-push-disable]');
       deactivate.hidden = !subscription; deactivate.disabled = busy;
       const badge = region.querySelector('[data-push-badge]');
-      badge.textContent = registered ? 'Ativado' : config?.enabled ? 'Não ativado' : 'Aguardando configuração';
+      badge.textContent = failure ? 'Não foi possível verificar' : !config ? 'Verificando' : !config.enabled ? 'Servidor indisponível' : !supported() ? 'Abra pelo ícone do app' : global.Notification.permission === 'denied' ? 'Permissão bloqueada' : registered ? agendaPaused() ? 'Agenda pausada' : 'Ativado' : 'Dispositivo não ativado';
+      const configure = region.querySelector('[data-push-preferences]');
+      configure.hidden = !userId || !ownWorkspace() || !agendaPaused();
     }
   }
   function mount(container) {
     if (!container || container.querySelector('[data-push-region]')) return;
     const region = global.document.createElement('section');
     region.dataset.pushRegion = ''; region.className = 'settings-section zama-push-reminders';
-    region.innerHTML = '<div class="ceo-toolbar"><strong>Lembretes com o app fechado</strong><span class="ceo-badge" data-push-badge></span></div><p class="settings-note za-help" role="status" aria-live="polite" data-push-status></p><div class="ceo-toolbar"><button class="ceo-button primary" type="button" data-push-enable>Ativar neste dispositivo</button><button class="ceo-button" type="button" data-push-disable hidden>Desativar neste dispositivo</button></div>';
+    region.innerHTML = '<div class="ceo-toolbar"><strong>Lembretes com o app fechado</strong><span class="ceo-badge" data-push-badge></span></div><p class="settings-note za-help" role="status" aria-live="polite" data-push-status></p><div class="ceo-toolbar"><button class="ceo-button primary" type="button" data-push-enable>Ativar neste dispositivo</button><button class="ceo-button" type="button" data-push-preferences>Configurar agenda</button><button class="ceo-button" type="button" data-push-disable hidden>Desativar neste dispositivo</button></div>';
     region.querySelector('[data-push-enable]').onclick = enable;
+    region.querySelector('[data-push-preferences]').onclick = () => global.ZamaAgenda?.openSettings();
     region.querySelector('[data-push-disable]').onclick = async () => {
       busy = true; failure = ''; paint();
       try { await disconnect({ keepUser: true }); } catch { failure = 'Não foi possível concluir a desativação. Tente novamente.'; }
@@ -104,7 +125,7 @@
     return registration;
   }
   async function init() {
-    const epoch = ++generation; failure = ''; registered = false;
+    const epoch = ++generation; failure = ''; registered = false; config = null;
     // A previous account may still be revoking its browser subscription. Do not
     // start another account until those side effects are fully finished.
     await pendingCleanup.catch(() => {});
@@ -121,8 +142,9 @@
       observer.observe(global.document.body, { childList: true, subtree: true });
     }
     try {
-      config = await api('config');
+      const nextConfig = await api('config');
       if (epoch !== generation) return;
+      config = nextConfig;
       const registration = await existingRegistration();
       const existing = await registration?.pushManager?.getSubscription();
       if (epoch !== generation) return;
@@ -170,8 +192,10 @@
       if (epoch !== generation) return;
       created = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: applicationKey(config.publicKey) });
       if (epoch !== generation) { await created.unsubscribe(); return; }
-      await api('subscription', 'POST', { keyId: config.keyId, subscription: created.toJSON() });
+      const result = await api('subscription', 'POST', { keyId: config.keyId, subscription: created.toJSON() });
       if (epoch !== generation) { await created.unsubscribe(); return; }
+      if (!result.registered) throw new Error('O servidor não confirmou a ativação. Tente novamente.');
+      if (global.Notification.permission !== 'granted') throw new Error('A permissão foi removida. Autorize as notificações e tente novamente.');
       subscription = created; registered = true;
       await workerSession(registration, userId);
     } catch (error) {
@@ -217,5 +241,5 @@
   }
   function reset() { return invalidate(); }
   function disconnect({ keepUser = false } = {}) { return invalidate({ keepUser, revokeServer: true }); }
-  global.ZamaPushReminders = { init, mount, disconnect, reset };
+  global.ZamaPushReminders = { init, mount, disconnect, reset, refresh: paint };
 })(window);
