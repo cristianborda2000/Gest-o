@@ -18,8 +18,8 @@ Nao publique arquivos de servidor dentro desta pasta. Nao coloque chaves
 OpenAI nem a service-role do Supabase em assets/js/env.js.
 
 Clientes, mensalidades, Marketing e RH legados continuam preservados no estado
-e nos backups. A nova área de Projetos usa tabelas separadas, etapas de catálogo
-e estruturação, credenciais protegidas e acesso por responsável. Veja
+e nos backups. A área de Projetos usa tabelas separadas, listas de produção
+criadas manualmente, credenciais protegidas e acesso por responsável. Veja
 [instalação e uso de Projetos](../docs/PROJETOS.md).
 
 Nunca execute database/supabase-setup.sql em um banco com dados existentes:

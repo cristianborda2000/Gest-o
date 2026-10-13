@@ -7,7 +7,8 @@ const { randomUUID } = require('node:crypto');
 const { PGlite } = require('@electric-sql/pglite');
 const { pgcrypto } = require('@electric-sql/pglite/contrib/pgcrypto');
 const migration = fs.readFileSync('database/migrations/20261012_projects.sql', 'utf8');
-let db;
+const listsMigration = fs.readFileSync('database/migrations/20261013_project_lists.sql', 'utf8');
+let db, legacyMigrationFixture;
 
 before(async () => {
   db = new PGlite({ extensions: { pgcrypto } });
@@ -21,6 +22,8 @@ before(async () => {
     create policy own on public.app_state to authenticated using(auth.uid()=user_id) with check(auth.uid()=user_id);`);
   await db.exec(fs.readFileSync('database/migrations/20261005_workspaces.sql', 'utf8'));
   await db.exec(migration);
+  legacyMigrationFixture = await fixture();
+  await db.exec(listsMigration);
 });
 after(async () => db?.close());
 
@@ -32,6 +35,7 @@ async function as(id, fn) {
 const rpc = async (sql, args = []) => (await db.query(sql, args)).rows[0]?.result;
 const save = (user, owner, data) => as(user, () => rpc('select zama_project_save($1,$2) result', [owner, JSON.stringify(data)]));
 const list = (user, owner) => as(user, () => rpc('select zama_projects_list($1) result', [owner]));
+const listV2 = (user, owner) => as(user, () => rpc('select zama_projects_list_v2($1) result', [owner]));
 const secret = (user, owner, id) => as(user, () => rpc('select zama_project_secret($1,$2) result', [owner, id]));
 const denied = { code: '42501' };
 async function user(confirmed = true) {
@@ -58,6 +62,7 @@ test('migration is repeatable, preserves business state and preserves the existi
   const state = await db.query('select * from app_state where user_id=$1', [owner.id]);
   const key = await db.query('select secret from zama_private.project_key');
   await db.exec(migration);
+  await db.exec(listsMigration);
   assert.deepEqual(await db.query('select secret from zama_private.project_key'), key);
   assert.deepEqual(await db.query('select * from app_state where user_id=$1', [owner.id]), state);
   assert.equal(await secret(owner.id, owner.id, project.id), 'Segredo-exclusivo!123');
@@ -96,7 +101,7 @@ test('only owner and assigned current members list each project; a finance edito
 test('responsible can advance both tracks and notes, but cannot alter protected fields or delete', async () => {
   const { owner, member, stranger, project } = await fixture();
   const advanced = await save(member.id, owner.id, {
-    ...project, status: 'in_progress', notes: 'Fotos recebidas',
+    id: project.id, revision: project.revision, status: 'in_progress', notes: 'Fotos recebidas',
     catalog_steps: [{ ...project.catalog_steps[0], done: true }],
     onboarding_steps: [{ ...project.onboarding_steps[0], done: true }]
   });
@@ -217,6 +222,7 @@ test('direct table/key/helper access is denied even to authenticated owners; ano
   const { owner, project } = await fixture();
   for (const query of [
     'select * from zama_projects', 'select * from zama_private.project_key',
+    "select zama_private.project_lists(null,'[]','[]')", "select zama_private.project_validate_steps('[]')",
     "select zama_private.project_encrypt('plaintext')", "select zama_private.project_decrypt('x'::bytea)",
     'delete from zama_projects', "update zama_projects set responsible_email='attacker@zama.test'"
   ]) await assert.rejects(as(owner.id, () => db.query(query)), denied);
@@ -224,6 +230,7 @@ test('direct table/key/helper access is denied even to authenticated owners; ano
   try {
     for (const [query, args] of [
       ['select zama_projects_list($1)', [owner.id]], ['select zama_project_save($1,$2)', [owner.id, '{}']],
+      ['select zama_projects_list_v2($1)', [owner.id]],
       ['select zama_project_secret($1,$2)', [owner.id, project.id]], ['select zama_project_delete($1,$2)', [owner.id, project.id]]
     ]) await assert.rejects(db.query(query, args), denied);
   } finally { await db.exec('reset role'); }
@@ -272,8 +279,131 @@ test('migration resolves pgcrypto installed in public and retains ciphertext acr
   const { owner, project } = await fixture();
   await db.exec('alter extension pgcrypto set schema public');
   await db.exec(migration);
+  await db.exec(listsMigration);
   assert.equal(await secret(owner.id, owner.id, project.id), 'Segredo-exclusivo!123');
   const updated = await save(owner.id, owner.id, { id: project.id, revision: project.revision, password: 'Extensão existente' });
   assert.equal(updated.has_password, true);
   assert.equal(await secret(owner.id, owner.id, project.id), 'Extensão existente');
+});
+
+test('manual-list migration preserves legacy progress, credentials and revision exactly once', async () => {
+  const { owner, project } = legacyMigrationFixture;
+  const migrated = (await listV2(owner.id, owner.id))[0];
+  assert.deepEqual(migrated.production_lists, [
+    { id: 'catalog', title: 'Catálogo', steps: project.catalog_steps },
+    { id: 'onboarding', title: 'Estruturação', steps: project.onboarding_steps }
+  ]);
+  assert.equal(migrated.revision, project.revision);
+  assert.equal(migrated.updated_at, project.updated_at);
+  assert.equal(await secret(owner.id, owner.id, project.id), 'Segredo-exclusivo!123');
+  const cleared = await save(owner.id, owner.id, { id: project.id, revision: migrated.revision, production_lists: [] });
+  await db.exec(listsMigration);
+  assert.deepEqual((await listV2(owner.id, owner.id))[0], cleared);
+  assert.deepEqual(cleared.production_lists, []);
+  assert.deepEqual(cleared.catalog_steps, []);
+  assert.deepEqual(cleared.onboarding_steps, []);
+  const normalized = await rpc("select zama_private.project_lists('null','[]','[]') result");
+  assert.equal(normalized.length, 2);
+  assert.deepEqual(await rpc("select zama_private.project_lists('[]','[{\"id\":\"old\"}]','[]') result"), []);
+});
+
+test('new projects start without fixed lists and custom lists support create, rename, reorder and removal', async () => {
+  const owner = await user();
+  let project = await save(owner.id, owner.id, { title: 'Produção manual', client_name: 'Cliente' });
+  assert.deepEqual(project.production_lists, []);
+  const production = [
+    { id: 'creative', title: 'Criação', steps: [{ id: 'brief', label: 'Receber briefing', done: false }] },
+    { id: 'delivery', title: 'Entrega', steps: [] }
+  ];
+  project = await save(owner.id, owner.id, { id: project.id, revision: project.revision, production_lists: production });
+  assert.deepEqual(project.production_lists, production);
+  project = await save(owner.id, owner.id, { id: project.id, revision: project.revision, notes: 'Edição parcial' });
+  assert.deepEqual(project.production_lists, production);
+  const reordered = [production[1], { ...production[0], title: 'Artes aprovadas', steps: [{ ...production[0].steps[0], done: true }] }];
+  project = await save(owner.id, owner.id, { id: project.id, revision: project.revision, production_lists: reordered });
+  assert.deepEqual(project.production_lists, reordered);
+  await db.exec(listsMigration);
+  assert.deepEqual((await listV2(owner.id, owner.id))[0].production_lists, reordered);
+  project = await save(owner.id, owner.id, { id: project.id, revision: project.revision, production_lists: [] });
+  assert.deepEqual(project.production_lists, []);
+});
+
+test('manual-list edits use existing assigned-member permissions and versioned list RPC authorization', async () => {
+  const { owner, member, stranger, project } = await fixture();
+  const custom = [{ id: 'production', title: 'Produção', steps: [{ id: 'same-id', label: 'Cortar', done: true }] }];
+  const edited = await save(member.id, owner.id, { id: project.id, revision: project.revision, production_lists: custom });
+  assert.deepEqual(edited.production_lists, custom);
+  assert.deepEqual(await listV2(member.id, owner.id), await list(member.id, owner.id));
+  assert.deepEqual(await listV2(stranger.id, owner.id), []);
+  assert.deepEqual(await listV2(owner.id, stranger.id), []);
+  await assert.rejects(save(stranger.id, owner.id, { id: project.id, revision: edited.revision, production_lists: [] }), denied);
+  await db.query("update zama_workspace_members set role='viewer' where owner_id=$1 and user_id=$2", [owner.id, member.id]);
+  assert.deepEqual((await listV2(member.id, owner.id))[0].production_lists, custom);
+  await assert.rejects(save(member.id, owner.id, { id: project.id, revision: edited.revision, production_lists: [] }), denied);
+  assert.equal(await secret(owner.id, owner.id, project.id), 'Segredo-exclusivo!123');
+});
+
+test('legacy checklist writes preserve unrelated manual lists and modern lists synchronize legacy fields', async () => {
+  const { owner, member, project } = await fixture();
+  const custom = { id: 'custom', title: 'Revisão final', steps: [{ id: 'review', label: 'Revisar', done: false }] };
+  const lists = [...project.production_lists, custom];
+  let edited = await save(owner.id, owner.id, { id: project.id, revision: project.revision, production_lists: lists });
+  const advanced = [{ ...project.catalog_steps[0], done: true }];
+  edited = await save(member.id, owner.id, { id: project.id, revision: edited.revision, catalog_steps: advanced });
+  assert.deepEqual(edited.production_lists[0].steps, advanced);
+  assert.deepEqual(edited.production_lists[2], custom);
+  assert.deepEqual(edited.onboarding_steps, project.onboarding_steps);
+  const replacement = [{ id: 'replacement', label: 'Nova tarefa', done: false }];
+  edited = await save(owner.id, owner.id, {
+    id: project.id, revision: edited.revision,
+    production_lists: [{ id: 'catalog', title: 'Catálogo revisado', steps: replacement }, custom],
+    catalog_steps: advanced
+  });
+  assert.deepEqual(edited.catalog_steps, replacement);
+  assert.deepEqual(edited.onboarding_steps, []);
+  assert.deepEqual(edited.production_lists[1], custom);
+});
+
+test('invalid manual lists reject atomically, including password and revision changes', async () => {
+  const { owner, project } = await fixture();
+  const step = { id: 's', label: 'Etapa', done: false };
+  const list = { id: 'l', title: 'Lista', steps: [step] };
+  const invalidLists = [
+    null, {}, 'text', [null], [[]], [{}], [{ ...list, id: '' }], [{ ...list, id: '\t\n' }],
+    [{ ...list, id: 'x'.repeat(81) }], [{ ...list, title: null }], [{ ...list, title: '\t\r\n' }],
+    [{ ...list, title: 'x'.repeat(255) }], [{ ...list, extra: true }], [list, list],
+    [{ ...list, steps: null }], [{ ...list, steps: {} }], [{ ...list, steps: [null] }],
+    [{ ...list, steps: [{ ...step, id: ' ' }] }], [{ ...list, steps: [{ ...step, id: '\t\n' }] }],
+    [{ ...list, steps: [{ ...step, id: 'x'.repeat(81) }] }],
+    [{ ...list, steps: [{ ...step, label: '' }] }], [{ ...list, steps: [{ ...step, label: '\t\n' }] }],
+    [{ ...list, steps: [{ ...step, label: 'x'.repeat(255) }] }],
+    [{ ...list, steps: [{ ...step, done: 'true' }] }], [{ ...list, steps: [{ ...step, password: 'unexpected' }] }],
+    [{ ...list, steps: [step, step] }],
+    Array.from({ length: 21 }, (_, i) => ({ ...list, id: String(i) })),
+    [{ ...list, steps: Array.from({ length: 101 }, (_, i) => ({ ...step, id: String(i) })) }]
+  ];
+  for (const production_lists of invalidLists) {
+    await assert.rejects(save(owner.id, owner.id, {
+      id: project.id, revision: project.revision, production_lists, password: 'Não gravar'
+    }), { code: '22023' });
+  }
+  assert.deepEqual((await listV2(owner.id, owner.id))[0], project);
+  assert.equal(await secret(owner.id, owner.id, project.id), 'Segredo-exclusivo!123');
+  const updated = await save(owner.id, owner.id, { id: project.id, revision: project.revision, production_lists: [list] });
+  await assert.rejects(save(owner.id, owner.id, {
+    id: project.id, revision: project.revision, production_lists: [], password: 'Também não gravar'
+  }), { code: '40001' });
+  assert.deepEqual((await listV2(owner.id, owner.id))[0], updated);
+  assert.equal(await secret(owner.id, owner.id, project.id), 'Segredo-exclusivo!123');
+});
+
+test('manual lists accept documented limits and allow the same task ID in different lists', async () => {
+  const owner = await user();
+  const production_lists = Array.from({ length: 20 }, (_, i) => ({
+    id: `${i}`.padEnd(80, 'l'), title: 'ç'.repeat(254),
+    steps: Array.from({ length: 100 }, (_, j) => ({ id: `${j}`.padEnd(80, 's'), label: 'ç'.repeat(254), done: false }))
+  }));
+  const saved = await save(owner.id, owner.id, { title: 'Limites', client_name: 'Cliente', production_lists });
+  assert.deepEqual(saved.production_lists, production_lists);
+  assert.deepEqual((await listV2(owner.id, owner.id))[0].production_lists, production_lists);
 });

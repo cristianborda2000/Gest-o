@@ -26,6 +26,7 @@ function sdk(seed, options = {}) {
   window.testPendingReads = []; window.testPendingWrites = [];
   window.testPendingSessions = [];
   window.testPendingProjectRpcs = [];
+  window.testProjectRpcError = options.projectRpcError || null;
   window.testReleaseProjectRpcs = () => { window.testPendingProjectRpcs.splice(0).forEach(resolve => resolve()); };
   window.testReleaseSessions = () => { window.testPendingSessions.splice(0).forEach(resolve => resolve()); };
   window.testReleaseReads = () => { window.testPendingReads.splice(0).forEach(resolve => resolve()); };
@@ -48,6 +49,7 @@ function sdk(seed, options = {}) {
       window.testRpcCalls.push({ name, params });
       if(window.testFailRpc === name) return {error:{message:'Não foi possível atualizar. Tente novamente.'}};
       if(name.startsWith('zama_project')) {
+        if(window.testProjectRpcError) return {error:structuredClone(window.testProjectRpcError)};
         const response=await fetch('/__test/projects', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,params,user:session?.user})});
         const result=await response.json();
         if(window.testDelayNextProjectRpc===name){window.testDelayNextProjectRpc='';await new Promise(resolve=>window.testPendingProjectRpcs.push(resolve));}
@@ -111,7 +113,7 @@ async function mock(page, data = seed, { jarvisVisible = false, projects, ...sdk
       const assigned=row=>own||row.responsible_email===user?.email;
       const error=message=>({error:{message}});
       let result;
-      if(name==='zama_projects_list') result={data:rows.filter(assigned).map(publicProject)};
+      if(name==='zama_projects_list_v2') result={data:rows.filter(assigned).map(publicProject)};
       else if(name==='zama_project_save') {
         const input=params.p_project, old=rows.find(row=>row.id===input.id);
         if(!own&&!old || old&&!assigned(old)) result=error('Acesso não autorizado.');

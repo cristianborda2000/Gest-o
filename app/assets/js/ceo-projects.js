@@ -2,8 +2,6 @@
 (function (root) {
   'use strict';
   const statuses = Object.freeze({ planning: 'Planejamento', in_progress: 'Em andamento', waiting: 'Aguardando cliente', completed: 'Concluído' });
-  const catalogDefaults = ['Receber produtos, fotos e preços', 'Organizar categorias do catálogo', 'Montar e revisar o catálogo', 'Aprovar com o cliente', 'Publicar e entregar o catálogo'];
-  const onboardingDefaults = ['Reunir dados e acessos do cliente', 'Definir estrutura e objetivos', 'Configurar a estrutura do cliente', 'Validar configurações e acessos', 'Orientar o cliente e concluir a entrega'];
   const text = value => String(value ?? '');
   const esc = value => text(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   const fold = value => text(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -26,6 +24,14 @@
   let errorMessage = '', notice = '', secretSequence = 0, secretTimer = null;
   const filters = { search: '', status: '' };
 
+  function productionLists(source) {
+    const lists = Array.isArray(source.production_lists) ? source.production_lists : [
+      { id: 'catalog', title: 'Catálogo', steps: source.catalog_steps },
+      { id: 'onboarding', title: 'Estruturação', steps: source.onboarding_steps }
+    ].filter(list => Array.isArray(list.steps) && list.steps.length);
+    return lists.map(list => ({ id: text(list.id), title: text(list.title), steps: Array.isArray(list.steps) ? list.steps.map(step => ({ id: text(step.id), label: text(step.label), done: step.done === true })) : [] }));
+  }
+
   // The allowlist makes it impossible for an accidental RPC password property to
   // enter the metadata cache, exports, the general app state, or local storage.
   function metadata(source) {
@@ -34,9 +40,7 @@
     ['id', 'title', 'client_name', 'company_name', 'client_email', 'access_url', 'responsible_email', 'responsible_name', 'status', 'due_date', 'notes', 'created_at', 'updated_at'].forEach(key => { record[key] = text(source[key]); });
     record.revision = Number(source.revision || 0);
     record.has_password = Boolean(source.has_password);
-    ['catalog_steps', 'onboarding_steps'].forEach(key => {
-      record[key] = Array.isArray(source[key]) ? source[key].map(step => ({ id: text(step.id), label: text(step.label), done: step.done === true })) : [];
-    });
+    record.production_lists = productionLists(source);
     if (!statuses[record.status]) record.status = 'planning';
     return record;
   }
@@ -114,13 +118,13 @@
     return dialog;
   }
   function card(row) {
-    const allSteps = [...row.catalog_steps, ...row.onboarding_steps], completion = progress(allSteps);
+    const allSteps = row.production_lists.flatMap(list => list.steps), completion = progress(allSteps);
     const late = row.due_date && row.due_date < today() && row.status !== 'completed';
     const person = row.responsible_name || row.responsible_email;
     return `<article class="ceo-project-card" data-project-id="${esc(row.id)}">
       <div class="ceo-project-card-meta"><span class="ceo-project-status is-${row.status}"><i></i>${statuses[row.status]}</span><span class="ceo-project-total">${completion.percent}%</span></div>
       <h3>${esc(row.title)}</h3><p class="ceo-project-company">${esc(row.company_name || row.client_name)}</p>${row.company_name ? `<p class="ceo-project-client">${esc(row.client_name)}</p>` : ''}
-      <div class="ceo-project-tracks">${meter('Catálogo', row.catalog_steps)}${meter('Estruturação', row.onboarding_steps, 'is-onboarding')}</div>
+      <div class="ceo-project-tracks">${row.production_lists.length ? row.production_lists.slice(0, 3).map(list => meter(list.title, list.steps)).join('') : '<p class="ceo-project-no-stages">Adicione as etapas da sua produção.</p>'}${row.production_lists.length > 3 ? `<small>Mais ${row.production_lists.length - 3} listas neste projeto</small>` : ''}</div>
       <div class="ceo-project-card-footer"><span class="ceo-project-person"><span class="ceo-project-avatar" aria-hidden="true">${esc((person || '?').slice(0, 1).toUpperCase())}</span><span>${esc(person || 'Sem responsável')}</span></span><span class="ceo-project-due ${late ? 'is-late' : ''}">${late ? 'Atrasado · ' : ''}${dateLabel(row.due_date)}</span></div>
       <button class="ceo-button ceo-project-open" type="button" data-project-open="${esc(row.id)}" aria-label="Abrir projeto ${esc(row.title)}">Acompanhar projeto <span aria-hidden="true">↗</span></button>
     </article>`;
@@ -131,14 +135,14 @@
     const visible = rows.filter(row => (!filters.status || row.status === filters.status) && (!query || fold(`${row.title} ${row.client_name} ${row.company_name} ${row.client_email} ${row.responsible_name} ${row.responsible_email}`).includes(query)));
     container.querySelector('[data-project-count]').textContent = `${visible.length} ${visible.length === 1 ? 'projeto encontrado' : 'projetos encontrados'}`;
     if (!visible.length) {
-      board.innerHTML = `<div class="ceo-project-empty"><span class="ceo-project-empty-icon" aria-hidden="true">▤</span><h3>${rows.length ? 'Nenhum projeto com estes filtros' : 'Cada cliente, uma entrega bem acompanhada'}</h3><p>${rows.length ? 'Tente outro nome ou situação para encontrar seu projeto.' : isOwner() ? 'Cadastre o cliente, defina o responsável e acompanhe cada etapa do catálogo e da estruturação.' : 'Os projetos atribuídos a você aparecerão aqui. O proprietário gerencia essas atribuições.'}</p>${!rows.length && isOwner() ? '<button type="button" class="ceo-button primary" data-project-new>+ Criar primeiro projeto</button>' : ''}</div>`;
+      board.innerHTML = `<div class="ceo-project-empty"><span class="ceo-project-empty-icon" aria-hidden="true">▤</span><h3>${rows.length ? 'Nenhum projeto com estes filtros' : 'Cada cliente, uma entrega bem acompanhada'}</h3><p>${rows.length ? 'Tente outro nome ou situação para encontrar seu projeto.' : isOwner() ? 'Cadastre o cliente, defina o responsável e crie as listas de produção do seu jeito.' : 'Os projetos atribuídos a você aparecerão aqui. O proprietário gerencia essas atribuições.'}</p>${!rows.length && isOwner() ? '<button type="button" class="ceo-button primary" data-project-new>+ Criar primeiro projeto</button>' : ''}</div>`;
       board.querySelector('[data-project-new]')?.addEventListener('click', () => openEditor());
     } else board.innerHTML = visible.map(card).join('');
   }
   function paint() {
     if (!container?.isConnected) return;
     const active = rows.filter(row => row.status !== 'completed').length;
-    container.innerHTML = `<section class="ceo-projects"><div class="ceo-project-heading"><div><span class="ceo-project-eyebrow">DO PRIMEIRO ACESSO À ENTREGA</span><h2>Projetos de clientes</h2><p>Catálogos, estruturação e próximos passos em um só lugar.</p></div><div class="ceo-project-heading-actions"><button type="button" class="ceo-button" data-project-refresh ${loading ? 'disabled' : ''}>${loading ? 'Atualizando…' : 'Atualizar'}</button>${isOwner() ? `<button type="button" class="ceo-button" data-project-team>Acesso do time</button><button type="button" class="ceo-button primary" data-project-new ${!loaded || loading || errorMessage ? 'disabled' : ''}>+ Novo projeto</button>` : ''}</div></div>
+    container.innerHTML = `<section class="ceo-projects"><div class="ceo-project-heading"><div><span class="ceo-project-eyebrow">SUA PRODUÇÃO, DO SEU JEITO</span><h2>Projetos de clientes</h2><p>Crie suas listas, organize as etapas e acompanhe cada entrega.</p></div><div class="ceo-project-heading-actions"><button type="button" class="ceo-button" data-project-refresh ${loading ? 'disabled' : ''}>${loading ? 'Atualizando…' : 'Atualizar'}</button>${isOwner() ? `<button type="button" class="ceo-button" data-project-team>Acesso do time</button><button type="button" class="ceo-button primary" data-project-new ${!loaded || loading || errorMessage ? 'disabled' : ''}>+ Novo projeto</button>` : ''}</div></div>
       ${workspace()?.isProjectsOnly?.() ? '<p class="ceo-project-access-note">Seu espaço de trabalho: acompanhe os clientes atribuídos a você e atualize as etapas de cada entrega.</p>' : role() === 'viewer' ? '<p class="ceo-project-access-note">Você tem acesso de leitura. As atualizações ficam com o proprietário e os responsáveis.</p>' : ''}
       <div class="ceo-project-stats"><div><span>Projetos ativos</span><strong>${active}</strong><small>Do planejamento à entrega</small></div><div><span>Em andamento</span><strong>${rows.filter(row => row.status === 'in_progress').length}</strong><small>Produção em movimento</small></div><div><span>Aguardando cliente</span><strong>${rows.filter(row => row.status === 'waiting').length}</strong><small>Aprovações e materiais</small></div><div><span>Concluídos</span><strong>${rows.filter(row => row.status === 'completed').length}</strong><small>Entregas realizadas</small></div></div>
       ${notice ? `<p class="ceo-project-notice" role="status">${esc(notice)}</p>` : ''}
@@ -163,7 +167,7 @@
     const ticket = capture(), sequence = ++requestSequence;
     paint();
     try {
-      const result = await rpc('zama_projects_list', { p_owner: ticket.owner });
+      const result = await rpc('zama_projects_list_v2', { p_owner: ticket.owner });
       if (!current(ticket) || sequence !== requestSequence) return;
       if (!Array.isArray(result)) throw new Error('PROJECT_INVALID_RESPONSE');
       rows = result.map(metadata).sort((a, b) => b.updated_at.localeCompare(a.updated_at)); loaded = true;
@@ -187,7 +191,7 @@
       <dl class="ceo-project-info"><div><dt>Cliente</dt><dd>${esc(row.client_name || 'Não informado')}</dd></div><div><dt>Empresa</dt><dd>${esc(row.company_name || 'Não informada')}</dd></div><div><dt>Responsável</dt><dd>${esc(row.responsible_name || 'Não definido')}${row.responsible_email ? `<small>${esc(row.responsible_email)}</small>` : ''}</dd></div></dl>
       <section class="ceo-project-credentials"><div><h3>Acessos do cliente</h3><p>Dados usados para trabalhar neste projeto.</p></div><dl class="ceo-project-info"><div><dt>E-mail de acesso</dt><dd>${esc(row.client_email || 'Não informado')}</dd></div><div><dt>Página de acesso</dt><dd>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Abrir página de acesso ↗</a>` : esc(row.access_url || 'Não informada')}</dd></div></dl>
       <div class="ceo-project-secret"><label class="ceo-field">Senha<input type="password" readonly data-private-value aria-label="Senha do cliente" placeholder="${row.has_password ? '••••••••••••' : 'Não cadastrada'}" autocomplete="off"></label>${row.has_password && canEdit() ? '<button class="ceo-button" type="button" data-reveal aria-pressed="false">Mostrar senha</button>' : ''}</div><p class="ceo-project-secret-note">${role() === 'viewer' ? 'A senha é reservada ao proprietário e aos responsáveis autorizados.' : 'A senha é consultada somente ao clicar e ocultada ao sair desta janela.'}</p></section>
-      <div class="ceo-project-detail-tracks">${checklist('Criação do catálogo', row.catalog_steps)}${checklist('Estruturação do cliente', row.onboarding_steps)}</div>
+      <div class="ceo-project-detail-tracks">${row.production_lists.length ? row.production_lists.map(list => checklist(list.title, list.steps)).join('') : '<p class="ceo-project-no-stages">Nenhuma lista de produção cadastrada.</p>'}</div>
       <section class="ceo-project-notes"><h3>Notas e próximos passos</h3><p>${esc(row.notes || 'Nenhuma observação por enquanto.')}</p></section>
       ${isOwner() && row.responsible_email ? `<section class="ceo-project-invite"><h3>Acesso do responsável</h3><p>Gere um convite para <strong>${esc(row.responsible_email)}</strong>. A pessoa usa sua própria conta e recebe acesso somente aos projetos atribuídos a ela.</p><button type="button" class="ceo-button" data-project-invite>Gerar convite para projetos</button><div data-invite-result hidden></div></section>` : ''}
       <p class="ceo-form-error" data-dialog-error role="alert" hidden></p><footer class="ceo-project-dialog-footer">${isOwner() ? '<button type="button" class="ceo-button danger" data-project-delete>Excluir projeto</button>' : ''}<div><button type="button" class="ceo-button" data-close>Fechar</button>${canEdit() ? `<button type="button" class="ceo-button primary" data-project-edit>${isOwner() ? 'Editar projeto' : 'Atualizar andamento'}</button>` : ''}</div></footer>`);
@@ -231,44 +235,81 @@
       finally { if (dialogCurrent(ticket, dialog)) button.disabled = false; }
     });
   }
-  function stepEditor(step, track) {
-    return `<div class="ceo-project-step-editor" data-step-id="${esc(step.id)}"><input type="checkbox" data-step-done ${step.done ? 'checked' : ''} aria-label="Concluir etapa: ${esc(step.label || 'Nova etapa')}"><input type="text" data-step-label value="${esc(step.label)}" required maxlength="200" aria-label="Nome da etapa de ${track === 'catalog_steps' ? 'catálogo' : 'estruturação'}"><button type="button" class="ceo-button" data-step-remove aria-label="Remover etapa: ${esc(step.label || 'Nova etapa')}">×</button></div>`;
+  function stepEditor(step) {
+    return `<div class="ceo-project-step-editor" data-step-id="${esc(step.id)}"><input type="checkbox" data-step-done ${step.done ? 'checked' : ''} aria-label="Concluir etapa: ${esc(step.label || 'Nova etapa')}"><input type="text" data-step-label value="${esc(step.label)}" required maxlength="254" aria-label="Nome da etapa" placeholder="O que precisa ser feito?"><div class="ceo-project-step-actions"><button type="button" class="ceo-button" data-step-up aria-label="Mover etapa para cima: ${esc(step.label || 'Nova etapa')}">↑</button><button type="button" class="ceo-button" data-step-down aria-label="Mover etapa para baixo: ${esc(step.label || 'Nova etapa')}">↓</button><button type="button" class="ceo-button" data-step-remove aria-label="Remover etapa: ${esc(step.label || 'Nova etapa')}">×</button></div></div>`;
   }
-  function trackEditor(label, track, steps) {
-    return `<fieldset class="ceo-project-track-editor"><legend>${label}</legend><p>Marque as etapas concluídas e ajuste os próximos passos.</p><div data-track="${track}">${steps.map(step => stepEditor(step, track)).join('')}</div><button type="button" class="ceo-button" data-step-add="${track}">+ Adicionar etapa</button></fieldset>`;
+  function listEditor(list) {
+    return `<fieldset class="ceo-project-track-editor" data-production-list data-list-id="${esc(list.id)}"><legend>Lista de produção</legend><div class="ceo-project-list-heading"><label class="ceo-field">Nome da lista<input type="text" data-list-title value="${esc(list.title)}" required maxlength="254" aria-label="Nome da lista" placeholder="Ex.: Design, Gravação, Entrega"></label><button type="button" class="ceo-button" data-list-remove aria-label="Excluir lista: ${esc(list.title || 'Nova lista')}">Excluir lista</button></div><p data-steps-empty ${list.steps.length ? 'hidden' : ''}>Comece adicionando uma etapa. Você define o que precisa ser feito.</p><div data-list-steps>${list.steps.map(stepEditor).join('')}</div><button type="button" class="ceo-button" data-step-add>+ Adicionar etapa</button></fieldset>`;
+  }
+  function syncListControls(form) {
+    const lists = [...form.querySelectorAll('[data-production-list]')];
+    form.querySelector('[data-lists-empty]').hidden = lists.length > 0;
+    form.querySelector('[data-list-add]').disabled = lists.length >= 20;
+    lists.forEach(list => {
+      const title = list.querySelector('[data-list-title]').value.trim() || 'Nova lista';
+      list.querySelector('[data-list-remove]').setAttribute('aria-label', `Excluir lista: ${title}`);
+      const steps = [...list.querySelector('[data-list-steps]').children];
+      list.querySelector('[data-steps-empty]').hidden = steps.length > 0;
+      list.querySelector('[data-step-add]').disabled = steps.length >= 100;
+      steps.forEach((step, index) => {
+        const label = step.querySelector('[data-step-label]').value.trim() || 'Nova etapa';
+        step.querySelector('[data-step-done]').setAttribute('aria-label', `Concluir etapa: ${label}`);
+        step.querySelector('[data-step-remove]').setAttribute('aria-label', `Remover etapa: ${label}`);
+        step.querySelector('[data-step-up]').setAttribute('aria-label', `Mover etapa para cima: ${label}`);
+        step.querySelector('[data-step-down]').setAttribute('aria-label', `Mover etapa para baixo: ${label}`);
+        step.querySelector('[data-step-up]').disabled = index === 0;
+        step.querySelector('[data-step-down]').disabled = index === steps.length - 1;
+      });
+    });
   }
   function openEditor(id = null) {
     if (!canEdit() || (!id && !isOwner())) return;
-    const row = id ? rows.find(item => item.id === id) : { title: '', client_name: '', company_name: '', client_email: '', access_url: '', responsible_name: '', responsible_email: '', due_date: '', status: 'planning', notes: '', catalog_steps: catalogDefaults.map(label => ({ id: makeId(), label, done: false })), onboarding_steps: onboardingDefaults.map(label => ({ id: makeId(), label, done: false })) };
+    const row = id ? rows.find(item => item.id === id) : { title: '', client_name: '', company_name: '', client_email: '', access_url: '', responsible_name: '', responsible_email: '', due_date: '', status: 'planning', notes: '', production_lists: [{ id: makeId(), title: 'Lista de produção', steps: [] }] };
     if (!row) return;
     const ticket = capture();
     const dialog = newDialog(id ? isOwner() ? 'Editar projeto' : 'Atualizar andamento' : 'Novo projeto', `<form class="ceo-project-form" autocomplete="off">
-      ${isOwner() ? `<section><h3>Cliente e projeto</h3><div class="ceo-project-form-grid"><label class="ceo-field ceo-project-wide">Nome do projeto<input name="title" required maxlength="180" value="${esc(row.title)}" placeholder="Ex.: Catálogo e estruturação · Loja Aurora"></label><label class="ceo-field">Nome do cliente<input name="client_name" required maxlength="180" value="${esc(row.client_name)}" placeholder="Nome do contato"></label><label class="ceo-field">Nome da empresa<input name="company_name" maxlength="180" value="${esc(row.company_name)}" placeholder="Empresa do cliente"></label></div></section>
+      ${isOwner() ? `<section><h3>Cliente e projeto</h3><div class="ceo-project-form-grid"><label class="ceo-field ceo-project-wide">Nome do projeto<input name="title" required maxlength="180" value="${esc(row.title)}" placeholder="Dê um nome ao seu projeto"></label><label class="ceo-field">Nome do cliente<input name="client_name" required maxlength="180" value="${esc(row.client_name)}" placeholder="Nome do contato"></label><label class="ceo-field">Nome da empresa<input name="company_name" maxlength="180" value="${esc(row.company_name)}" placeholder="Empresa do cliente"></label></div></section>
       <section><h3>Acessos do cliente</h3><div class="ceo-project-form-grid"><label class="ceo-field">E-mail de acesso<input name="client_email" type="email" maxlength="254" value="${esc(row.client_email)}" placeholder="cliente@empresa.com" autocomplete="off"></label><label class="ceo-field">Página de acesso<input name="access_url" type="url" maxlength="2000" value="${esc(row.access_url)}" placeholder="https://" autocomplete="off"></label><label class="ceo-field ceo-project-wide">${row.has_password ? 'Nova senha (opcional)' : 'Senha do cliente'}<input name="password" type="password" data-private-value maxlength="2000" autocomplete="new-password" placeholder="${row.has_password ? 'Deixe vazio para manter a senha atual' : 'Informe a senha de acesso do cliente'}"></label>${row.has_password ? '<label class="ceo-project-remove-secret ceo-project-wide"><input type="checkbox" name="remove_password"> Remover a senha cadastrada</label>' : ''}</div><p>A senha não aparece nas listagens ou nos backups da central.</p></section>
       <section><h3>Responsável pela entrega</h3><div class="ceo-project-form-grid"><label class="ceo-field">Nome do responsável<input name="responsible_name" maxlength="180" value="${esc(row.responsible_name)}" placeholder="Quem cuidará do projeto?"></label><label class="ceo-field">E-mail do responsável<input name="responsible_email" type="email" maxlength="254" value="${esc(row.responsible_email)}" placeholder="responsavel@empresa.com"></label><label class="ceo-field">Prazo da entrega<input name="due_date" type="date" value="${esc(row.due_date)}"></label></div><p>Após salvar, abra o projeto para gerar o convite. O responsável usa sua própria conta e acessa somente os projetos atribuídos a ele.</p></section>` : `<p class="ceo-project-edit-summary">${esc(row.title)} · ${esc(row.client_name)}</p>`}
       <label class="ceo-field">Situação do projeto<select name="status">${options(row.status)}</select></label>
-      ${trackEditor('Criação do catálogo', 'catalog_steps', row.catalog_steps)}${trackEditor('Estruturação do cliente', 'onboarding_steps', row.onboarding_steps)}
+      <section class="ceo-project-production"><h3>Listas de produção</h3><p>Crie suas listas e escreva as etapas na ordem que você precisa. Os nomes e as etapas ficam por sua conta.</p><div data-production-lists>${row.production_lists.map(listEditor).join('')}</div><p data-lists-empty ${row.production_lists.length ? 'hidden' : ''}>Nenhuma lista criada. Você pode adicionar uma agora ou depois.</p><button type="button" class="ceo-button" data-list-add>+ Adicionar lista</button></section>
       <label class="ceo-field">Notas e próximos passos<textarea name="notes" rows="4" maxlength="10000" placeholder="O que já foi feito, o que falta e o que depende do cliente.">${esc(row.notes)}</textarea></label>
       <p class="ceo-form-error" data-dialog-error role="alert" hidden></p><footer class="ceo-project-dialog-footer ceo-dialog-actions"><span>As alterações são salvas neste projeto.</span><div><button type="button" class="ceo-button" data-close>Cancelar</button><button type="submit" class="ceo-button primary">${id ? 'Salvar alterações' : 'Criar projeto'}</button></div></footer></form>`);
     const form = dialog.querySelector('form');
+    syncListControls(form);
     form.querySelector('[name="remove_password"]')?.addEventListener('change', event => {
       const input = form.elements.password; input.value = ''; input.disabled = event.target.checked;
     });
     form.addEventListener('input', event => {
-      if (!event.target.matches('[data-step-label]')) return;
-      const step = event.target.closest('[data-step-id]'), label = event.target.value.trim() || 'Nova etapa';
-      step.querySelector('[data-step-done]').setAttribute('aria-label', `Concluir etapa: ${label}`);
-      step.querySelector('[data-step-remove]').setAttribute('aria-label', `Remover etapa: ${label}`);
+      if (event.target.matches('[data-step-label], [data-list-title]')) syncListControls(form);
     });
     form.addEventListener('click', event => {
+      const listAdd = event.target.closest('[data-list-add]'), listRemove = event.target.closest('[data-list-remove]');
       const add = event.target.closest('[data-step-add]'), remove = event.target.closest('[data-step-remove]');
-      if (remove) remove.closest('[data-step-id]').remove();
+      const move = event.target.closest('[data-step-up], [data-step-down]');
+      if (listAdd && form.querySelectorAll('[data-production-list]').length < 20) {
+        const lists = form.querySelector('[data-production-lists]');
+        lists.insertAdjacentHTML('beforeend', listEditor({ id: makeId(), title: '', steps: [] }));
+        lists.lastElementChild.querySelector('[data-list-title]').focus();
+      }
+      if (listRemove) { listRemove.closest('[data-production-list]').remove(); form.querySelector('[data-list-add]').focus(); }
+      if (remove) {
+        const list = remove.closest('[data-production-list]');
+        remove.closest('[data-step-id]').remove(); list.querySelector('[data-step-add]').focus();
+      }
       if (add) {
-        const track = form.querySelector(`[data-track="${add.dataset.stepAdd}"]`);
-        if (track.children.length >= 50) { const output = form.querySelector('[data-dialog-error]'); output.textContent = 'Use até 50 etapas em cada frente do projeto.'; output.hidden = false; return; }
-        track.insertAdjacentHTML('beforeend', stepEditor({ id: makeId(), label: '', done: false }, add.dataset.stepAdd));
+        const track = add.closest('[data-production-list]').querySelector('[data-list-steps]');
+        if (track.children.length >= 100) return;
+        track.insertAdjacentHTML('beforeend', stepEditor({ id: makeId(), label: '', done: false }));
         track.lastElementChild.querySelector('[data-step-label]').focus();
       }
+      if (move) {
+        const step = move.closest('[data-step-id]'), track = step.parentElement;
+        if (move.hasAttribute('data-step-up') && step.previousElementSibling) track.insertBefore(step, step.previousElementSibling);
+        else if (move.hasAttribute('data-step-down') && step.nextElementSibling) track.insertBefore(step.nextElementSibling, step);
+        step.querySelector('[data-step-label]').focus();
+      }
+      if (listAdd || listRemove || add || remove || move) syncListControls(form);
     });
     form.addEventListener('submit', async event => {
       event.preventDefault();
@@ -277,7 +318,13 @@
       if (submit.disabled) return;
       const project = { status: form.elements.status.value, notes: form.elements.notes.value.trim() };
       if (id) { project.id = id; project.revision = row.revision; }
-      ['catalog_steps', 'onboarding_steps'].forEach(key => { project[key] = [...form.querySelector(`[data-track="${key}"]`).children].map(item => ({ id: item.dataset.stepId, label: item.querySelector('[data-step-label]').value.trim(), done: item.querySelector('[data-step-done]').checked })); });
+      project.production_lists = [...form.querySelectorAll('[data-production-list]')].map(list => ({
+        id: list.dataset.listId, title: list.querySelector('[data-list-title]').value.trim(),
+        steps: [...list.querySelector('[data-list-steps]').children].map(item => ({ id: item.dataset.stepId, label: item.querySelector('[data-step-label]').value.trim(), done: item.querySelector('[data-step-done]').checked }))
+      }));
+      if (project.production_lists.some(list => !list.title || list.steps.some(step => !step.label))) {
+        output.textContent = 'Preencha o nome de cada lista e de cada etapa antes de salvar.'; output.hidden = false; return;
+      }
       if (isOwner()) {
         ['title', 'client_name', 'company_name', 'client_email', 'access_url', 'responsible_name', 'responsible_email', 'due_date'].forEach(key => { project[key] = form.elements[key].value.trim(); });
         if (form.elements.remove_password?.checked) project.password = '';

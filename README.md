@@ -1,6 +1,6 @@
 # ZAMA Admin
 
-Projetos de clientes: [catálogos, estruturação, credenciais e acesso restrito](docs/PROJETOS.md).
+Projetos de clientes: [listas de produção manuais, credenciais e acesso restrito](docs/PROJETOS.md).
 
 Melhorias administrativas: [financeiro, backups, equipe, sessão e notificações](docs/ADMINISTRATIVO.md).
 
