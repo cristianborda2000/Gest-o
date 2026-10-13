@@ -26,7 +26,8 @@ async function expectUsableControls(scope) {
     return { label: el.getAttribute('aria-label') || el.name || el.id || el.textContent.trim(), height: bounds.height, font: parseFloat(getComputedStyle(el).fontSize), field: /INPUT|SELECT/.test(el.tagName) };
   }));
   for (const control of controls) {
-    expect.soft(control.height, `${control.label} touch height`).toBeGreaterThanOrEqual(44);
+    // DOMRect coordinates can lose floating-point precision at large scroll offsets.
+    expect.soft(Math.round(control.height * 1000) / 1000, `${control.label} touch height`).toBeGreaterThanOrEqual(44);
     if (control.field) expect.soft(control.font, `${control.label} field font`).toBeGreaterThanOrEqual(16);
   }
 }

@@ -167,6 +167,7 @@
       if (typeof ZamaAgenda !== "undefined") ZamaAgenda.stopReminders();
       if (typeof ZamaJarvis !== "undefined") ZamaJarvis.reset();
       if (typeof ZamaFinance !== "undefined") ZamaFinance.reset?.();
+      if (typeof ZamaProjects !== "undefined") ZamaProjects.reset();
       if (!keepWorkspace && typeof ZamaWorkspace !== "undefined") ZamaWorkspace.reset();
       if (resetPush && typeof ZamaPushReminders !== "undefined") ZamaPushReminders.reset?.();
       if (typeof unsubscribeFromCloudChanges === "function") void unsubscribeFromCloudChanges();
@@ -291,15 +292,19 @@
         navButtons.forEach(item => item.classList.toggle("active", item.dataset.module === "jarvis"));
       }
       render();
-      if (typeof ZamaWorkspace === "undefined" || ZamaWorkspace.canEdit()) maybeShowOnboarding();
+      const projectsOnly = typeof ZamaWorkspace !== "undefined" && ZamaWorkspace.isProjectsOnly();
+      if (projectsOnly) setCloudStatus('Acesso a projetos');
+      const pendingInvite = typeof ZamaWorkspace !== "undefined" && ZamaWorkspace.hasPendingInvite();
+      if (pendingInvite) openSettings();
+      else if (typeof ZamaWorkspace === "undefined" || ZamaWorkspace.canEdit()) maybeShowOnboarding();
       try {
         const legacyButton = document.getElementById("legacyBackupBtn");
-        if (legacyButton) legacyButton.hidden = !localStorage.getItem(storageKey);
+        if (legacyButton) legacyButton.hidden = projectsOnly || !localStorage.getItem(storageKey);
       } catch {}
-      if (typeof ZamaAgenda !== "undefined") ZamaAgenda.startReminders();
-      if (typeof ZamaJarvis !== "undefined") ZamaJarvis.init(session?.user);
+      if (!projectsOnly && typeof ZamaAgenda !== "undefined") ZamaAgenda.startReminders();
+      if (!projectsOnly && typeof ZamaJarvis !== "undefined") ZamaJarvis.init(session?.user);
       if (typeof ZamaWorkspace !== "undefined") ZamaWorkspace.render();
-      if (typeof ZamaPushReminders !== "undefined") void ZamaPushReminders.init();
+      if (!projectsOnly && typeof ZamaPushReminders !== "undefined") void ZamaPushReminders.init();
     }
 
     function clearRecoveryUrl() {
@@ -579,7 +584,7 @@
       const confirmed = await requestConfirmation({
         eyebrow: "Ação permanente",
         title: "Limpar todos os dados?",
-        message: "Esta ação apaga os dados locais e da nuvem desta conta.",
+        message: "Esta ação apaga os dados da central desta conta. Os projetos e suas credenciais são gerenciados separadamente na área de Projetos.",
         confirmText: "APAGAR"
       });
       if (!confirmed || generation !== sessionGeneration) return;
@@ -610,13 +615,15 @@
     });
 
     document.getElementById("exportBtn").addEventListener("click", () => {
+      if (typeof ZamaWorkspace !== "undefined" && ZamaWorkspace.isProjectsOnly()) return;
       try {
         downloadStateBackup(`backup-zama-completo-${todayIso()}.json`, state);
-        showToast("Backup completo baixado", "Guarde o arquivo em um local seguro para restaurar esta conta.");
+        showToast("Backup da central baixado", "Projetos e credenciais não estão incluídos neste arquivo.");
       } catch (error) { showToast("Não foi possível gerar o backup", error.message, "error"); }
     });
 
     document.getElementById("legacyBackupBtn")?.addEventListener("click", () => {
+      if (typeof ZamaWorkspace !== "undefined" && ZamaWorkspace.isProjectsOnly()) return;
       try {
         const data = JSON.parse(localStorage.getItem(storageKey));
         if (!data) throw new Error();
@@ -628,6 +635,7 @@
     });
 
     monthlyBackupBtn.addEventListener("click", () => {
+      if (typeof ZamaWorkspace !== "undefined" && ZamaWorkspace.isProjectsOnly()) return;
       const monthKey = (activeModule === "financeiro" && typeof ZamaFinance.reportMonth === "function" ? ZamaFinance.reportMonth() : "")
         || (typeof overviewMonth !== "undefined" ? overviewMonth : "") || todayIso().slice(0, 7);
       closeSettings();
@@ -635,6 +643,7 @@
     });
 
     function downloadStateBackup(filename, data) {
+      if (typeof ZamaWorkspace !== "undefined" && ZamaWorkspace.isProjectsOnly()) return;
       ZamaAdminData.download(filename, ZamaAdminData.makeBackup(data));
     }
 
@@ -658,10 +667,12 @@
     });
 
     importBtn.addEventListener("click", () => {
+      if (typeof ZamaWorkspace !== "undefined" && !ZamaWorkspace.canEdit()) return;
       importInput.click();
     });
 
     importInput.addEventListener("change", async () => {
+      if (typeof ZamaWorkspace !== "undefined" && !ZamaWorkspace.canEdit()) { importInput.value = ""; return; }
       const file = importInput.files[0];
       if (!file) return;
 

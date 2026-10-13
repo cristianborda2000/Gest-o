@@ -7,6 +7,7 @@ modules.agenda.title = 'Agenda';
 modules.agenda.subtitle = 'Organize seu dia e dê espaço ao que importa.';
 modules.investimentos = { title: 'Investimentos', subtitle: 'Acompanhe o que faz a ZAMA crescer.', fields: [], rows: [] };
 modules.ideias = { title: 'Banco de ideias', subtitle: 'Da primeira anotação ao próximo grande projeto.', fields: [], rows: [] };
+modules.projetos = { title: 'Projetos', subtitle: 'Clientes, catálogos e estruturação. Cada etapa em um só lugar.', fields: [], rows: [] };
 modules.jarvis = { title: 'JARVIS', subtitle: 'Seu assistente pessoal. Conectado à sua rotina.', fields: [], rows: [] };
 let overviewMonth = ZamaTime.today().slice(0, 7);
 
@@ -22,7 +23,8 @@ function ceoIcon(name) {
 
 function renderCeoModule() {
   ZamaJarvis.navigation();
-  const isCeo = ['dashboard', 'investimentos', 'agenda', 'ideias', 'jarvis'].includes(activeModule)
+  if (activeModule !== 'projetos' && typeof ZamaProjects !== 'undefined') ZamaProjects.leave();
+  const isCeo = ['dashboard', 'investimentos', 'agenda', 'ideias', 'jarvis', 'projetos'].includes(activeModule)
     || activeModule === 'financeiro';
   const container = document.getElementById('ceoWorkspace');
   container.hidden = !isCeo;
@@ -41,6 +43,7 @@ function renderCeoModule() {
   if (activeModule === 'investimentos') ZamaFinance.renderInvestments(container);
   if (activeModule === 'agenda') ZamaAgenda.render(container);
   if (activeModule === 'ideias') ZamaIdeas.render(container);
+  if (activeModule === 'projetos') ZamaProjects.render(container);
   return true;
 }
 

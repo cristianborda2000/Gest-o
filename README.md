@@ -1,5 +1,7 @@
 # ZAMA Admin
 
+Projetos de clientes: [catálogos, estruturação, credenciais e acesso restrito](docs/PROJETOS.md).
+
 Melhorias administrativas: [financeiro, backups, equipe, sessão e notificações](docs/ADMINISTRATIVO.md).
 
 JARVIS: veja [configuracao, migration, testes e limites da entrega](docs/JARVIS.md).

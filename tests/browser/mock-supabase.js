@@ -25,6 +25,8 @@ function sdk(seed, options = {}) {
   window.testDbReads = []; window.testDbWrites = []; window.testRpcCalls = [];
   window.testPendingReads = []; window.testPendingWrites = [];
   window.testPendingSessions = [];
+  window.testPendingProjectRpcs = [];
+  window.testReleaseProjectRpcs = () => { window.testPendingProjectRpcs.splice(0).forEach(resolve => resolve()); };
   window.testReleaseSessions = () => { window.testPendingSessions.splice(0).forEach(resolve => resolve()); };
   window.testReleaseReads = () => { window.testPendingReads.splice(0).forEach(resolve => resolve()); };
   window.testReleaseWrites = () => { window.testPendingWrites.splice(0).forEach(resolve => resolve()); };
@@ -42,11 +44,17 @@ function sdk(seed, options = {}) {
       localStorage.setItem('test-auth-event',JSON.stringify({event:'SIGNED_OUT',nonce:Math.random()}));
       return {};
     },updateUser:async()=>({}),resetPasswordForEmail:async()=>({})},
-    ...(options.workspaces ? {rpc:async(name, params={}) => {
+    ...(options.workspaces || options.projects ? {rpc:async(name, params={}) => {
       window.testRpcCalls.push({ name, params });
       if(window.testFailRpc === name) return {error:{message:'Não foi possível atualizar. Tente novamente.'}};
+      if(name.startsWith('zama_project')) {
+        const response=await fetch('/__test/projects', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,params,user:session?.user})});
+        const result=await response.json();
+        if(window.testDelayNextProjectRpc===name){window.testDelayNextProjectRpc='';await new Promise(resolve=>window.testPendingProjectRpcs.push(resolve));}
+        return result;
+      }
       const own = { owner_id:session.user.id,role:'owner',name:'Minha empresa' };
-      if(name==='zama_workspace_list') return {data:window.testWorkspaceLists[session.user.id] || [own]};
+      if(name==='zama_workspace_list') return {data:structuredClone(window.testWorkspaceLists?.[session.user.id] || [own])};
       if(name==='zama_workspace_roster') return {data:structuredClone(window.testWorkspaceRoster)};
       if(name==='zama_workspace_invite') {
         const invite={id:'invite-1',email:params.p_email,role:params.p_role};
@@ -54,8 +62,14 @@ function sdk(seed, options = {}) {
         return {data:{...invite,token:'a'.repeat(64),expires_at:'2026-10-06T12:00:00Z'}};
       }
       if(name==='zama_workspace_accept') return {data:options.inviteOwner || 'shared-company'};
-      if(name==='zama_workspace_set_role') window.testWorkspaceRoster.members.find(member=>member.user_id===params.p_user).role=params.p_role;
-      if(name==='zama_workspace_revoke') window.testWorkspaceRoster.members=window.testWorkspaceRoster.members.filter(member=>member.user_id!==params.p_user);
+      if(name==='zama_workspace_set_role'||name==='zama_workspace_revoke') {
+        const member=window.testWorkspaceRoster.members.find(member=>member.user_id===params.p_user);
+        if(member) {
+          window.testWorkspaceRoster.invites=window.testWorkspaceRoster.invites.filter(invite=>invite.email!==member.email);
+          if(name==='zama_workspace_set_role') member.role=params.p_role;
+          else window.testWorkspaceRoster.members=window.testWorkspaceRoster.members.filter(item=>item.user_id!==params.p_user);
+        }
+      }
       if(name==='zama_workspace_cancel_invite') window.testWorkspaceRoster.invites=window.testWorkspaceRoster.invites.filter(invite=>invite.id!==params.p_id);
       return {data:null};
     }} : {}),
@@ -84,7 +98,39 @@ function sdk(seed, options = {}) {
     channel:()=>({on(){return this;},subscribe(fn){fn('SUBSCRIBED');return this;}}),removeChannel:async()=>{}
   })};
 }
-async function mock(page, data = seed, { jarvisVisible = false, ...sdkOptions } = {}) {
+async function mock(page, data = seed, { jarvisVisible = false, projects, ...sdkOptions } = {}) {
+  if(projects) {
+    // This fixture lives in the test process, like the real remote store. It must
+    // not put client credentials in browser storage to simulate persistence.
+    const projectRows=structuredClone(projects);
+    const publicProject=row=>Object.fromEntries(Object.entries({...row,has_password:Boolean(row.password)}).filter(([key])=>key!=='password'&&key!=='owner_id'));
+    await page.route('**/__test/projects',async route=>{
+      const {name,params,user}=route.request().postDataJSON();
+      const rows=projectRows[params.p_owner] ||= [];
+      const own=params.p_owner===user?.id;
+      const assigned=row=>own||row.responsible_email===user?.email;
+      const error=message=>({error:{message}});
+      let result;
+      if(name==='zama_projects_list') result={data:rows.filter(assigned).map(publicProject)};
+      else if(name==='zama_project_save') {
+        const input=params.p_project, old=rows.find(row=>row.id===input.id);
+        if(!own&&!old || old&&!assigned(old)) result=error('Acesso não autorizado.');
+        else if(old&&input.revision!==old.revision) result=error('Os dados foram alterados. Atualize antes de salvar.');
+        else {
+          const saved={...old,...structuredClone(input),id:old?.id||require('node:crypto').randomUUID(),revision:(old?.revision||0)+1,created_at:old?.created_at||'2026-09-29T15:00:00Z',updated_at:'2026-09-29T15:00:00Z'};
+          if(old) rows.splice(rows.indexOf(old),1,saved); else rows.push(saved);
+          result={data:publicProject(saved)};
+        }
+      } else if(name==='zama_project_secret') {
+        const row=rows.find(row=>row.id===params.p_id); result=row&&assigned(row)?{data:row.password||''}:error('Acesso não autorizado.');
+      } else if(name==='zama_project_delete') {
+        if(!own) result=error('Acesso não autorizado.');
+        else {const index=rows.findIndex(row=>row.id===params.p_id);if(index!==-1) rows.splice(index,1);result={data:null};}
+      } else result=error('RPC de projeto desconhecida.');
+      await route.fulfill({contentType:'application/json',body:JSON.stringify(result)});
+    });
+    sdkOptions.projects=true;
+  }
   await page.clock.install({time:new Date('2026-09-29T12:00:00-03:00')});
   await page.route('**/*.supabase.co/**',route=>route.abort());
   await page.route('**/assets/js/env.js*', route => route.fulfill({contentType:'text/javascript',body:`window.ZAMA_CONFIG = ${JSON.stringify({cloudStateTable:'app_state',supabaseUrl:'https://test.supabase.co',supabaseAnonKey:'fixture-public-key',jarvisVisible})};`}));

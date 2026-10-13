@@ -94,6 +94,13 @@
       cloudUserId = user.id;
       const ownerId = typeof ZamaWorkspace !== "undefined" ? ZamaWorkspace.ownerId(user.id) : user.id;
       cloudOwnerId = ownerId;
+      // A project collaborator never downloads the company's all-in-one state.
+      if (typeof ZamaWorkspace !== "undefined" && ZamaWorkspace.isProjectsOnly()) {
+        cloudRevision = null;
+        const empty = createInitialState();
+        empty.setupDone = true;
+        return empty;
+      }
       const { data, error } = await supabaseClient.from(cloudStateTable)
         .select("data,updated_at").eq("user_id", ownerId).maybeSingle();
       if (epoch !== cloudEpoch || cloudUserId !== user.id || cloudOwnerId !== ownerId) throw new Error("A sessão mudou. Entre novamente.");
@@ -152,6 +159,7 @@
 
     async function subscribeToCloudChanges(user) {
       if (!supabaseClient || !user) return;
+      if (typeof ZamaWorkspace !== "undefined" && ZamaWorkspace.isProjectsOnly()) return;
       const epoch = cloudEpoch, ownerId = cloudOwnerId || user.id;
       await unsubscribeFromCloudChanges();
       if (epoch !== cloudEpoch || cloudUserId !== user.id) return;
@@ -299,7 +307,9 @@
 
     // Troca de aba no menu lateral e permite abrir sub-abas como financeiro/fixos.
     function goToModule(module, options = {}) {
-      if (!['dashboard', 'financeiro', 'investimentos', 'agenda', 'ideias', 'jarvis'].includes(module) || module === 'jarvis' && !jarvisVisible) module = 'dashboard';
+      if (!['dashboard', 'financeiro', 'investimentos', 'agenda', 'ideias', 'jarvis', 'projetos'].includes(module) || module === 'jarvis' && !jarvisVisible) module = 'dashboard';
+      if (typeof ZamaWorkspace !== "undefined" && ZamaWorkspace.isProjectsOnly()) module = 'projetos';
+      if (module !== 'projetos' && typeof ZamaProjects !== 'undefined') ZamaProjects.leave();
       activeModule = module;
       if (options.financeView) financeView = options.financeView;
       if (options.agendaView) agendaView = options.agendaView;
@@ -318,7 +328,9 @@
 
     function render() {
       if (!state) return;
-      if (!['dashboard', 'financeiro', 'investimentos', 'agenda', 'ideias', 'jarvis'].includes(activeModule) || activeModule === 'jarvis' && !jarvisVisible) activeModule = 'dashboard';
+      if (!['dashboard', 'financeiro', 'investimentos', 'agenda', 'ideias', 'jarvis', 'projetos'].includes(activeModule) || activeModule === 'jarvis' && !jarvisVisible) activeModule = 'dashboard';
+      if (typeof ZamaWorkspace !== "undefined" && ZamaWorkspace.isProjectsOnly()) activeModule = 'projetos';
+      navButtons.forEach(item => item.classList.toggle('active', item.dataset.module === activeModule));
       if (typeof renderCeoModule === "function") renderCeoModule();
       else setCloudStatus("Não foi possível abrir a tela. Atualize a página.", "error");
     }

@@ -183,6 +183,57 @@ test('owner invitation uses an explicit role, private fragment link and revocati
   expect(await page.evaluate(() => window.testRpcCalls.filter(call => call.name === 'zama_workspace_cancel_invite').length)).toBe(0);
   await page.getByRole('button', { name: 'Revogar convite' }).click(); await page.locator('#confirmOkBtn').click();
   await expect(page.getByRole('button', { name: 'Revogar convite' })).toHaveCount(0);
+  await expect(link).toHaveCount(0);
+  await expect(page.locator('#workspaceSection')).toContainText('Convite revogado.');
+});
+
+test('a late team permission failure cannot change a newer account settings', async ({ page }) => {
+  await mock(page, seed, {
+    workspaces: spaces('viewer'), rows: rows(),
+    roster: { members: [{ user_id: 'project-member', email: 'equipe@example.invalid', role: 'editor' }], invites: [] }
+  });
+  await page.locator('#settingsBtn').click();
+  await page.evaluate(() => {
+    const original = supabaseClient.rpc.bind(supabaseClient);
+    supabaseClient.rpc = (name, params) => name === 'zama_workspace_set_role'
+      ? new Promise(resolve => { window.testReleaseRoleChange = () => resolve({ error: { message: 'Falha da empresa anterior.' } }); })
+      : original(name, params);
+  });
+  await page.getByLabel('Permissão de equipe@example.invalid', { exact: true }).selectOption('projects');
+  await page.evaluate(nextUser => window.testAuthEvent('SIGNED_IN', nextUser), user('account-b'));
+  await page.clock.fastForward(1);
+  await expect(page.locator('#ceoWorkspace')).toContainText('Receita confidencial B');
+  await page.locator('#settingsBtn').click();
+  await page.getByLabel('E-mail do convidado').fill('novo-time@example.invalid');
+  await page.evaluate(() => window.testReleaseRoleChange());
+  await expect(page.locator('#workspaceSection')).not.toContainText('Falha da empresa anterior.');
+  await expect(page.getByLabel('E-mail do convidado')).toHaveValue('novo-time@example.invalid');
+  await expect(page.getByLabel('Empresa em uso')).toHaveValue('account-b');
+});
+
+test('an older team roster response cannot hide a newly created projects invite', async ({ page }) => {
+  await mock(page, seed, { workspaces: spaces('viewer'), rows: rows() });
+  await page.locator('#settingsBtn').click();
+  await page.evaluate(() => {
+    const original = supabaseClient.rpc.bind(supabaseClient);
+    let delay = true;
+    supabaseClient.rpc = async (name, params) => {
+      const result = await original(name, params);
+      if (name === 'zama_workspace_roster' && delay) {
+        delay = false;
+        await new Promise(resolve => { window.testReleaseRoster = resolve; });
+      }
+      return result;
+    };
+    ZamaWorkspace.render();
+  });
+  await expect.poll(() => page.evaluate(() => Boolean(window.testReleaseRoster))).toBe(true);
+  await page.getByLabel('E-mail do convidado').fill('projetos@example.invalid');
+  await page.getByRole('button', { name: 'Gerar link de convite' }).click();
+  await expect(page.getByRole('textbox', { name: 'Link do convite' })).toBeVisible();
+  await page.evaluate(() => window.testReleaseRoster());
+  await expect(page.getByRole('textbox', { name: 'Link do convite' })).toBeVisible();
+  await expect(page.locator('.workspace-roster')).toContainText('projetos@example.invalid · Somente projetos');
 });
 
 test('revoking the current workspace closes unsaved dialogs and clears access without asking to keep it', async ({ page }) => {

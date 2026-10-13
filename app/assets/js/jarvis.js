@@ -139,6 +139,7 @@
     paint();
   }
   function open() {
+    if (typeof ZamaWorkspace !== 'undefined' && ZamaWorkspace.isProjectsOnly()) return;
     if (!jarvisVisible) return;
     if (typeof state === 'undefined' || !state) return;
     if (activeModule === 'jarvis') { host?.querySelector('textarea')?.focus(); return; }

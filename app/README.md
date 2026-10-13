@@ -17,8 +17,10 @@ O servidor disponibiliza frontend e API em http://localhost:5174/.
 Nao publique arquivos de servidor dentro desta pasta. Nao coloque chaves
 OpenAI nem a service-role do Supabase em assets/js/env.js.
 
-Clientes, mensalidades, projetos, Marketing e equipe foram retirados da
-interface. Os dados historicos continuam preservados no estado e nos backups.
+Clientes, mensalidades, Marketing e RH legados continuam preservados no estado
+e nos backups. A nova área de Projetos usa tabelas separadas, etapas de catálogo
+e estruturação, credenciais protegidas e acesso por responsável. Veja
+[instalação e uso de Projetos](../docs/PROJETOS.md).
 
 Nunca execute database/supabase-setup.sql em um banco com dados existentes:
 o script legado contem DROP TABLE. Use apenas a migration aditiva descrita
