@@ -5,8 +5,8 @@
 1. Abra **Projetos** no menu e clique em **Novo projeto**.
 2. Preencha o título e o nome do cliente, que são obrigatórios. Complete a empresa, e-mail e senha de acesso quando necessário. Informe o nome e o e-mail da pessoa responsável e o prazo.
 3. Crie suas **Listas de produção** manualmente, com os nomes e as etapas que o projeto precisa. O formulário começa com uma lista vazia chamada **Lista de produção**, que você pode renomear ou remover. Adicione outras listas quando precisar; em cada uma, crie, renomeie, reordene e remova etapas. As barras de progresso refletem as etapas concluídas.
-4. Salve e, nos detalhes, clique em **Gerar convite para projetos**. Copie o link e compartilhe com a pessoa responsável.
-5. A pessoa abre o link, entra ou cria uma conta com o e-mail indicado, confirma o e-mail e aceita o convite nas configurações. Na empresa compartilhada, verá somente os projetos atribuídos a ela.
+4. Salve e, nos detalhes, clique em **Gerenciar acesso do responsável**. Confira o e-mail e os projetos liberados e clique em **Gerar link de acesso**. Copie o link e compartilhe com a pessoa responsável.
+5. A pessoa abre o link, entra ou cria uma conta com o e-mail indicado e a própria senha. Se precisar confirmar o e-mail, deve confirmar e reabrir o convite. Depois, clica em **Aceitar convite** nas configurações. Na empresa compartilhada, verá somente os projetos atribuídos a ela.
 6. O responsável usa **Atualizar andamento** para editar as listas e etapas, marcar conclusões, mudar a situação e registrar notas. O proprietário pode alterar dados do cliente, credenciais e atribuição.
 
 Projetos existentes preservam as antigas etapas nas listas **Catálogo** e **Estruturação**, que também podem ser personalizadas. Cada projeto aceita até 20 listas, com até 100 etapas em cada uma, e pode ser salvo sem listas.
@@ -15,7 +15,9 @@ Use **Atualizar** para consultar alterações de outras pessoas. O filtro de sit
 
 O acesso restrito vale para a empresa compartilhada. A conta pessoal do convidado continua independente, assim como outras empresas às quais ele já tenha acesso.
 
-O proprietário também pode usar **Acesso do time**, no cabeçalho de **Projetos**, para abrir **Empresa e equipe** e gerenciar membros, permissões e convites.
+O proprietário pode usar **Criar acesso**, no cabeçalho de **Projetos**, para abrir a tela **Acesso somente a Projetos**. A permissão é fixa e a lista mostra os projetos cujo e-mail do responsável corresponde ao endereço informado. É possível convidar alguém antes de atribuir um projeto; a pessoa verá uma lista vazia até receber uma atribuição. O aplicativo gera o link, mas não envia o convite automaticamente.
+
+Na mesma tela, **Equipe de Projetos** mostra os acessos ativos e os convites pendentes com essa permissão. O proprietário pode cancelar convites ou remover um acesso, mantendo os projetos. Quem já tem acesso exclusivo aparece como **Acesso já ativo**. Se o e-mail informado pertence a alguém com acesso de edição ou leitura aos outros módulos, o botão **Limitar acesso a Projetos** aplica a mudança imediatamente e cancela os convites anteriores. Esse perfil permite editar listas e etapas e consultar as senhas dos clientes atribuídos, inclusive se antes a pessoa só tinha leitura.
 
 ## Instalação do banco
 

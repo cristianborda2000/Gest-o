@@ -87,6 +87,28 @@
 .ceo-project-invite p { line-height:1.7; margin:7px 0 13px; overflow-wrap:anywhere; }
 .ceo-project-invite [data-invite-result] { margin-top:15px; }
 .ceo-project-invite [data-copy-invite] { margin-top:8px; }
+.ceo-project-access-note > p { margin:6px 0 0; }
+.ceo-project-team-form { display:grid; gap:16px; margin:22px 0; }
+.ceo-project-team-form > .ceo-button { justify-self:start; }
+.ceo-project-team-form p,.ceo-project-team-list p { margin:0; line-height:1.7; }
+.ceo-project-team-preview { padding:16px; border:1px solid #e4eae6; border-radius:10px; background:#f8faf9; }
+.ceo-project-team-preview h3 { margin-bottom:8px; }
+.ceo-project-team-preview ul,.ceo-project-team-entry ul { padding-left:20px; margin:8px 0 0; line-height:1.8; }
+.ceo-project-team-list { margin-top:28px; }
+.ceo-project-team-list-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+.ceo-project-team-list-heading h3 { margin:0; }
+.ceo-project-team-entry { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; border-top:1px solid #e9eeea; padding:16px 0; }
+.ceo-project-team-entry > div { min-width:0; }
+.ceo-project-team-entry > div:first-child { flex:1; }
+.ceo-project-team-entry strong,.ceo-project-team-preview li,.ceo-project-team-entry li { overflow-wrap:anywhere; }
+.ceo-project-team-entry strong { display:block; font-size:13px; }
+.ceo-project-team-entry p { margin-top:8px; }
+.ceo-project-team-entry [data-team-actions] { display:flex; gap:8px; flex-wrap:wrap; max-width:45%; }
+.ceo-project-team-entry [data-team-actions] .ceo-button { white-space:normal; }
+.ceo-project-team-badge { display:block; margin:6px 0; color:#386453; font-size:11px; }
+.ceo-project-team-badge.is-pending { color:#926a2d; }
+.ceo-project-invite ol { padding-left:22px; line-height:1.8; }
+.ceo-project-invite [data-team-copy] { margin-top:8px; }
 .ceo-project-dialog-footer { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; margin-top:26px; border-top:1px solid #e9eeea; padding-top:18px; }
 .ceo-project-dialog-footer > div { display:flex; gap:8px; margin-left:auto; flex-wrap:wrap; }
 .ceo-project-dialog-footer > span { color:#87928b; font-size:10px; }
@@ -156,4 +178,7 @@
   .ceo-project-form .mobile-form-actions > div { width:100%; }
   .ceo-project-form .mobile-form-actions > div .ceo-button { flex:1; }
   .ceo-project-invite [data-project-invite] { white-space:normal; width:100%; }
+  .ceo-project-team-form > .ceo-button { width:100%; white-space:normal; }
+  .ceo-project-team-entry { flex-direction:column; }
+  .ceo-project-team-entry [data-team-actions] { max-width:100%; }
 }

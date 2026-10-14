@@ -142,7 +142,7 @@
   function paint() {
     if (!container?.isConnected) return;
     const active = rows.filter(row => row.status !== 'completed').length;
-    container.innerHTML = `<section class="ceo-projects"><div class="ceo-project-heading"><div><span class="ceo-project-eyebrow">SUA PRODUÇÃO, DO SEU JEITO</span><h2>Projetos de clientes</h2><p>Crie suas listas, organize as etapas e acompanhe cada entrega.</p></div><div class="ceo-project-heading-actions"><button type="button" class="ceo-button" data-project-refresh ${loading ? 'disabled' : ''}>${loading ? 'Atualizando…' : 'Atualizar'}</button>${isOwner() ? `<button type="button" class="ceo-button" data-project-team>Acesso do time</button><button type="button" class="ceo-button primary" data-project-new ${!loaded || loading || errorMessage ? 'disabled' : ''}>+ Novo projeto</button>` : ''}</div></div>
+    container.innerHTML = `<section class="ceo-projects"><div class="ceo-project-heading"><div><span class="ceo-project-eyebrow">SUA PRODUÇÃO, DO SEU JEITO</span><h2>Projetos de clientes</h2><p>Crie suas listas, organize as etapas e acompanhe cada entrega.</p></div><div class="ceo-project-heading-actions"><button type="button" class="ceo-button" data-project-refresh ${loading ? 'disabled' : ''}>${loading ? 'Atualizando…' : 'Atualizar'}</button>${isOwner() ? `<button type="button" class="ceo-button" data-project-team ${!loaded || loading || errorMessage ? 'disabled' : ''}>Criar acesso</button><button type="button" class="ceo-button primary" data-project-new ${!loaded || loading || errorMessage ? 'disabled' : ''}>+ Novo projeto</button>` : ''}</div></div>
       ${workspace()?.isProjectsOnly?.() ? '<p class="ceo-project-access-note">Seu espaço de trabalho: acompanhe os clientes atribuídos a você e atualize as etapas de cada entrega.</p>' : role() === 'viewer' ? '<p class="ceo-project-access-note">Você tem acesso de leitura. As atualizações ficam com o proprietário e os responsáveis.</p>' : ''}
       <div class="ceo-project-stats"><div><span>Projetos ativos</span><strong>${active}</strong><small>Do planejamento à entrega</small></div><div><span>Em andamento</span><strong>${rows.filter(row => row.status === 'in_progress').length}</strong><small>Produção em movimento</small></div><div><span>Aguardando cliente</span><strong>${rows.filter(row => row.status === 'waiting').length}</strong><small>Aprovações e materiais</small></div><div><span>Concluídos</span><strong>${rows.filter(row => row.status === 'completed').length}</strong><small>Entregas realizadas</small></div></div>
       ${notice ? `<p class="ceo-project-notice" role="status">${esc(notice)}</p>` : ''}
@@ -150,7 +150,7 @@
       ${loading && !loaded ? '<div class="ceo-project-empty" role="status"><h3>Carregando seus projetos…</h3><p>Consultando os projetos disponíveis para sua conta.</p></div>' : !errorMessage && loaded ? `<div class="ceo-project-filters"><label class="ceo-field ceo-project-search">Pesquisar projetos<input type="search" data-project-search value="${esc(filters.search)}" placeholder="Cliente, empresa ou responsável"></label><label class="ceo-field">Situação<select data-project-status><option value="">Todas as situações</option>${options(filters.status)}</select></label></div><p class="ceo-project-results" data-project-count aria-live="polite"></p><div class="ceo-project-board" data-project-board></div>` : ''}
     </section>`;
     container.querySelector('[data-project-new]')?.addEventListener('click', () => openEditor());
-    container.querySelector('[data-project-team]')?.addEventListener('click', () => { if (isOwner()) workspace()?.openTeam?.(); });
+    container.querySelector('[data-project-team]')?.addEventListener('click', () => openTeamAccess());
     container.querySelector('[data-project-refresh]')?.addEventListener('click', () => void load());
     container.querySelector('[data-project-retry]')?.addEventListener('click', () => void load());
     container.querySelector('[data-project-search]')?.addEventListener('input', event => { filters.search = event.target.value; renderBoard(); });
@@ -181,6 +181,128 @@
   function safeUrl(value) {
     try { const url = new URL(value); return ['https:', 'http:'].includes(url.protocol) ? url.href : ''; } catch { return ''; }
   }
+  function openTeamAccess(initialEmail = '') {
+    if (!isOwner() || !loaded || loading || errorMessage) return;
+    const ticket = capture();
+    const dialog = newDialog('Acesso somente a Projetos', `<div class="ceo-project-access-note"><strong>Um acesso separado para sua equipe</strong><p>Nesta empresa, a pessoa poderá ver os projetos atribuídos ao seu e-mail, organizar listas e etapas e consultar os acessos do cliente. Financeiro, agenda e os demais módulos ficam indisponíveis.</p></div>
+      <form class="ceo-project-team-form" data-team-form><label class="ceo-field">E-mail da pessoa<input type="email" name="email" required maxlength="254" autocomplete="off" placeholder="pessoa@empresa.com"></label>
+      <section class="ceo-project-team-preview" aria-live="polite"><h3>Projetos liberados para este e-mail</h3><div data-team-preview></div></section>
+      <p data-team-permission aria-live="polite"></p><button class="ceo-button primary" type="submit" disabled data-team-submit>Gerar link de acesso</button></form>
+      <div class="ceo-project-invite" data-team-result hidden></div><p class="ceo-project-notice" data-team-notice role="status" hidden></p>
+      <p class="ceo-form-error" data-team-error role="alert" hidden></p>
+      <section class="ceo-project-team-list"><div class="ceo-project-team-list-heading"><h3>Equipe de Projetos</h3><button type="button" class="ceo-button" data-team-refresh>Atualizar acessos</button></div><div data-team-roster aria-live="polite">Carregando acessos…</div></section>
+      <footer class="ceo-project-dialog-footer"><button type="button" class="ceo-button" data-close>Fechar</button></footer>`);
+    const form = dialog.querySelector('[data-team-form]'), emailInput = form.elements.email;
+    emailInput.value = initialEmail;
+    const submit = dialog.querySelector('[data-team-submit]'), preview = dialog.querySelector('[data-team-preview]');
+    const permission = dialog.querySelector('[data-team-permission]'), rosterBox = dialog.querySelector('[data-team-roster]');
+    const output = dialog.querySelector('[data-team-result]'), errorBox = dialog.querySelector('[data-team-error]'), status = dialog.querySelector('[data-team-notice]');
+    let roster = null, busy = false, generatedEmail = '';
+    const valid = () => dialogCurrent(ticket, dialog) && isOwner();
+    const normalize = value => text(value).trim().toLowerCase();
+    const email = () => normalize(emailInput.value);
+    const memberFor = address => roster?.members.find(member => normalize(member.email) === address);
+    const assignments = address => rows.filter(row => normalize(row.responsible_email) === address);
+    function assignmentList(address) {
+      const projects = assignments(address);
+      return projects.length ? `<ul>${projects.map(row => `<li>${esc(row.title)}</li>`).join('')}</ul>` : '<p>Nenhum projeto atribuído. Preencha o campo “E-mail do responsável” ao criar ou editar um projeto para liberar o acesso a ele.</p>';
+    }
+    function clearResult() { output.replaceChildren(); output.hidden = true; generatedEmail = ''; }
+    function showTeamError(error, saved = false) {
+      errorBox.textContent = saved ? 'A alteração foi salva, mas não foi possível consultar os acessos atualizados. Clique em Atualizar acessos para continuar.' : friendly(error);
+      errorBox.hidden = false;
+      if (!roster) rosterBox.textContent = 'Não foi possível consultar a equipe. Clique em Atualizar acessos para tentar novamente.';
+    }
+    function syncForm() {
+      const address = email(), member = memberFor(address);
+      preview.innerHTML = address && emailInput.validity.valid ? assignmentList(address) : '<p>Informe o e-mail para conferir os projetos que essa pessoa poderá acessar.</p>';
+      permission.textContent = !roster ? busy ? 'Aguarde a consulta dos acessos.' : 'Atualize os acessos para continuar.' : member?.role === 'projects' ? 'Esta pessoa já tem acesso somente a Projetos nesta empresa. Ela pode entrar com a própria conta.' : member ? 'Esta pessoa já tem acesso a outros módulos. Ao limitar o acesso, ela poderá editar os projetos atribuídos e consultar as senhas dos clientes. O acesso aos demais módulos será retirado e os convites anteriores serão cancelados.' : 'Permissão fixa: somente Projetos desta empresa. A pessoa cria sua própria senha ao abrir o convite ou entra com uma conta existente.';
+      submit.textContent = busy ? 'Aguarde…' : member?.role === 'projects' ? 'Acesso já ativo' : member ? 'Limitar acesso a Projetos' : 'Gerar link de acesso';
+      submit.disabled = busy || !roster || member?.role === 'projects';
+      emailInput.disabled = busy && Boolean(roster);
+      dialog.querySelector('[data-team-refresh]').disabled = busy;
+      rosterBox.querySelectorAll('button').forEach(button => { button.disabled = busy; });
+    }
+    function renderRoster() {
+      const members = roster.members.filter(member => member.role === 'projects');
+      const invites = roster.invites.filter(invite => invite.role === 'projects');
+      rosterBox.innerHTML = members.map(member => `<article class="ceo-project-team-entry" data-team-entry><div><strong>${esc(member.email)}</strong><span class="ceo-project-team-badge">Acesso ativo · Somente Projetos</span>${assignmentList(normalize(member.email))}</div><div data-team-actions><button type="button" class="ceo-button danger" data-team-revoke="${esc(member.user_id)}">Remover acesso</button></div></article>`).join('')
+        + invites.map(invite => `<article class="ceo-project-team-entry" data-team-entry><div><strong>${esc(invite.email)}</strong><span class="ceo-project-team-badge is-pending">Convite pendente · Somente Projetos</span>${assignmentList(normalize(invite.email))}</div><div data-team-actions><button type="button" class="ceo-button" data-team-cancel="${esc(invite.id)}">Cancelar convite</button></div></article>`).join('');
+      if (!members.length && !invites.length) rosterBox.innerHTML = '<p>Nenhum acesso exclusivo a Projetos ainda. Gere um link acima para convidar a primeira pessoa.</p>';
+    }
+    async function refreshRoster() {
+      roster = null; rosterBox.textContent = 'Carregando acessos…';
+      const result = await rpc('zama_workspace_roster', {});
+      if (!valid()) return;
+      if (!Array.isArray(result?.members) || !Array.isArray(result?.invites)) throw new Error('PROJECT_INVALID_RESPONSE');
+      roster = result; renderRoster();
+    }
+    async function reloadRoster() {
+      if (!valid() || busy) return;
+      busy = true; roster = null; clearResult(); errorBox.hidden = true; status.hidden = true; syncForm();
+      rosterBox.textContent = 'Carregando acessos…';
+      try { await refreshRoster(); }
+      catch (error) { if (valid()) showTeamError(error); }
+      finally { if (valid()) { busy = false; syncForm(); } }
+    }
+    emailInput.addEventListener('input', () => { clearResult(); status.hidden = errorBox.hidden = true; syncForm(); });
+    dialog.querySelector('[data-team-refresh]').addEventListener('click', () => void reloadRoster());
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      if (!valid() || busy || !roster || !form.reportValidity()) return;
+      const address = email(), member = memberFor(address);
+      if (member?.role === 'projects') return;
+      let saved = false;
+      busy = true; clearResult(); errorBox.hidden = status.hidden = true; syncForm();
+      try {
+        if (member) {
+          await rpc('zama_workspace_set_role', { p_user: member.user_id, p_role: 'projects' });
+          if (!valid()) return;
+          saved = true;
+          status.textContent = `Acesso de ${address} atualizado: somente Projetos desta empresa.`; status.hidden = false;
+        } else {
+          if (!workspace()?.inviteProjects) throw new Error('PROJECT_UNAVAILABLE');
+          const link = await workspace().inviteProjects(address);
+          if (!valid()) return;
+          saved = true;
+          generatedEmail = address; output.hidden = false;
+          output.innerHTML = `<h3>Convite pronto para ${esc(address)}</h3><label class="ceo-field">Link de acesso a Projetos<input type="text" readonly aria-label="Link de acesso a Projetos"></label><button type="button" class="ceo-button" data-team-copy>Copiar link</button><p>Copie e envie o link à pessoa. O convite é válido por 7 dias e só pode ser aceito com o e-mail indicado.</p><ol><li>Abra o link e entre na sua conta ou clique em “Criar acesso” para cadastrar a própria senha.</li><li>Se precisar confirmar o e-mail, confirme e abra este convite novamente.</li><li>Clique em “Aceitar convite” para entrar nos projetos atribuídos.</li></ol>`;
+          output.querySelector('input').value = text(link);
+          output.querySelector('[data-team-copy]').addEventListener('click', async event => {
+            const button = event.currentTarget;
+            try { await root.navigator.clipboard.writeText(text(link)); if (valid() && generatedEmail === address) button.textContent = 'Link copiado'; }
+            catch { if (valid() && generatedEmail === address) { output.querySelector('input').select(); button.textContent = 'Selecione e copie o link'; } }
+          });
+        }
+        await refreshRoster();
+      } catch (error) { if (valid()) showTeamError(error, saved); }
+      finally { if (valid()) { busy = false; syncForm(); } }
+    });
+    rosterBox.addEventListener('click', async event => {
+      const button = event.target.closest('button');
+      if (!button || !valid() || busy || !roster) return;
+      if (button.hasAttribute('data-team-keep')) { renderRoster(); return; }
+      if (button.dataset.teamRevoke) {
+        button.parentElement.innerHTML = `<p>Remover o acesso desta pessoa à empresa? Os projetos serão mantidos.</p><button type="button" class="ceo-button danger" data-team-confirm="${esc(button.dataset.teamRevoke)}">Confirmar remoção</button><button type="button" class="ceo-button" data-team-keep>Manter acesso</button>`;
+        return;
+      }
+      const member = roster.members.find(item => item.user_id === button.dataset.teamConfirm && item.role === 'projects');
+      const invite = roster.invites.find(item => item.id === button.dataset.teamCancel && item.role === 'projects');
+      if (!member && !invite) return;
+      let saved = false;
+      busy = true; errorBox.hidden = status.hidden = true; syncForm();
+      try {
+        await rpc(member ? 'zama_workspace_revoke' : 'zama_workspace_cancel_invite', member ? { p_user: member.user_id } : { p_id: invite.id });
+        if (!valid()) return;
+        saved = true;
+        if (generatedEmail === normalize((member || invite).email)) clearResult();
+        status.textContent = member ? 'Acesso removido. Os projetos foram mantidos.' : 'Convite cancelado. O link não permite mais aceitar o acesso.'; status.hidden = false;
+        await refreshRoster();
+      } catch (error) { if (valid()) showTeamError(error, saved); }
+      finally { if (valid()) { busy = false; syncForm(); } }
+    });
+    syncForm(); emailInput.focus(); void reloadRoster();
+  }
   function checklist(label, steps) {
     return `<section class="ceo-project-detail-track"><h3>${esc(label)}</h3>${meter('Etapas concluídas', steps)}<ul class="ceo-project-checklist">${steps.length ? steps.map(step => `<li class="${step.done ? 'is-done' : ''}"><span class="ceo-project-check" aria-hidden="true">${step.done ? '✓' : ''}</span><span>${esc(step.label)}${step.done ? '<span class="ceo-project-sr"> — Concluída</span>' : ''}</span></li>`).join('') : '<li class="ceo-muted">Nenhuma etapa cadastrada.</li>'}</ul></section>`;
   }
@@ -193,7 +315,7 @@
       <div class="ceo-project-secret"><label class="ceo-field">Senha<input type="password" readonly data-private-value aria-label="Senha do cliente" placeholder="${row.has_password ? '••••••••••••' : 'Não cadastrada'}" autocomplete="off"></label>${row.has_password && canEdit() ? '<button class="ceo-button" type="button" data-reveal aria-pressed="false">Mostrar senha</button>' : ''}</div><p class="ceo-project-secret-note">${role() === 'viewer' ? 'A senha é reservada ao proprietário e aos responsáveis autorizados.' : 'A senha é consultada somente ao clicar e ocultada ao sair desta janela.'}</p></section>
       <div class="ceo-project-detail-tracks">${row.production_lists.length ? row.production_lists.map(list => checklist(list.title, list.steps)).join('') : '<p class="ceo-project-no-stages">Nenhuma lista de produção cadastrada.</p>'}</div>
       <section class="ceo-project-notes"><h3>Notas e próximos passos</h3><p>${esc(row.notes || 'Nenhuma observação por enquanto.')}</p></section>
-      ${isOwner() && row.responsible_email ? `<section class="ceo-project-invite"><h3>Acesso do responsável</h3><p>Gere um convite para <strong>${esc(row.responsible_email)}</strong>. A pessoa usa sua própria conta e recebe acesso somente aos projetos atribuídos a ela.</p><button type="button" class="ceo-button" data-project-invite>Gerar convite para projetos</button><div data-invite-result hidden></div></section>` : ''}
+      ${isOwner() && row.responsible_email ? `<section class="ceo-project-invite"><h3>Acesso do responsável</h3><p>Crie ou gerencie o acesso de <strong>${esc(row.responsible_email)}</strong> aos projetos desta empresa.</p><button type="button" class="ceo-button" data-project-invite>Gerenciar acesso do responsável</button></section>` : ''}
       <p class="ceo-form-error" data-dialog-error role="alert" hidden></p><footer class="ceo-project-dialog-footer">${isOwner() ? '<button type="button" class="ceo-button danger" data-project-delete>Excluir projeto</button>' : ''}<div><button type="button" class="ceo-button" data-close>Fechar</button>${canEdit() ? `<button type="button" class="ceo-button primary" data-project-edit>${isOwner() ? 'Editar projeto' : 'Atualizar andamento'}</button>` : ''}</div></footer>`);
     dialog.querySelector('[data-project-edit]')?.addEventListener('click', () => { if (dialogCurrent(ticket, dialog)) openEditor(id); });
     dialog.querySelector('[data-project-delete]')?.addEventListener('click', () => { if (dialogCurrent(ticket, dialog)) openDelete(row); });
@@ -215,24 +337,8 @@
         if (dialogCurrent(ticket, dialog) && sequence === secretSequence) { errorBox.textContent = friendly(error); errorBox.hidden = false; button.textContent = 'Mostrar senha'; }
       } finally { if (dialogCurrent(ticket, dialog) && sequence === secretSequence) button.disabled = false; }
     });
-    dialog.querySelector('[data-project-invite]')?.addEventListener('click', async event => {
-      if (!dialogCurrent(ticket, dialog) || !isOwner()) return;
-      const button = event.currentTarget, output = dialog.querySelector('[data-invite-result]'), errorBox = dialog.querySelector('[data-dialog-error]');
-      button.disabled = true; errorBox.hidden = true;
-      try {
-        if (!workspace()?.inviteProjects) throw new Error('PROJECT_UNAVAILABLE');
-        const link = await workspace().inviteProjects(row.responsible_email);
-        if (!dialogCurrent(ticket, dialog)) return;
-        output.hidden = false;
-        output.innerHTML = `<label class="ceo-field">Link de acesso do responsável<input type="text" readonly aria-label="Link de acesso do responsável"></label><button type="button" class="ceo-button" data-copy-invite>Copiar link</button><p>Envie este link ao responsável. O convite só pode ser aceito pela conta com o e-mail indicado.</p>`;
-        output.querySelector('input').value = text(link);
-        output.querySelector('[data-copy-invite]').addEventListener('click', async event => {
-          const copyButton = event.currentTarget;
-          try { await root.navigator.clipboard.writeText(text(link)); if (dialogCurrent(ticket, dialog)) copyButton.textContent = 'Link copiado'; }
-          catch { if (dialogCurrent(ticket, dialog)) { output.querySelector('input').select(); copyButton.textContent = 'Selecione e copie o link'; } }
-        });
-      } catch (error) { if (dialogCurrent(ticket, dialog)) { errorBox.textContent = friendly(error); errorBox.hidden = false; } }
-      finally { if (dialogCurrent(ticket, dialog)) button.disabled = false; }
+    dialog.querySelector('[data-project-invite]')?.addEventListener('click', () => {
+      if (dialogCurrent(ticket, dialog) && isOwner()) openTeamAccess(row.responsible_email);
     });
   }
   function stepEditor(step) {
