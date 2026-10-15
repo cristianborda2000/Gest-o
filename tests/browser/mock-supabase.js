@@ -101,6 +101,7 @@ function sdk(seed, options = {}) {
   })};
 }
 async function mock(page, data = seed, { jarvisVisible = false, projects, ...sdkOptions } = {}) {
+  await page.route('**/api/project-access', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ code: 'NOT_CONFIGURED', error: 'Cadastro com senha indisponível neste teste.' }) }));
   if(projects) {
     // This fixture lives in the test process, like the real remote store. It must
     // not put client credentials in browser storage to simulate persistence.

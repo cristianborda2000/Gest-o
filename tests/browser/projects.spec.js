@@ -33,6 +33,241 @@ async function ownerProjects(page, projects = [assigned], options = {}) {
   await page.locator('.nav [data-module="projetos"]').click();
 }
 
+const accountPassword = 'Fixture-access-secret-2026!';
+const accountEmail = 'person@example.invalid';
+async function accountApi(page, { delayGet = false, delayPost = false, postError = null } = {}) {
+  const calls = [], pending = [];
+  async function respond(route, updateRoster = true) {
+    if (route.request().method() === 'GET') return route.fulfill({ json: { enabled: true } });
+    if (postError) return route.fulfill({ status: postError.status, json: { code: postError.code, error: postError.error } });
+    const { email } = route.request().postDataJSON();
+    if (updateRoster) await page.evaluate(address => { window.testWorkspaceRoster.members.push({ user_id: 'new-projects-user', email: address, role: 'projects' }); }, email);
+    return route.fulfill({ status: 201, json: { created: true, email, role: 'projects', loginUrl: 'https://www.zam4.com/' } });
+  }
+  await page.route('**/api/project-access', async route => {
+    calls.push({ method: route.request().method(), authorization: route.request().headers().authorization, body: route.request().postDataJSON() });
+    if ((route.request().method() === 'GET' && delayGet) || (route.request().method() === 'POST' && delayPost)) { pending.push(route); return; }
+    await respond(route);
+  });
+  return { calls, pending, respond };
+}
+async function openAccountForm(page, email = accountEmail) {
+  await page.locator('#ceoWorkspace').getByRole('button', { name: 'Criar acesso', exact: true }).click();
+  await dialog(page).getByLabel('E-mail da pessoa', { exact: true }).fill(email);
+  await expect(dialog(page).getByRole('button', { name: 'Criar acesso com senha', exact: true })).toBeEnabled();
+}
+async function fillAccountPassword(page, confirmation = accountPassword) {
+  await dialog(page).getByLabel('Senha de acesso', { exact: true }).fill(accountPassword);
+  await dialog(page).getByLabel('Confirmar senha', { exact: true }).fill(confirmation);
+}
+async function noPersistedAccountPassword(page) {
+  expect(await page.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage }, state, cloudSnapshot, calls: window.testRpcCalls }))).not.toContain(accountPassword);
+  expect(await page.content()).not.toContain(accountPassword);
+}
+
+test('direct project account creation exposes masked credentials only until copied or expired', async ({ page }, info) => {
+  await ownerProjects(page, [{ ...assigned, responsible_email: accountEmail }]);
+  const api = await accountApi(page);
+  let copied = '';
+  await page.exposeFunction('testCopyAccountCredentials', value => { copied = value; });
+  await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: value => window.testCopyAccountCredentials(value) } }));
+  await openAccountForm(page, accountEmail.toUpperCase());
+  await expect(dialog(page).locator('[data-team-preview]')).toContainText('Catálogo Aurora');
+  await fillAccountPassword(page);
+  await page.screenshot({ path: info.outputPath('project-account-form-desktop.png') });
+  await dialog(page).getByRole('button', { name: 'Criar acesso com senha', exact: true }).click();
+  const secret = dialog(page).getByLabel('Senha cadastrada', { exact: true });
+  await expect(secret).toHaveValue(accountPassword);
+  await expect(secret).toHaveAttribute('type', 'password');
+  await expect(secret).toHaveAttribute('readonly', '');
+  await expect(dialog(page).getByLabel('Senha de acesso', { exact: true })).toHaveValue('');
+  await expect(dialog(page).getByLabel('Confirmar senha', { exact: true })).toHaveValue('');
+  await expect(dialog(page).locator('[data-team-roster]')).toContainText(accountEmail);
+  expect(api.calls).toEqual([{ method: 'GET', authorization: 'Bearer test-access-token', body: null }, { method: 'POST', authorization: 'Bearer test-access-token', body: { email: accountEmail, password: accountPassword } }]);
+  expect(copied).toBe('');
+  await noPersistedAccountPassword(page);
+  await page.screenshot({ path: info.outputPath('project-account-success-desktop.png') });
+  await dialog(page).getByRole('button', { name: 'Copiar dados de acesso', exact: true }).click();
+  expect(copied).toBe(`Site: https://www.zam4.com/\nE-mail: ${accountEmail}\nSenha: ${accountPassword}`);
+  await page.clock.fastForward(60001);
+  await expect(secret).toHaveValue('');
+  copied = '';
+  await dialog(page).getByRole('button', { name: 'Dados de acesso copiados', exact: true }).click();
+  await expect(dialog(page).locator('[data-team-notice]')).toContainText('senha já foi apagada');
+  expect(copied).toBe('');
+  await dialog(page).getByRole('button', { name: 'Fechar', exact: true }).click();
+  await page.locator('#ceoWorkspace').getByRole('button', { name: 'Criar acesso', exact: true }).click();
+  await dialog(page).getByLabel('E-mail da pessoa', { exact: true }).fill(accountEmail);
+  await expect(dialog(page).getByRole('button', { name: 'Acesso já ativo', exact: true })).toBeDisabled();
+  await expect(dialog(page).getByLabel('Senha cadastrada', { exact: true })).toHaveCount(0);
+  await noPersistedAccountPassword(page);
+});
+
+test('direct project account validation blocks mismatched and oversized passwords but preserves manual invitations', async ({ page }) => {
+  await ownerProjects(page);
+  const api = await accountApi(page);
+  await openAccountForm(page);
+  await fillAccountPassword(page, 'Different-password-2026!');
+  await dialog(page).getByRole('button', { name: 'Criar acesso com senha', exact: true }).click();
+  await expect(dialog(page).getByRole('alert')).toContainText('senhas não coincidem');
+  expect(api.calls.filter(call => call.method === 'POST')).toEqual([]);
+  await dialog(page).getByLabel('Senha de acesso', { exact: true }).fill('é'.repeat(37));
+  await dialog(page).getByLabel('Confirmar senha', { exact: true }).fill('é'.repeat(37));
+  await dialog(page).getByRole('button', { name: 'Criar acesso com senha', exact: true }).click();
+  await expect(dialog(page).getByRole('alert')).toContainText('72 bytes');
+  expect(api.calls.filter(call => call.method === 'POST')).toEqual([]);
+  await fillAccountPassword(page, 'Different-password-2026!');
+  await dialog(page).getByRole('button', { name: 'Gerar link de acesso', exact: true }).click();
+  await expect(dialog(page).getByLabel('Link de acesso a Projetos', { exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
+  expect(api.calls.filter(call => call.method === 'POST')).toEqual([]);
+  await noPersistedAccountPassword(page);
+});
+
+test('direct project account existing-email conflict keeps the current account intact and offers invitation', async ({ page }) => {
+  await ownerProjects(page);
+  const api = await accountApi(page, { postError: { status: 409, code: 'ACCOUNT_EXISTS', error: 'Este e-mail já possui uma conta. A senha existente não foi alterada. Use o convite para vincular essa conta.' } });
+  await openAccountForm(page);
+  await fillAccountPassword(page);
+  await dialog(page).getByRole('button', { name: 'Criar acesso com senha', exact: true }).click();
+  await expect(dialog(page).getByRole('alert')).toContainText('senha existente não foi alterada');
+  await expect(dialog(page).getByLabel('Senha cadastrada', { exact: true })).toHaveCount(0);
+  await expect(dialog(page).getByLabel('Senha de acesso', { exact: true })).toHaveValue('');
+  await expect(dialog(page).getByLabel('Confirmar senha', { exact: true })).toHaveValue('');
+  await dialog(page).getByRole('button', { name: 'Gerar link de acesso', exact: true }).click();
+  await expect(dialog(page).getByLabel('Link de acesso a Projetos', { exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
+  expect(api.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+  await noPersistedAccountPassword(page);
+});
+
+test('direct project account controls never replace an existing member password', async ({ page }) => {
+  await ownerProjects(page, [assigned], { roster: { members: [{ user_id: 'member-editor', email: accountEmail, role: 'editor' }], invites: [] } });
+  const api = await accountApi(page);
+  await openAccountForm(page, 'new-person@example.invalid');
+  await fillAccountPassword(page);
+  await dialog(page).getByLabel('E-mail da pessoa', { exact: true }).fill(accountEmail);
+  await expect(dialog(page).getByRole('button', { name: 'Criar acesso com senha', exact: true })).not.toBeVisible();
+  await expect(dialog(page).getByLabel('Senha de acesso', { exact: true })).toHaveValue('');
+  await expect(dialog(page).getByLabel('Senha de acesso', { exact: true })).toBeDisabled();
+  await dialog(page).getByRole('button', { name: 'Limitar acesso a Projetos', exact: true }).click();
+  await expect(dialog(page).getByRole('button', { name: 'Acesso já ativo', exact: true })).toBeDisabled();
+  expect(api.calls.filter(call => call.method === 'POST')).toEqual([]);
+});
+
+test('project access Enter creates an invitation when password accounts are unavailable', async ({ page }) => {
+  await ownerProjects(page);
+  const methods = [];
+  page.on('request', request => { if (request.url().endsWith('/api/project-access')) methods.push(request.method()); });
+  await page.locator('#ceoWorkspace').getByRole('button', { name: 'Criar acesso', exact: true }).click();
+  const email = dialog(page).getByLabel('E-mail da pessoa', { exact: true });
+  await email.fill(accountEmail);
+  await expect(dialog(page).locator('[data-team-capability]')).toContainText('indisponível');
+  await expect(dialog(page).getByRole('button', { name: 'Gerar link de acesso', exact: true })).toBeEnabled();
+  await email.press('Enter');
+  await expect(dialog(page).getByLabel('Link de acesso a Projetos', { exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
+  expect(methods).toEqual(['GET']);
+});
+
+test('project access Enter limits an existing member without creating a password account', async ({ page }) => {
+  await ownerProjects(page, [assigned], { roster: { members: [{ user_id: 'member-editor', email: accountEmail, role: 'editor' }], invites: [] } });
+  const api = await accountApi(page);
+  await page.locator('#ceoWorkspace').getByRole('button', { name: 'Criar acesso', exact: true }).click();
+  const email = dialog(page).getByLabel('E-mail da pessoa', { exact: true });
+  await email.fill(accountEmail);
+  await expect(dialog(page).getByRole('button', { name: 'Limitar acesso a Projetos', exact: true })).toBeEnabled();
+  await email.press('Enter');
+  await expect(dialog(page).getByRole('button', { name: 'Acesso já ativo', exact: true })).toBeDisabled();
+  await expect(dialog(page).locator('[data-team-notice]')).toContainText('atualizado: somente Projetos');
+  expect(api.calls.filter(call => call.method === 'POST')).toEqual([]);
+  expect(await page.evaluate(() => window.testRpcCalls.filter(call => call.name === 'zama_workspace_set_role'))).toEqual([{ name: 'zama_workspace_set_role', params: { p_user: 'member-editor', p_role: 'projects' } }]);
+});
+
+test('project access Enter during capability loading creates only the visible invitation action', async ({ page }) => {
+  await ownerProjects(page);
+  const api = await accountApi(page, { delayGet: true });
+  await page.locator('#ceoWorkspace').getByRole('button', { name: 'Criar acesso', exact: true }).click();
+  const email = dialog(page).getByLabel('E-mail da pessoa', { exact: true });
+  await email.fill(accountEmail);
+  await expect.poll(() => api.pending.length).toBe(1);
+  await expect(dialog(page).getByRole('button', { name: 'Gerar link de acesso', exact: true })).toBeEnabled();
+  await expect(dialog(page).getByRole('button', { name: 'Criar acesso com senha', exact: true })).not.toBeVisible();
+  await email.press('Enter');
+  await expect(dialog(page).getByLabel('Link de acesso a Projetos', { exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
+  await api.respond(api.pending[0]);
+  await expect(dialog(page).getByRole('button', { name: 'Criar acesso com senha', exact: true })).toBeEnabled();
+  await expect(dialog(page).getByLabel('Link de acesso a Projetos', { exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
+  await expect(dialog(page).getByLabel('Senha cadastrada', { exact: true })).toHaveCount(0);
+  expect(api.calls.filter(call => call.method === 'POST')).toEqual([]);
+});
+
+test('direct project account creation rejects a different authenticated session before sending a password', async ({ page }) => {
+  await ownerProjects(page);
+  const api = await accountApi(page);
+  await openAccountForm(page);
+  await fillAccountPassword(page);
+  await page.evaluate(() => { supabaseClient.auth.getSession = async () => ({ data: { session: { access_token: 'different-token', user: { id: 'account-b' } } } }); });
+  await dialog(page).getByRole('button', { name: 'Criar acesso com senha', exact: true }).click();
+  await expect(dialog(page).getByRole('alert')).toContainText('sessão expirou');
+  expect(api.calls.filter(call => call.method === 'POST')).toEqual([]);
+  await noPersistedAccountPassword(page);
+});
+
+for (const action of ['blur', 'close', 'switch account']) test(`direct project account late creation cannot reveal credentials after ${action}`, async ({ page }) => {
+  await ownerProjects(page);
+  const api = await accountApi(page, { delayPost: true });
+  await openAccountForm(page);
+  await fillAccountPassword(page);
+  await dialog(page).getByRole('button', { name: 'Criar acesso com senha', exact: true }).click();
+  await expect.poll(() => api.pending.length).toBe(1);
+  await expect(dialog(page).locator('[data-team-submit]')).toBeDisabled();
+  await expect(dialog(page).locator('[data-team-create]')).toBeDisabled();
+  if (action === 'blur') await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  else if (action === 'close') {
+    await dialog(page).getByRole('button', { name: 'Fechar', exact: true }).click();
+    await page.locator('#ceoWorkspace').getByRole('button', { name: 'Criar acesso', exact: true }).click();
+  } else {
+    await page.evaluate(() => window.testAuthEvent('SIGNED_IN', { id: 'account-b', email: 'account-b@example.invalid' }));
+    await page.clock.fastForward(1);
+    await expect.poll(() => page.evaluate(() => cloudUserId)).toBe('account-b');
+  }
+  await api.respond(api.pending[0], action === 'blur');
+  if (action === 'blur') {
+    await expect(dialog(page).getByLabel('Senha cadastrada', { exact: true })).toHaveValue('');
+    await expect(dialog(page).locator('[data-team-notice]')).toContainText('já pode entrar');
+  } else {
+    await expect(page.getByLabel('Senha cadastrada', { exact: true })).toHaveCount(0);
+    if (action === 'close') await expect(dialog(page).getByLabel('E-mail da pessoa', { exact: true })).toHaveValue('');
+    else await expect(dialog(page)).toHaveCount(0);
+  }
+  expect(api.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+  await noPersistedAccountPassword(page);
+});
+
+test('direct project account late capability response cannot enable a closed dialog', async ({ page }) => {
+  await ownerProjects(page);
+  const api = await accountApi(page, { delayGet: true });
+  await page.locator('#ceoWorkspace').getByRole('button', { name: 'Criar acesso', exact: true }).click();
+  await expect.poll(() => api.pending.length).toBe(1);
+  await expect(dialog(page).getByRole('button', { name: 'Criar acesso com senha', exact: true })).not.toBeVisible();
+  await dialog(page).getByRole('button', { name: 'Fechar', exact: true }).click();
+  await api.respond(api.pending[0]);
+  await expect(dialog(page)).toHaveCount(0);
+  expect(api.calls.filter(call => call.method === 'POST')).toEqual([]);
+});
+
+for (const width of [320, 390]) test(`direct project account credentials fit a ${width}px phone`, async ({ page }, info) => {
+  await page.setViewportSize({ width, height: 844 });
+  await ownerProjects(page);
+  await accountApi(page);
+  await openAccountForm(page, 'responsavel.producao.nome.completo@example.invalid');
+  await fillAccountPassword(page);
+  expect(await dialog(page).evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await dialog(page).getByRole('button', { name: 'Criar acesso com senha', exact: true }).click();
+  await expect(dialog(page).getByLabel('Senha cadastrada', { exact: true })).toHaveValue(accountPassword);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(await dialog(page).evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await page.screenshot({ path: info.outputPath(`project-account-${width}.png`) });
+});
+
 test('owner builds multiple production lists, reorders stages and keeps the order after reload', async ({ page }) => {
   await ownerProjects(page, []);
   await page.getByRole('button', { name: '+ Novo projeto', exact: true }).click();
@@ -274,7 +509,7 @@ test('a successful removal followed by a roster failure keeps new access disable
   await member.getByRole('button', { name: 'Remover acesso', exact: true }).click();
   await page.evaluate(() => { window.testFailRpc = 'zama_workspace_roster'; });
   await member.getByRole('button', { name: 'Confirmar remoção', exact: true }).click();
-  await expect(dialog(page).getByRole('status')).toContainText('Acesso removido');
+  await expect(dialog(page).locator('[data-team-notice]')).toContainText('Acesso removido');
   await expect(dialog(page).getByRole('alert')).toContainText(/Não foi possível/i);
   await dialog(page).getByLabel('E-mail da pessoa', { exact: true }).fill('new-person@example.invalid');
   await expect(dialog(page).getByRole('button', { name: 'Gerar link de acesso', exact: true })).toBeDisabled();

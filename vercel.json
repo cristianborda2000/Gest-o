@@ -4,6 +4,6 @@
   "buildCommand": "npm run build:css",
   "outputDirectory": "app",
   "cleanUrls": true,
-  "functions": { "api/jarvis.js": { "maxDuration": 180 }, "api/reminder-cron.js": { "maxDuration": 60 } },
+  "functions": { "api/jarvis.js": { "maxDuration": 180 }, "api/reminder-cron.js": { "maxDuration": 60 }, "api/project-access.js": { "maxDuration": 60 } },
   "rewrites": [{ "source": "/api/jarvis/:path*", "destination": "/api/jarvis?path=:path*" }, { "source": "/api/reminders/:path*", "destination": "/api/reminders?path=:path*" }]
 }

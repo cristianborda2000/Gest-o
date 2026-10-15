@@ -187,7 +187,10 @@
     const dialog = newDialog('Acesso somente a Projetos', `<div class="ceo-project-access-note"><strong>Um acesso separado para sua equipe</strong><p>Nesta empresa, a pessoa poderá ver os projetos atribuídos ao seu e-mail, organizar listas e etapas e consultar os acessos do cliente. Financeiro, agenda e os demais módulos ficam indisponíveis.</p></div>
       <form class="ceo-project-team-form" data-team-form><label class="ceo-field">E-mail da pessoa<input type="email" name="email" required maxlength="254" autocomplete="off" placeholder="pessoa@empresa.com"></label>
       <section class="ceo-project-team-preview" aria-live="polite"><h3>Projetos liberados para este e-mail</h3><div data-team-preview></div></section>
-      <p data-team-permission aria-live="polite"></p><button class="ceo-button primary" type="submit" disabled data-team-submit>Gerar link de acesso</button></form>
+      <p data-team-permission aria-live="polite"></p>
+      <div class="ceo-project-team-passwords" data-team-passwords hidden><div class="ceo-project-form-grid"><label class="ceo-field">Senha de acesso<input type="password" name="access_password" minlength="10" maxlength="72" autocomplete="new-password" data-private-value></label><label class="ceo-field">Confirmar senha<input type="password" name="confirm_password" minlength="10" maxlength="72" autocomplete="new-password" data-private-value></label></div><p>Use pelo menos 10 caracteres. A pessoa entra com este e-mail e senha, sem precisar receber um convite.</p></div>
+      <p class="ceo-project-team-capability" data-team-capability role="status">Verificando a criação de acesso com senha…</p>
+      <div class="ceo-project-team-form-actions"><button class="ceo-button primary" type="submit" data-team-create hidden disabled>Criar acesso com senha</button><button class="ceo-button primary" type="button" disabled data-team-submit>Gerar link de acesso</button></div></form>
       <div class="ceo-project-invite" data-team-result hidden></div><p class="ceo-project-notice" data-team-notice role="status" hidden></p>
       <p class="ceo-form-error" data-team-error role="alert" hidden></p>
       <section class="ceo-project-team-list"><div class="ceo-project-team-list-heading"><h3>Equipe de Projetos</h3><button type="button" class="ceo-button" data-team-refresh>Atualizar acessos</button></div><div data-team-roster aria-live="polite">Carregando acessos…</div></section>
@@ -195,9 +198,12 @@
     const form = dialog.querySelector('[data-team-form]'), emailInput = form.elements.email;
     emailInput.value = initialEmail;
     const submit = dialog.querySelector('[data-team-submit]'), preview = dialog.querySelector('[data-team-preview]');
+    const createButton = dialog.querySelector('[data-team-create]'), passwordFields = dialog.querySelector('[data-team-passwords]');
+    const passwordInput = form.elements.access_password, confirmationInput = form.elements.confirm_password;
+    const capabilityNote = dialog.querySelector('[data-team-capability]');
     const permission = dialog.querySelector('[data-team-permission]'), rosterBox = dialog.querySelector('[data-team-roster]');
     const output = dialog.querySelector('[data-team-result]'), errorBox = dialog.querySelector('[data-team-error]'), status = dialog.querySelector('[data-team-notice]');
-    let roster = null, busy = false, generatedEmail = '';
+    let roster = null, busy = false, generatedEmail = '', passwordAccess = false, capabilityLoading = true;
     const valid = () => dialogCurrent(ticket, dialog) && isOwner();
     const normalize = value => text(value).trim().toLowerCase();
     const email = () => normalize(emailInput.value);
@@ -207,7 +213,42 @@
       const projects = assignments(address);
       return projects.length ? `<ul>${projects.map(row => `<li>${esc(row.title)}</li>`).join('')}</ul>` : '<p>Nenhum projeto atribuído. Preencha o campo “E-mail do responsável” ao criar ou editar um projeto para liberar o acesso a ele.</p>';
     }
-    function clearResult() { output.replaceChildren(); output.hidden = true; generatedEmail = ''; }
+    function clearResult() { clearSecrets(); output.replaceChildren(); output.hidden = true; generatedEmail = ''; }
+    function accessError(error) {
+      if (['NOT_CONFIGURED', 'UNAUTHORIZED', 'FORBIDDEN', 'INVALID_REQUEST', 'INVALID_PASSWORD', 'ACCOUNT_EXISTS', 'RATE_LIMITED', 'ACCOUNT_SETUP_INCOMPLETE', 'INTERNAL_ERROR', 'PROJECT_UNAVAILABLE'].includes(error?.code) && error.publicMessage) return error.publicMessage;
+      if (error?.status === 409) return 'Já existe uma conta com este e-mail. A senha dela não foi alterada. Gere um link de acesso para a pessoa entrar com a própria conta.';
+      if (error?.status === 403) return 'A criação de contas com senha está disponível somente para o administrador autorizado.';
+      if (error?.status === 401) return 'Sua sessão expirou. Entre novamente para criar o acesso.';
+      if (error?.status === 400) return 'Confira o e-mail e a senha. Use pelo menos 10 caracteres e no máximo 72 bytes na senha.';
+      if (error?.status === 429) return 'Muitas tentativas de criação. Aguarde um pouco e tente novamente.';
+      if (error?.status === 503) return 'A criação de acesso com senha ainda precisa ser habilitada pelo administrador. Você pode gerar um link de acesso abaixo.';
+      return 'Não foi possível criar o acesso. Confira a lista da equipe antes de tentar novamente.';
+    }
+    async function accessRequest(method, body) {
+      if (!valid()) throw new Error('PROJECT_ACCESS_DENIED');
+      const auth = await client()?.auth?.getSession();
+      if (!valid()) throw new Error('PROJECT_ACCESS_DENIED');
+      const session = auth?.data?.session;
+      if (auth?.error || session?.user?.id !== ticket.account || !session?.access_token) throw Object.assign(new Error('PROJECT_ACCESS_DENIED'), { status: 401 });
+      const response = await root.fetch('/api/project-access', { method, cache: 'no-store', headers: { Authorization: `Bearer ${session.access_token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
+      if (!valid()) throw new Error('PROJECT_ACCESS_DENIED');
+      const result = await response.json();
+      if (!valid()) throw new Error('PROJECT_ACCESS_DENIED');
+      if (!response.ok) throw Object.assign(new Error('PROJECT_ACCESS_FAILED'), { status: response.status, code: result?.code, publicMessage: typeof result?.error === 'string' ? result.error.slice(0, 500) : '' });
+      return result;
+    }
+    async function loadCapability() {
+      try {
+        const result = await accessRequest('GET');
+        if (!valid()) return;
+        passwordAccess = result?.enabled === true;
+        capabilityNote.textContent = passwordAccess ? '' : 'A criação de acesso com senha ainda não está habilitada. Você pode gerar um link de acesso.';
+      } catch (error) {
+        if (!valid()) return;
+        passwordAccess = false;
+        capabilityNote.textContent = error?.status === 403 ? 'Use o convite por link para conceder acesso. O cadastro com senha é reservado ao administrador autorizado.' : 'A criação de acesso com senha está indisponível no momento. Você pode gerar um link de acesso.';
+      } finally { if (valid()) { capabilityLoading = false; syncForm(); } }
+    }
     function showTeamError(error, saved = false) {
       errorBox.textContent = saved ? 'A alteração foi salva, mas não foi possível consultar os acessos atualizados. Clique em Atualizar acessos para continuar.' : friendly(error);
       errorBox.hidden = false;
@@ -216,7 +257,17 @@
     function syncForm() {
       const address = email(), member = memberFor(address);
       preview.innerHTML = address && emailInput.validity.valid ? assignmentList(address) : '<p>Informe o e-mail para conferir os projetos que essa pessoa poderá acessar.</p>';
-      permission.textContent = !roster ? busy ? 'Aguarde a consulta dos acessos.' : 'Atualize os acessos para continuar.' : member?.role === 'projects' ? 'Esta pessoa já tem acesso somente a Projetos nesta empresa. Ela pode entrar com a própria conta.' : member ? 'Esta pessoa já tem acesso a outros módulos. Ao limitar o acesso, ela poderá editar os projetos atribuídos e consultar as senhas dos clientes. O acesso aos demais módulos será retirado e os convites anteriores serão cancelados.' : 'Permissão fixa: somente Projetos desta empresa. A pessoa cria sua própria senha ao abrir o convite ou entra com uma conta existente.';
+      permission.textContent = !roster ? busy ? 'Aguarde a consulta dos acessos.' : 'Atualize os acessos para continuar.' : member?.role === 'projects' ? 'Esta pessoa já tem acesso somente a Projetos nesta empresa. Ela pode entrar com a própria conta.' : member ? 'Esta pessoa já tem acesso a outros módulos. Ao limitar o acesso, ela poderá editar os projetos atribuídos e consultar as senhas dos clientes. O acesso aos demais módulos será retirado e os convites anteriores serão cancelados. A senha atual será mantida.' : passwordAccess ? 'Permissão fixa: somente Projetos desta empresa. Cadastre a senha e entregue os dados de acesso à pessoa.' : 'Permissão fixa: somente Projetos desta empresa. A pessoa cria sua própria senha ao abrir o convite ou entra com uma conta existente.';
+      const canCreate = passwordAccess && Boolean(roster) && !member;
+      createButton.type = canCreate ? 'submit' : 'button';
+      submit.type = canCreate ? 'button' : 'submit';
+      passwordFields.hidden = createButton.hidden = !canCreate;
+      passwordInput.disabled = confirmationInput.disabled = busy || !canCreate;
+      if (member) { passwordInput.value = ''; confirmationInput.value = ''; }
+      createButton.disabled = busy || !canCreate;
+      createButton.textContent = busy ? 'Aguarde…' : 'Criar acesso com senha';
+      submit.classList.toggle('primary', !canCreate);
+      capabilityNote.hidden = !capabilityLoading && (passwordAccess || Boolean(member));
       submit.textContent = busy ? 'Aguarde…' : member?.role === 'projects' ? 'Acesso já ativo' : member ? 'Limitar acesso a Projetos' : 'Gerar link de acesso';
       submit.disabled = busy || !roster || member?.role === 'projects';
       emailInput.disabled = busy && Boolean(roster);
@@ -228,7 +279,7 @@
       const invites = roster.invites.filter(invite => invite.role === 'projects');
       rosterBox.innerHTML = members.map(member => `<article class="ceo-project-team-entry" data-team-entry><div><strong>${esc(member.email)}</strong><span class="ceo-project-team-badge">Acesso ativo · Somente Projetos</span>${assignmentList(normalize(member.email))}</div><div data-team-actions><button type="button" class="ceo-button danger" data-team-revoke="${esc(member.user_id)}">Remover acesso</button></div></article>`).join('')
         + invites.map(invite => `<article class="ceo-project-team-entry" data-team-entry><div><strong>${esc(invite.email)}</strong><span class="ceo-project-team-badge is-pending">Convite pendente · Somente Projetos</span>${assignmentList(normalize(invite.email))}</div><div data-team-actions><button type="button" class="ceo-button" data-team-cancel="${esc(invite.id)}">Cancelar convite</button></div></article>`).join('');
-      if (!members.length && !invites.length) rosterBox.innerHTML = '<p>Nenhum acesso exclusivo a Projetos ainda. Gere um link acima para convidar a primeira pessoa.</p>';
+      if (!members.length && !invites.length) rosterBox.innerHTML = '<p>Nenhum acesso exclusivo a Projetos ainda. Cadastre o primeiro acesso usando o formulário acima.</p>';
     }
     async function refreshRoster() {
       roster = null; rosterBox.textContent = 'Carregando acessos…';
@@ -247,9 +298,9 @@
     }
     emailInput.addEventListener('input', () => { clearResult(); status.hidden = errorBox.hidden = true; syncForm(); });
     dialog.querySelector('[data-team-refresh]').addEventListener('click', () => void reloadRoster());
-    form.addEventListener('submit', async event => {
+    submit.addEventListener('click', async event => {
       event.preventDefault();
-      if (!valid() || busy || !roster || !form.reportValidity()) return;
+      if (!valid() || busy || !roster || !emailInput.reportValidity()) return;
       const address = email(), member = memberFor(address);
       if (member?.role === 'projects') return;
       let saved = false;
@@ -278,6 +329,52 @@
       } catch (error) { if (valid()) showTeamError(error, saved); }
       finally { if (valid()) { busy = false; syncForm(); } }
     });
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      if (!valid() || busy || !roster || !emailInput.reportValidity()) return;
+      if (!passwordAccess || memberFor(email())) { if (!submit.disabled) submit.click(); return; }
+      let password = passwordInput.value;
+      if (password.length < 10 || new TextEncoder().encode(password).length > 72 || password !== confirmationInput.value) {
+        errorBox.textContent = password !== confirmationInput.value ? 'As senhas não coincidem. Digite a mesma senha nos dois campos.' : 'Use uma senha com pelo menos 10 caracteres e no máximo 72 bytes.';
+        errorBox.hidden = false; password = ''; return;
+      }
+      const address = email();
+      let saved = false;
+      busy = true; clearResult(); errorBox.hidden = status.hidden = true; syncForm();
+      const sequence = secretSequence;
+      try {
+        const result = await accessRequest('POST', { email: address, password });
+        if (!valid()) return;
+        if (result?.created !== true || normalize(result.email) !== address || result.role !== 'projects') throw new Error('PROJECT_INVALID_RESPONSE');
+        saved = true; generatedEmail = address;
+        output.innerHTML = '<h3>Acesso criado · Somente Projetos</h3><div class="ceo-project-form-grid"><label class="ceo-field">E-mail de acesso<input type="email" readonly data-created-email aria-label="E-mail de acesso"></label><label class="ceo-field">Senha cadastrada<input type="password" readonly data-created-password data-private-value autocomplete="off" aria-label="Senha cadastrada"></label><label class="ceo-field ceo-project-wide">Site para entrar<input type="url" readonly data-created-site aria-label="Site para entrar"></label></div><button type="button" class="ceo-button" data-team-copy-credentials>Copiar dados de acesso</button><p data-created-help>Copie e entregue os dados à pessoa. A senha será apagada desta tela após um minuto ou ao sair da janela. Nenhum e-mail foi enviado.</p>';
+        output.querySelector('[data-created-email]').value = address;
+        output.querySelector('[data-created-site]').value = safeUrl(result.loginUrl) || `${root.location.origin}/`;
+        if (sequence === secretSequence && !document.hidden) {
+          output.querySelector('[data-created-password]').value = password;
+          secretTimer = root.setTimeout(clearSecrets, 60000);
+        } else output.querySelector('[data-created-help]').textContent = 'Acesso criado. A senha foi apagada desta tela porque você saiu da janela. Ela não pode ser consultada novamente aqui. Nenhum e-mail foi enviado.';
+        password = ''; output.hidden = false;
+        output.querySelector('[data-team-copy-credentials]').addEventListener('click', async event => {
+          if (!valid()) return;
+          const button = event.currentTarget, savedPassword = output.querySelector('[data-created-password]');
+          if (!savedPassword?.value) {
+            status.textContent = 'A senha já foi apagada desta tela e não pode ser consultada novamente aqui.'; status.hidden = false; return;
+          }
+          try {
+            await root.navigator.clipboard.writeText(`Site: ${output.querySelector('[data-created-site]').value}\nE-mail: ${output.querySelector('[data-created-email]').value}\nSenha: ${savedPassword.value}`);
+            if (valid() && generatedEmail === address) button.textContent = 'Dados de acesso copiados';
+          } catch { if (valid() && generatedEmail === address) { status.textContent = 'Não foi possível copiar os dados. Permita o acesso à área de transferência e tente novamente.'; status.hidden = false; } }
+        });
+        status.textContent = `Acesso de ${address} criado. A pessoa já pode entrar com a senha cadastrada.`; status.hidden = false;
+        await refreshRoster();
+      } catch (error) {
+        if (valid()) {
+          if (saved) showTeamError(error, true);
+          else { errorBox.textContent = accessError(error); errorBox.hidden = false; }
+        }
+      } finally { password = ''; if (valid()) { passwordInput.value = confirmationInput.value = ''; busy = false; syncForm(); } }
+    });
     rosterBox.addEventListener('click', async event => {
       const button = event.target.closest('button');
       if (!button || !valid() || busy || !roster) return;
@@ -301,7 +398,7 @@
       } catch (error) { if (valid()) showTeamError(error, saved); }
       finally { if (valid()) { busy = false; syncForm(); } }
     });
-    syncForm(); emailInput.focus(); void reloadRoster();
+    syncForm(); emailInput.focus(); void reloadRoster(); void loadCapability();
   }
   function checklist(label, steps) {
     return `<section class="ceo-project-detail-track"><h3>${esc(label)}</h3>${meter('Etapas concluídas', steps)}<ul class="ceo-project-checklist">${steps.length ? steps.map(step => `<li class="${step.done ? 'is-done' : ''}"><span class="ceo-project-check" aria-hidden="true">${step.done ? '✓' : ''}</span><span>${esc(step.label)}${step.done ? '<span class="ceo-project-sr"> — Concluída</span>' : ''}</span></li>`).join('') : '<li class="ceo-muted">Nenhuma etapa cadastrada.</li>'}</ul></section>`;
@@ -476,6 +573,7 @@
   }
   document.addEventListener('visibilitychange', () => { if (document.hidden) clearSecrets(); });
   root.addEventListener('pagehide', clearSecrets);
+  root.addEventListener('blur', clearSecrets);
   root.addEventListener('focus', () => { if (container?.isConnected && !activeDialog && !loading && !document.hidden) void load(); });
   root.ZamaProjects = Object.freeze({ render, reset, leave });
 })(window);

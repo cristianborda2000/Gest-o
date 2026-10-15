@@ -90,6 +90,11 @@
 .ceo-project-access-note > p { margin:6px 0 0; }
 .ceo-project-team-form { display:grid; gap:16px; margin:22px 0; }
 .ceo-project-team-form > .ceo-button { justify-self:start; }
+.ceo-project-team-passwords { padding:16px; border:1px solid #dce9e2; border-radius:10px; background:#f8faf9; }
+.ceo-project-team-passwords > p { margin-top:10px; font-size:12px; }
+.ceo-project-team-form-actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+.ceo-project-team-capability { color:#747d88; font-size:12px; }
+.ceo-project-invite [data-team-copy-credentials] { margin-top:14px; }
 .ceo-project-team-form p,.ceo-project-team-list p { margin:0; line-height:1.7; }
 .ceo-project-team-preview { padding:16px; border:1px solid #e4eae6; border-radius:10px; background:#f8faf9; }
 .ceo-project-team-preview h3 { margin-bottom:8px; }
@@ -179,6 +184,7 @@
   .ceo-project-form .mobile-form-actions > div .ceo-button { flex:1; }
   .ceo-project-invite [data-project-invite] { white-space:normal; width:100%; }
   .ceo-project-team-form > .ceo-button { width:100%; white-space:normal; }
+  .ceo-project-team-form-actions .ceo-button,.ceo-project-invite [data-team-copy-credentials] { width:100%; white-space:normal; }
   .ceo-project-team-entry { flex-direction:column; }
   .ceo-project-team-entry [data-team-actions] { max-width:100%; }
 }

@@ -5,8 +5,8 @@
 1. Abra **Projetos** no menu e clique em **Novo projeto**.
 2. Preencha o título e o nome do cliente, que são obrigatórios. Complete a empresa, e-mail e senha de acesso quando necessário. Informe o nome e o e-mail da pessoa responsável e o prazo.
 3. Crie suas **Listas de produção** manualmente, com os nomes e as etapas que o projeto precisa. O formulário começa com uma lista vazia chamada **Lista de produção**, que você pode renomear ou remover. Adicione outras listas quando precisar; em cada uma, crie, renomeie, reordene e remova etapas. As barras de progresso refletem as etapas concluídas.
-4. Salve e, nos detalhes, clique em **Gerenciar acesso do responsável**. Confira o e-mail e os projetos liberados e clique em **Gerar link de acesso**. Copie o link e compartilhe com a pessoa responsável.
-5. A pessoa abre o link, entra ou cria uma conta com o e-mail indicado e a própria senha. Se precisar confirmar o e-mail, deve confirmar e reabrir o convite. Depois, clica em **Aceitar convite** nas configurações. Na empresa compartilhada, verá somente os projetos atribuídos a ela.
+4. Salve e abra **Criar acesso** no cabeçalho ou **Gerenciar acesso do responsável** nos detalhes. Com a conta administrativa autorizada, preencha **E-mail da pessoa**, **Senha de acesso** e **Confirmar senha** e clique em **Criar acesso com senha**. Use pelo menos 10 caracteres. Clique em **Copiar dados de acesso** e entregue os dados à pessoa.
+5. A pessoa entra no site com o e-mail e a senha cadastrados, sem convite nem confirmação por e-mail. Na empresa compartilhada, verá somente os projetos cujo **E-mail do responsável** corresponde ao login dela. Se já possui uma conta, gere um novo link em **Gerar link de acesso**: ela deve entrar com a própria senha e aceitar o convite. Esse caminho exige e-mail confirmado.
 6. O responsável usa **Atualizar andamento** para editar as listas e etapas, marcar conclusões, mudar a situação e registrar notas. O proprietário pode alterar dados do cliente, credenciais e atribuição.
 
 Projetos existentes preservam as antigas etapas nas listas **Catálogo** e **Estruturação**, que também podem ser personalizadas. Cada projeto aceita até 20 listas, com até 100 etapas em cada uma, e pode ser salvo sem listas.
@@ -15,11 +15,21 @@ Use **Atualizar** para consultar alterações de outras pessoas. O filtro de sit
 
 O acesso restrito vale para a empresa compartilhada. A conta pessoal do convidado continua independente, assim como outras empresas às quais ele já tenha acesso.
 
-O proprietário pode usar **Criar acesso**, no cabeçalho de **Projetos**, para abrir a tela **Acesso somente a Projetos**. A permissão é fixa e a lista mostra os projetos cujo e-mail do responsável corresponde ao endereço informado. É possível convidar alguém antes de atribuir um projeto; a pessoa verá uma lista vazia até receber uma atribuição. O aplicativo gera o link, mas não envia o convite automaticamente.
+O proprietário pode usar **Criar acesso**, no cabeçalho de **Projetos**, para abrir a tela **Acesso somente a Projetos**. A permissão é fixa e a lista mostra os projetos cujo e-mail do responsável corresponde ao endereço informado. É possível cadastrar alguém antes de atribuir um projeto; a pessoa verá uma lista vazia até receber uma atribuição. O cadastro com senha não envia e-mail e não exige SMTP. Ele cria um login usando um endereço de e-mail existente, não uma caixa de correio.
+
+A senha do novo login aparece mascarada para copiar após o cadastro. Ela é apagada da tela ao fechar a janela, sair da aba, perder o foco ou após um minuto, e não pode ser consultada novamente. Contas existentes nunca têm a senha substituída por esse formulário. A alternativa **Gerar link de acesso** continua disponível; copie e entregue o link manualmente, pois o aplicativo não o envia por e-mail.
 
 Na mesma tela, **Equipe de Projetos** mostra os acessos ativos e os convites pendentes com essa permissão. O proprietário pode cancelar convites ou remover um acesso, mantendo os projetos. Quem já tem acesso exclusivo aparece como **Acesso já ativo**. Se o e-mail informado pertence a alguém com acesso de edição ou leitura aos outros módulos, o botão **Limitar acesso a Projetos** aplica a mudança imediatamente e cancela os convites anteriores. Esse perfil permite editar listas e etapas e consultar as senhas dos clientes atribuídos, inclusive se antes a pessoa só tinha leitura.
 
 ## Instalação do banco
+
+### Cadastro de login pelo sistema
+
+O endpoint de servidor `GET/POST /api/project-access` exige a sessão da conta administrativa confirmada desta instalação. A conta autorizada já está definida no servidor; `PROJECT_ACCESS_ADMIN_EMAIL` permite substituí-la em outra instalação. São necessárias as variáveis de servidor `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `APP_ORIGIN`. A chave administrativa nunca vai para o navegador. `PROJECT_ACCESS_ENABLED=false` desativa o recurso. Não há nova migration para o cadastro de login; ele usa a configuração de equipe e Projetos descrita abaixo.
+
+O servidor verifica a identidade no Supabase, valida a empresa e o limite de cadastros pelo RPC existente e cria exclusivamente uma conta nova com perfil `projects`. O e-mail fica confirmado pelo administrador. Se a associação à empresa falhar, o servidor tenta desfazer apenas a conta recém-criada. Falhas ambíguas orientam conferir o usuário no Supabase antes de repetir. A preparação usa um convite interno, nunca enviado nem retornado, que é cancelado ao final. Tentativas com o mesmo endereço invalidam convites anteriores; para uma conta existente, gere um novo link.
+
+### Tabelas e permissões
 
 Para resolver a mensagem de configuração pendente, abra o **SQL Editor** do projeto Supabase que atende esta instalação, cole todo o conteúdo de [`database/instalar-projetos.sql`](../database/instalar-projetos.sql) e execute como proprietário do banco. Depois, volte à área **Projetos** e clique em **Atualizar**. Esse arquivo reúne a configuração de equipe, projetos e listas manuais em uma única transação e pode ser reaplicado.
 
@@ -39,7 +49,7 @@ O banco armazena projetos em `public.zama_projects`, separado de `app_state`. Ne
 
 ## Permissões
 
-O convite da equipe aceita o perfil `projects` (Somente projetos). Cada pessoa entra com sua própria conta e precisa confirmar o e-mail e aceitar o convite enviado para esse mesmo endereço. O proprietário pode cadastrar o e-mail responsável antes de gerar ou aceitar o convite; isso ainda não concede acesso.
+O cadastro direto e o convite da equipe usam o perfil `projects` (Somente projetos). No cadastro direto, o administrador cria e confirma a conta e o vínculo fica ativo imediatamente. Pelo convite, a pessoa entra com sua própria conta, confirma o e-mail e aceita o link destinado ao mesmo endereço. Preencher somente o e-mail responsável no projeto ainda não concede acesso à empresa.
 
 | Pessoa | Projetos visíveis | Alterações | Senha do cliente |
 | --- | --- | --- | --- |
@@ -56,7 +66,9 @@ Alterar o perfil ou remover uma pessoa da equipe também cancela convites penden
 
 ## Credenciais e proteção
 
-Senhas são cifradas com `pgcrypto` e AES-256 antes de gravar a linha. A chave aleatória fica em `zama_private.project_key`, sem acesso para `anon`, `authenticated` ou `service_role`. O schema privado não deve ser exposto pela API. A migration resolve o schema em que a extensão `pgcrypto` já estiver instalada (`public` ou `extensions`).
+As senhas de login são gerenciadas pelo Supabase Auth; o ZAMA não mantém uma cópia recuperável. A senha informada no cadastro é enviada ao endpoint autenticado e não entra em logs, estado do aplicativo ou armazenamento local.
+
+As credenciais dos clientes cadastradas dentro de cada projeto são cifradas com `pgcrypto` e AES-256 antes de gravar a linha. A chave aleatória fica em `zama_private.project_key`, sem acesso para `anon`, `authenticated` ou `service_role`. O schema privado não deve ser exposto pela API. A migration resolve o schema em que a extensão `pgcrypto` já estiver instalada (`public` ou `extensions`).
 
 Tabela e chave têm RLS ativada e forçada, sem políticas que concedam acesso direto ao navegador. As funções públicas usam `SECURITY DEFINER`, caminho de busca vazio e verificações explícitas de identidade. Listagem e gravação retornam somente `has_password`; o texto da senha só é devolvido pela função específica de consulta, após autorização.
 
@@ -89,7 +101,10 @@ O campo opcional `password` só é aceito do proprietário: ausente preserva a s
 ## Verificação local
 
 ```text
-node --test tests/projects-database.test.js
+node --test tests/project-access.test.js tests/workspaces-database.test.js tests/projects-database.test.js
+npx playwright test tests/browser/projects.spec.js
 ```
 
 Os testes usam PostgreSQL em WASM (PGlite) e a extensão `pgcrypto` real, sem acesso a dados de produção. Cobrem convite e confirmação, bloqueio de financeiro, isolamento entre empresas e responsáveis, consulta de senhas, revisão concorrente, revogação, troca de atribuição/e-mail, bloqueio de acesso direto, reexecução das migrations e extensão preexistente em outro schema. Também verificam conversão das etapas antigas, projetos sem listas, edição e remoção de listas manuais, compatibilidade com clientes antigos, limites de tamanho, rejeição atômica de dados inválidos e permissões da listagem v2.
+
+Os testes do cadastro direto simulam o Supabase Auth e verificam administrador autorizado, preservação de contas existentes, desfazimento de cadastros incompletos, limite do corpo em bytes e senhas UTF-8 recebidas em partes. No navegador, verificam criação e cópia dos dados de acesso, limpeza da senha, troca de sessão, resposta atrasada, uso da tecla Enter nos convites e apresentação em computador e celular.
