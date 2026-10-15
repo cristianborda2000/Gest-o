@@ -9,7 +9,40 @@
   const plain = (value) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const makeId = () => root.crypto?.randomUUID ? root.crypto.randomUUID() : `idea-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const today = () => typeof ZamaTime !== "undefined" ? ZamaTime.today() : root.ZamaTime?.today ? root.ZamaTime.today() : new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-  const currentState = () => typeof state !== "undefined" ? state : root.state;
+  const personalState = () => typeof state !== "undefined" ? state : root.state;
+  const shared = () => Boolean(root.ZamaWorkspace?.isTeamSpace?.());
+  const identity = () => `${typeof cloudEpoch !== 'undefined' ? cloudEpoch : ''}:${typeof cloudUserId !== 'undefined' ? cloudUserId : ''}:${root.ZamaWorkspace?.ownerId?.() || ''}`;
+  let sharedData = null, sharedRevision = null, sharedIdentity = '', sharedLoading = false, sharedError = '', sharedBusy = false;
+  const currentState = () => shared() ? { ...personalState(), ideias: sharedData || [] } : personalState();
+  function reset() {
+    sharedData = sharedRevision = null; sharedIdentity = ''; sharedLoading = sharedBusy = false; sharedError = '';
+    currentContainer = null;
+    Object.assign(filters, { search: '', category: '', priority: '', stage: '', archived: 'active' });
+  }
+  function sharedFailure(error) {
+    if (error?.code === '40001') return 'As ideias foram alteradas por outra pessoa. Clique em Atualizar ideias antes de salvar novamente.';
+    if (error?.code === '42501') return 'Seu acesso à equipe mudou. Entre novamente para continuar.';
+    if (['PGRST202','42883'].includes(error?.code)) return 'O compartilhamento de ideias aguarda a atualização do banco da ZAMA.';
+    return 'Não foi possível consultar ou salvar as ideias da equipe. Tente novamente.';
+  }
+  async function loadShared(container) {
+    const ticket = identity();
+    if (sharedLoading) return;
+    sharedLoading = true; sharedError = '';
+    try {
+      const result = await supabaseClient.rpc('zama_team_ideas_get', { p_owner: root.ZamaWorkspace.ownerId() });
+      if (ticket !== identity() || !shared()) return;
+      if (result.error) throw result.error;
+      if (!Array.isArray(result.data?.ideas) || !result.data?.revision) throw new Error('INVALID_RESPONSE');
+      sharedData = result.data.ideas; sharedRevision = result.data.revision;
+    } catch (error) { if (ticket === identity()) { sharedData = null; sharedError = sharedFailure(error); } }
+    finally {
+      if (ticket === identity()) {
+        sharedLoading = false;
+        if (currentContainer === container && container.isConnected && (typeof activeModule === 'undefined' || activeModule === 'ideias')) render(container);
+      }
+    }
+  }
   const dateLabel = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value || "") ? value.split("-").reverse().join("/") : "Sem data";
   function validDate(value) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))) return false;
@@ -90,10 +123,14 @@
     idea.updatedAt = new Date().toISOString();
     return idea;
   }
-  function convert(targetState, id, schedule) {
+  function linkedTask(targetState, idea, ownerId = '') {
+    return (targetState.agenda || []).find(task => (ownerId ? task.ideaOwnerId === ownerId : !task.ideaOwnerId)
+      && (task.ideaId === idea.id || (task.id === idea.taskId && !task.ideaId)));
+  }
+  function convert(targetState, id, schedule, ownerId = '') {
     const idea = findIdea(targetState, id);
     if (!Array.isArray(targetState.agenda)) targetState.agenda = [];
-    const existing = targetState.agenda.find((task) => task.ideaId === id || (task.id === idea.taskId && !task.ideaId));
+    const existing = linkedTask(targetState, idea, ownerId);
     if (existing) {
       existing.ideaId = id;
       idea.taskId = existing.id;
@@ -105,6 +142,7 @@
     if (!Number.isInteger(duration) || duration < 5 || duration > 1440) throw new Error("A duração precisa ser de 5 a 1.440 minutos.");
     const stamp = new Date().toISOString();
     const task = { id: makeId(), nome: idea.titulo, tipo: "Tarefa", prazo: schedule.prazo, hora: schedule.hora, duracao: duration, status: "Pendente", observacoes: idea.descricao, prioridade: idea.prioridade, valor: idea.prioridade === "Alta" ? 5 : idea.prioridade === "Baixa" ? 1 : 3, ideaId: idea.id, createdAt: stamp, updatedAt: stamp };
+    if (ownerId) task.ideaOwnerId = ownerId;
     targetState.agenda.push(task);
     idea.taskId = task.id;
     idea.etapa = "execucao";
@@ -115,7 +153,7 @@
     return `${placeholder ? `<option value="">${esc(placeholder)}</option>` : ""}${values.map(([value, label]) => `<option value="${esc(value)}" ${value === selected ? "selected" : ""}>${esc(label)}</option>`).join("")}`;
   }
   function card(idea, targetState) {
-    const task = (targetState.agenda || []).find((row) => row.ideaId === idea.id || row.id === idea.taskId);
+    const task = linkedTask(targetState, idea, shared() ? root.ZamaWorkspace.ownerId() : '');
     return `<article class="ceo-idea-card" data-idea-id="${esc(idea.id)}">
       <div class="ceo-idea-meta"><span class="ceo-badge">${esc(idea.categoria)}</span><span class="ceo-badge ceo-idea-priority-${plain(idea.prioridade)}">${esc(idea.prioridade)}</span></div>
       <h3>${esc(idea.titulo)}</h3>${idea.descricao ? `<p class="ceo-idea-description">${esc(idea.descricao)}</p>` : '<p class="ceo-idea-description ceo-muted">Adicione detalhes ao editar.</p>'}
@@ -134,8 +172,28 @@
       return `<section class="ceo-idea-column" aria-label="${label}"><header><h2>${label}</h2><span class="ceo-badge">${items.length}</span></header><div class="ceo-idea-stack">${items.length ? items.map((idea) => card(idea, targetState)).join("") : `<div class="ceo-empty">${filters.search || filters.category || filters.priority ? "Nenhuma ideia com estes filtros." : "Espaço para suas próximas ideias."}</div>`}</div></section>`;
     }).join("");
     container.querySelector("[data-ideas-count]").textContent = `${rows.length} ${rows.length === 1 ? "ideia encontrada" : "ideias encontradas"}`;
+    if (shared() && root.ZamaWorkspace.role() === 'viewer') container.querySelectorAll('[data-idea-new],[data-idea-move],[data-idea-action="edit"],[data-idea-action="archive"],[data-idea-action="restore"]').forEach(control => { control.disabled = true; });
   }
   async function commit(action, message) {
+    if (shared()) {
+      if (!sharedData || sharedBusy || root.ZamaWorkspace.role() === 'viewer') throw new Error('As alterações nas ideias não estão disponíveis para este acesso.');
+      const ticket = identity(), draft = structuredClone(currentState());
+      sharedBusy = true;
+      try {
+        await action(draft);
+        if (ticket !== identity()) throw new Error('A sessão mudou.');
+        const keys = ['id','titulo','descricao','categoria','prioridade','data','etapa','arquivada','createdAt','updatedAt'];
+        const ideas = draft.ideias.map(idea => Object.fromEntries(keys.filter(key => idea[key] !== undefined).map(key => [key, idea[key]])));
+        const result = await supabaseClient.rpc('zama_team_ideas_save', { p_owner: root.ZamaWorkspace.ownerId(), p_revision: sharedRevision, p_ideas: ideas });
+        if (ticket !== identity()) return false;
+        if (result.error) throw Object.assign(new Error(sharedFailure(result.error)), { code: result.error.code });
+        if (!Array.isArray(result.data?.ideas) || !result.data.revision) throw new Error('Resposta inválida ao salvar as ideias.');
+        sharedData = result.data.ideas; sharedRevision = result.data.revision;
+        if (currentContainer?.isConnected && (typeof activeModule === 'undefined' || activeModule === 'ideias')) render(currentContainer);
+        if (typeof showToast === 'function') showToast(message, 'Salvo para a equipe ZAMA.');
+        return true;
+      } finally { if (ticket === identity()) sharedBusy = false; }
+    }
     if (typeof ceoCommit !== "function" && typeof root.ceoCommit !== "function") throw new Error("O salvamento não está disponível. Atualize a página.");
     const result = await (typeof ceoCommit === "function" ? ceoCommit : root.ceoCommit)(action, message);
     if (result === false) throw new Error("Não foi possível salvar. Verifique sua conexão e tente novamente.");
@@ -150,6 +208,7 @@
     }
   }
   function openDialog(title, markup, action, buttonLabel = "Salvar ideia") {
+    const ticket = identity();
     const previous = document.getElementById("ceoIdeaDialog");
     if (previous) previous.remove();
     const dialog = document.createElement("dialog");
@@ -166,6 +225,7 @@
     dialog.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => dialog.close()));
     dialog.querySelector("form").addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (ticket !== identity() || !dialog.isConnected || !dialog.open) return;
       const form = event.currentTarget;
       if (!form.reportValidity()) return;
       const submit = form.querySelector('[type="submit"]');
@@ -195,19 +255,37 @@
   }
   function openConvert(id) {
     const idea = findIdea(currentState(), id);
-    openDialog("Transformar ideia em tarefa", `<p class="ceo-idea-conversion-summary">${esc(idea.titulo)}</p><p class="ceo-muted">A tarefa ficará vinculada a esta ideia, que passará para Em execução. Horários de Brasília.</p><div class="ceo-form-grid">
+    const team = shared(), owner = root.ZamaWorkspace?.ownerId?.();
+    openDialog("Transformar ideia em tarefa", `<p class="ceo-idea-conversion-summary">${esc(idea.titulo)}</p><p class="ceo-muted">${team ? 'A tarefa será criada somente na sua agenda privada. A ideia continua disponível para todos da equipe.' : 'A tarefa ficará vinculada a esta ideia, que passará para Em execução.'} Horários de Brasília.</p><div class="ceo-form-grid">
       <label class="ceo-field">Data da tarefa<input name="prazo" type="date" value="${today()}" required></label>
       <label class="ceo-field">Horário<input name="hora" type="time" value="09:00" required></label>
       <label class="ceo-field">Duração em minutos<input name="duracao" type="number" min="5" max="1440" step="1" value="60" required></label>
-    </div>`, (schedule) => commit((draft) => convert(draft, id, schedule), "Tarefa criada e vinculada à ideia."), "Criar tarefa");
+    </div>`, async (schedule) => {
+      if (!team) return commit((draft) => convert(draft, id, schedule), 'Tarefa criada e vinculada à ideia.');
+      const saved = await ceoCommit(draft => {
+        const temporary = { agenda: draft.agenda, ideias: [structuredClone(idea)] };
+        convert(temporary, id, schedule, owner);
+        draft.agenda = temporary.agenda;
+      }, 'Tarefa criada na sua agenda privada.');
+      if (!saved) throw new Error('Não foi possível salvar sua tarefa. Tente novamente.');
+    }, "Criar tarefa");
   }
   function render(container) {
     currentContainer = container;
+    if (shared()) {
+      if (sharedIdentity !== identity()) { sharedData = null; sharedRevision = null; sharedError = ''; sharedLoading = sharedBusy = false; sharedIdentity = identity(); }
+      if (!sharedData) {
+        container.innerHTML = `<section class="ceo-card ceo-empty"><h2>Ideias da equipe</h2><p role="${sharedError ? 'alert' : 'status'}">${esc(sharedError || 'Carregando o espaço compartilhado da ZAMA…')}</p>${sharedError ? '<button type="button" class="ceo-button" data-ideas-retry>Tentar novamente</button>' : ''}</section>`;
+        container.querySelector('[data-ideas-retry]')?.addEventListener('click', () => void loadShared(container));
+        if (!sharedError) void loadShared(container);
+        return;
+      }
+    }
     const targetState = currentState();
     normalize(targetState);
     const categories = [...new Set(targetState.ideias.map((idea) => idea.categoria))].sort((a, b) => a.localeCompare(b, "pt-BR"));
     if (filters.category && !categories.includes(filters.category)) filters.category = "";
-    container.innerHTML = `<section class="ceo-ideas"><div class="ceo-toolbar"><div><h2>Banco de ideias</h2><p class="ceo-muted">Capture agora. Transforme em próximos passos.</p></div><button type="button" class="ceo-button primary" data-idea-new>+ Nova ideia</button></div>
+    container.innerHTML = `<section class="ceo-ideas"><div class="ceo-toolbar"><div><h2>Banco de ideias</h2><p class="ceo-muted">Ideias compartilhadas com a equipe. Tarefas na sua agenda privada.</p></div>${shared() ? '<button type="button" class="ceo-button" data-ideas-refresh>Atualizar ideias</button>' : ''}<button type="button" class="ceo-button primary" data-idea-new>+ Nova ideia</button></div>
       <div class="ceo-card ceo-idea-filters"><label class="ceo-field ceo-idea-search">Pesquisar<input type="search" data-idea-filter="search" value="${esc(filters.search)}" placeholder="Título, descrição ou categoria"></label>
       <label class="ceo-field">Categoria<select data-idea-filter="category">${options(categories.map((item) => [item, item]), filters.category, "Todas")}</select></label>
       <label class="ceo-field">Prioridade<select data-idea-filter="priority">${options(priorities.map((item) => [item, item]), filters.priority, "Todas")}</select></label>
@@ -215,6 +293,7 @@
       <label class="ceo-field">Exibir<select data-idea-filter="archived">${options([["active", "Ativas"], ["archived", "Arquivadas"], ["all", "Todas"]], filters.archived)}</select></label></div>
       <p class="ceo-idea-results" data-ideas-count aria-live="polite"></p><p class="ceo-form-error" data-ideas-error role="alert" hidden></p><div class="ceo-ideas-board" data-ideas-board></div></section>`;
     container.querySelector("[data-idea-new]").addEventListener("click", () => openEditor());
+    container.querySelector('[data-ideas-refresh]')?.addEventListener('click', () => { if (!sharedBusy) { sharedData = null; sharedError = ''; render(container); } });
     container.querySelectorAll("[data-idea-filter]").forEach((control) => control.addEventListener(control.tagName === "INPUT" ? "input" : "change", () => {
       filters[control.dataset.ideaFilter] = control.value;
       renderBoard(container);
@@ -240,7 +319,7 @@
     });
     renderBoard(container);
   }
-  const api = { normalize, render, recent, openEditor, stageLabels, filterIdeas, upsert, move, archive, convert, validDate, stageKey };
+  const api = { normalize, render, recent, openEditor, reset, stageLabels, filterIdeas, upsert, move, archive, convert, validDate, stageKey };
   root.ZamaIdeas = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

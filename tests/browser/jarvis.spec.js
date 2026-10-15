@@ -82,12 +82,14 @@ test('Jarvis desktop uses real summary contract and preserves the legacy data of
   await expect(page.locator('.jarvis-home-grid')).toContainText('Revisar o financeiro');
   await expect(page.locator('.jarvis-welcome')).toContainText('Boa tarde.');
   await page.screenshot({path:'test-results/jarvis-desktop.png',fullPage:true});
-  for(const name of ['clientes','mensalidades','projetos','marketing','rh']){
+  for(const name of ['clientes','mensalidades','marketing','rh']){
     await expect(page.locator(`.nav [data-module="${name}"]`)).toHaveCount(0);
     await page.evaluate(name=>goToModule(name),name);
     await expect(page.locator('body')).toHaveAttribute('data-module','dashboard');
     expect(await page.evaluate(name=>JSON.parse(localStorage.getItem('test-cloud')).data[name],name)).toEqual(legacy[name]);
   }
+  await expect(page.locator('.nav [data-module="projetos"]')).toBeVisible();
+  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('test-cloud')).data.projetos)).toEqual(legacy.projetos);
   expect(api.requests.every(r=>r.authorization==='Bearer test-access-token')).toBe(true);
 });
 

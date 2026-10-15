@@ -6,7 +6,9 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const migrations = [
   '20261005_workspaces.sql',
   '20261012_projects.sql',
-  '20261013_project_lists.sql'
+  '20261013_project_lists.sql',
+  '20261015_project_planning.sql',
+  '20261015_team_space.sql'
 ];
 const outputPath = resolve(root, 'database/instalar-projetos.sql');
 
@@ -32,7 +34,7 @@ export function buildProjectsSetup() {
 -- usando o papel postgres (proprietario do projeto).
 -- Requer a tabela public.app_state existente. Nao recria nem apaga essa tabela.
 -- Reaplicavel: preserva dados, membros, convites, progresso e chave das senhas.
--- As tres migrations sao aplicadas juntas; uma falha reverte toda a instalacao.
+-- Todas as migrations sao aplicadas juntas; uma falha reverte toda a instalacao.
 
 begin;
 

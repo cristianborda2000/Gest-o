@@ -1,110 +1,99 @@
-# Projetos de clientes
+# Espaço da equipe ZAMA
 
-## Como usar
+A equipe tem três abas: **Agenda**, **Projetos** e **Ideias**. Projetos e ideias são compartilhados entre todos os membros confirmados da mesma empresa. Cada pessoa tem uma agenda privada, inclusive o administrador. O administrador mantém os módulos administrativos, o financeiro e a gestão de acessos.
 
-1. Abra **Projetos** no menu e clique em **Novo projeto**.
-2. Preencha o título e o nome do cliente, que são obrigatórios. Complete a empresa, e-mail e senha de acesso quando necessário. Informe o nome e o e-mail da pessoa responsável e o prazo.
-3. Crie suas **Listas de produção** manualmente, com os nomes e as etapas que o projeto precisa. O formulário começa com uma lista vazia chamada **Lista de produção**, que você pode renomear ou remover. Adicione outras listas quando precisar; em cada uma, crie, renomeie, reordene e remova etapas. As barras de progresso refletem as etapas concluídas.
-4. Salve e abra **Criar acesso** no cabeçalho ou **Gerenciar acesso do responsável** nos detalhes. Com a conta administrativa autorizada, preencha **E-mail da pessoa**, **Senha de acesso** e **Confirmar senha** e clique em **Criar acesso com senha**. Use pelo menos 10 caracteres. Clique em **Copiar dados de acesso** e entregue os dados à pessoa.
-5. A pessoa entra no site com o e-mail e a senha cadastrados, sem convite nem confirmação por e-mail. Na empresa compartilhada, verá somente os projetos cujo **E-mail do responsável** corresponde ao login dela. Se já possui uma conta, gere um novo link em **Gerar link de acesso**: ela deve entrar com a própria senha e aceitar o convite. Esse caminho exige e-mail confirmado.
-6. O responsável usa **Atualizar andamento** para editar as listas e etapas, marcar conclusões, mudar a situação e registrar notas. O proprietário pode alterar dados do cliente, credenciais e atribuição.
+## Projetos
 
-Projetos existentes preservam as antigas etapas nas listas **Catálogo** e **Estruturação**, que também podem ser personalizadas. Cada projeto aceita até 20 listas, com até 100 etapas em cada uma, e pode ser salvo sem listas.
+O painel destaca todos os projetos, atrasos de projetos ou etapas, entregas dos próximos sete dias e projetos aguardando o cliente. As métricas funcionam como filtros e combinam com a busca e a situação. A ordenação permite priorizar os prazos, os nomes ou as alterações recentes. Projetos concluídos não entram nas pendências de prazo.
 
-Use **Atualizar** para consultar alterações de outras pessoas. O filtro de situação e a busca ajudam a encontrar clientes, empresas e responsáveis. O botão **Mostrar senha** faz uma consulta autorizada; a senha é ocultada ao sair, ao trocar de aba ou depois de um minuto. Em **Configurações → Empresa e equipe**, o proprietário pode remover o acesso ou alterar a permissão.
+1. O administrador abre **Projetos → Novo projeto** e preenche o título e o cliente. Empresa, acesso, responsável e prazo são opcionais.
+2. Cria as listas e etapas necessárias. É possível renomear, reordenar, remover e marcar etapas, além de definir um prazo individual para cada uma.
+3. Em **Modelos de produção**, pode salvar a estrutura atual com um nome e reutilizá-la em outro projeto. Aplicar um modelo acrescenta listas ao rascunho; substitui apenas a lista inicial vazia. O modelo não copia dados do cliente, senha, notas, progresso ou datas. As listas copiadas recebem identificadores novos.
+4. A equipe usa **Atualizar andamento** para editar listas, etapas, prazos das etapas, situação e notas. Os dados do cliente, a atribuição, o prazo geral, a criação e a exclusão de projetos ficam com o administrador.
 
-O acesso restrito vale para a empresa compartilhada. A conta pessoal do convidado continua independente, assim como outras empresas às quais ele já tenha acesso.
+Projetos antigos preservam as listas **Catálogo** e **Estruturação**. Um projeto aceita até 20 listas, com até 100 etapas por lista; listas vazias e projetos sem listas são válidos. Cada administrador pode guardar até 50 modelos. Use **Atualizar** para consultar alterações de outras pessoas. Revisões concorrentes são recusadas para evitar sobrescrever trabalho recente.
 
-O proprietário pode usar **Criar acesso**, no cabeçalho de **Projetos**, para abrir a tela **Acesso somente a Projetos**. A permissão é fixa e a lista mostra os projetos cujo e-mail do responsável corresponde ao endereço informado. É possível cadastrar alguém antes de atribuir um projeto; a pessoa verá uma lista vazia até receber uma atribuição. O cadastro com senha não envia e-mail e não exige SMTP. Ele cria um login usando um endereço de e-mail existente, não uma caixa de correio.
+## Ideias e agenda
 
-A senha do novo login aparece mascarada para copiar após o cadastro. Ela é apagada da tela ao fechar a janela, sair da aba, perder o foco ou após um minuto, e não pode ser consultada novamente. Contas existentes nunca têm a senha substituída por esse formulário. A alternativa **Gerar link de acesso** continua disponível; copie e entregue o link manualmente, pois o aplicativo não o envia por e-mail.
+As ideias pertencem à empresa selecionada. Os membros com perfil de equipe podem criar, editar, mudar a etapa, arquivar e restaurar ideias. O perfil de leitura pode consultar. **Atualizar ideias** busca a revisão mais recente.
 
-Na mesma tela, **Equipe de Projetos** mostra os acessos ativos e os convites pendentes com essa permissão. O proprietário pode cancelar convites ou remover um acesso, mantendo os projetos. Quem já tem acesso exclusivo aparece como **Acesso já ativo**. Se o e-mail informado pertence a alguém com acesso de edição ou leitura aos outros módulos, o botão **Limitar acesso a Projetos** aplica a mudança imediatamente e cancela os convites anteriores. Esse perfil permite editar listas e etapas e consultar as senhas dos clientes atribuídos, inclusive se antes a pessoa só tinha leitura.
+**Criar tarefa** em uma ideia compartilhada cria uma tarefa somente na agenda de quem clicou. O dia e o horário da tarefa não são publicados para a equipe. Os vínculos privados do administrador com suas tarefas são preservados quando outra pessoa edita a ideia. Empresas diferentes não compartilham projetos, ideias nem vínculos de tarefas.
 
-## Instalação do banco
+As agendas ficam na linha pessoal de `app_state`, mesmo durante o uso do espaço da equipe. Um colega ou administrador da empresa não tem acesso à agenda de outra conta. A associação à equipe não concede leitura do `app_state` do administrador; a consulta de ideias usa uma função específica que retorna apenas os campos compartilhados.
 
-### Cadastro de login pelo sistema
+## Criar e gerenciar acesso
 
-O endpoint de servidor `GET/POST /api/project-access` exige a sessão da conta administrativa confirmada desta instalação. A conta autorizada já está definida no servidor; `PROJECT_ACCESS_ADMIN_EMAIL` permite substituí-la em outra instalação. São necessárias as variáveis de servidor `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `APP_ORIGIN`. A chave administrativa nunca vai para o navegador. `PROJECT_ACCESS_ENABLED=false` desativa o recurso. Não há nova migration para o cadastro de login; ele usa a configuração de equipe e Projetos descrita abaixo.
+Em **Projetos → Criar acesso**, a tela **Acesso à equipe ZAMA** informa as três abas e mostra os projetos compartilhados, independentemente do e-mail responsável.
 
-O servidor verifica a identidade no Supabase, valida a empresa e o limite de cadastros pelo RPC existente e cria exclusivamente uma conta nova com perfil `projects`. O e-mail fica confirmado pelo administrador. Se a associação à empresa falhar, o servidor tenta desfazer apenas a conta recém-criada. Falhas ambíguas orientam conferir o usuário no Supabase antes de repetir. A preparação usa um convite interno, nunca enviado nem retornado, que é cancelado ao final. Tentativas com o mesmo endereço invalidam convites anteriores; para uma conta existente, gere um novo link.
+O administrador autorizado pode preencher e-mail, senha e confirmação e escolher **Criar acesso com senha**. A senha precisa ter pelo menos 10 caracteres. A conta nova recebe o perfil `projects`, agora apresentado como **Equipe ZAMA**, e pode entrar imediatamente. O cadastro não envia e-mail nem cria uma caixa de correio. Use **Copiar dados de acesso** para entregar os dados à pessoa.
 
-### Tabelas e permissões
+Para uma conta existente, **Gerar link de acesso** cria um convite válido por sete dias, destinado ao endereço informado. A pessoa entra com sua própria senha, confirma o e-mail quando necessário e aceita o convite. A senha existente nunca é substituída. O link deve ser entregue manualmente.
 
-Para resolver a mensagem de configuração pendente, abra o **SQL Editor** do projeto Supabase que atende esta instalação, cole todo o conteúdo de [`database/instalar-projetos.sql`](../database/instalar-projetos.sql) e execute como proprietário do banco. Depois, volte à área **Projetos** e clique em **Atualizar**. Esse arquivo reúne a configuração de equipe, projetos e listas manuais em uma única transação e pode ser reaplicado.
+A lista de equipe mostra membros e convites de todos os perfis. É possível cancelar um convite ou remover um membro sem excluir os projetos. **Usar perfil da equipe** muda um acesso existente para `projects`. Alterar o perfil ou remover o membro invalida convites anteriores do mesmo endereço.
 
-Como alternativa, execute as migrations na ordem:
-
-1. `database/migrations/20261005_workspaces.sql`, caso ainda não tenha sido aplicada.
-2. `database/migrations/20261012_projects.sql`.
-3. `database/migrations/20261013_project_lists.sql`.
-
-Execute como proprietário do banco. As migrations são aditivas e podem ser reaplicadas na ordem indicada: preservam os dados existentes, a chave de criptografia e os projetos já cadastrados. A atualização das listas converte as etapas antigas apenas quando `production_lists` estiver ausente ou nulo; uma lista vazia salva manualmente continua vazia. Não execute `database/supabase-setup.sql` em uma base existente. A entrega dos arquivos ou a publicação do site não aplica as migrations automaticamente no Supabase.
-
-A interface exige a função `zama_projects_list_v2`, instalada pela terceira migration, antes de permitir o cadastro. Isso impede que uma instalação com o banco antigo ignore silenciosamente as listas personalizadas. Não reaplique apenas a migration de projetos antiga depois da atualização; use o instalador completo ou conclua novamente com a migration de listas.
-
-Após alterar as migrations no repositório, execute `npm run build:projects-sql` para atualizar o instalador único antes de distribuí-lo.
-
-O banco armazena projetos em `public.zama_projects`, separado de `app_state`. Nenhum dado legado de projetos é convertido ou removido automaticamente. O backup JSON administrativo baseado em `app_state` não contém os novos projetos nem suas credenciais; sua restauração não recupera essa área. Para recuperação completa, use o backup do banco Supabase, incluindo o schema `zama_private`.
-
-## Permissões
-
-O cadastro direto e o convite da equipe usam o perfil `projects` (Somente projetos). No cadastro direto, o administrador cria e confirma a conta e o vínculo fica ativo imediatamente. Pelo convite, a pessoa entra com sua própria conta, confirma o e-mail e aceita o link destinado ao mesmo endereço. Preencher somente o e-mail responsável no projeto ainda não concede acesso à empresa.
-
-| Pessoa | Projetos visíveis | Alterações | Senha do cliente |
+| Perfil | Projetos e ideias | Agenda | Senhas de clientes |
 | --- | --- | --- | --- |
-| Proprietário | Todos os seus projetos | Criar, editar, atribuir e excluir | Consultar, substituir e remover |
-| Responsável com perfil `projects` ou `editor` | Somente os atribuídos ao seu e-mail confirmado | Status, observações, listas de produção e etapas | Consultar |
-| Responsável com perfil `viewer` | Somente os atribuídos ao seu e-mail confirmado | Nenhuma | Sem acesso |
-| Membro sem atribuição | Nenhum | Nenhuma | Sem acesso |
+| Administrador (`owner`) | Todos da própria empresa; administração completa | Somente a própria | Consultar, substituir e remover |
+| Equipe (`projects` ou `editor`) | Todos da empresa; andamento dos projetos e edição de ideias | Somente a própria, com edição | Consultar apenas nos projetos atribuídos ao seu e-mail confirmado |
+| Leitura (`viewer`) | Todos da empresa, sem edição | Somente a própria, com edição | Sem acesso |
+| Pessoa sem vínculo | Sem acesso à empresa | Somente a própria | Sem acesso |
 
-O perfil `projects` não pode ler nem alterar o `app_state` da empresa, onde ficam financeiro e outras áreas. A restrição é aplicada no banco, inclusive em chamadas diretas à API. Os perfis `editor` e `viewer` conservam suas permissões administrativas existentes; para restringir alguém somente aos projetos, selecione `projects`.
+O e-mail do responsável organiza o trabalho e restringe a consulta de senhas; não restringe mais a visibilidade dos projetos. Preencher esse e-mail no projeto não cria uma associação à empresa.
 
-Toda consulta verifica a associação atual à empresa, o perfil, a confirmação do e-mail e a correspondência com o e-mail responsável. Remover o membro, mudar a atribuição ou alterar seu e-mail invalida o próximo acesso. Consultar a lista de empresas compartilhadas revela apenas o nome da empresa e seu perfil, como no fluxo de equipe existente.
+## Instalação e atualização do banco
 
-Alterar o perfil ou remover uma pessoa da equipe também cancela convites pendentes da mesma empresa para o e-mail atual dela. Um link antigo não pode restaurar a permissão anterior; o proprietário pode gerar um novo convite quando quiser conceder acesso novamente.
+Execute o conteúdo completo de [`database/instalar-projetos.sql`](../database/instalar-projetos.sql) no **SQL Editor** do Supabase da ZAMA, como proprietário do banco. O instalador exige a tabela `public.app_state` existente e reúne estas migrations em uma transação:
 
-## Credenciais e proteção
+1. `20261005_workspaces.sql` — empresas, membros e convites.
+2. `20261012_projects.sql` — projetos e credenciais cifradas.
+3. `20261013_project_lists.sql` — listas manuais.
+4. `20261015_project_planning.sql` — prazos por etapa e modelos.
+5. `20261015_team_space.sql` — projetos/ideias compartilhados e agendas privadas.
 
-As senhas de login são gerenciadas pelo Supabase Auth; o ZAMA não mantém uma cópia recuperável. A senha informada no cadastro é enviada ao endpoint autenticado e não entra em logs, estado do aplicativo ou armazenamento local.
+O instalador pode ser reaplicado: preserva dados, membros, progresso, modelos e a chave de criptografia. As listas legadas só são convertidas quando `production_lists` está ausente ou nulo. A última migration retira dos perfis antigos `editor` e `viewer` o acesso amplo ao `app_state` de outra conta e aplica o modelo da equipe às associações existentes.
 
-As credenciais dos clientes cadastradas dentro de cada projeto são cifradas com `pgcrypto` e AES-256 antes de gravar a linha. A chave aleatória fica em `zama_private.project_key`, sem acesso para `anon`, `authenticated` ou `service_role`. O schema privado não deve ser exposto pela API. A migration resolve o schema em que a extensão `pgcrypto` já estiver instalada (`public` ou `extensions`).
+**Aplique o instalador completo antes de publicar esta versão da interface.** Publicar o site não executa SQL no Supabase. Não reaplique apenas uma migration antiga depois desta atualização, pois ela pode restaurar permissões anteriores. Não execute `database/supabase-setup.sql` sobre uma base existente.
 
-Tabela e chave têm RLS ativada e forçada, sem políticas que concedam acesso direto ao navegador. As funções públicas usam `SECURITY DEFINER`, caminho de busca vazio e verificações explícitas de identidade. Listagem e gravação retornam somente `has_password`; o texto da senha só é devolvido pela função específica de consulta, após autorização.
+Após mudar migrations, gere novamente o instalador com `npm run build:projects-sql`. A interface usa `zama_projects_list_v3`; em instalações antigas com v2, os campos de prazo por etapa e modelos ficam indisponíveis. Ideias compartilhadas exigem a última migration e apresentam uma mensagem de configuração pendente quando ela falta.
 
-A chave é mantida no mesmo banco: isso protege contra leitura indevida pela API, mas não impede que um administrador do banco ou alguém com o backup completo recupere as credenciais. O backup do banco contém ciphertext e chave, e deve receber a mesma proteção que os demais segredos administrativos. Não remover ou substituir a linha da chave: isso tornaria as senhas atuais ilegíveis. A interface não deve colocar senhas em `app_state`, localStorage, IndexedDB, logs ou backups JSON.
+## Cadastro de login pelo servidor
 
-## Contrato RPC
+`GET/POST /api/project-access` exige a sessão confirmada do administrador autorizado. `PROJECT_ACCESS_ADMIN_EMAIL` permite configurar essa conta; as variáveis de servidor são `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `APP_ORIGIN`. `PROJECT_ACCESS_ENABLED=false` desativa o cadastro. Nenhuma chave administrativa vai para o navegador.
 
-Todas as funções abaixo exigem sessão autenticada:
+O servidor verifica identidade e empresa, aplica limites de cadastro e cria exclusivamente contas novas com perfil `projects`. Se a associação falhar, tenta desfazer apenas a conta recém-criada. Falhas ambíguas orientam conferir o usuário no Supabase antes de repetir. O convite interno de preparação nunca é enviado nem retornado e é cancelado ao final.
 
-| Função | Argumentos | Retorno |
-| --- | --- | --- |
-| `zama_projects_list` | `p_owner: uuid` | Array JSON dos projetos autorizados, sem senhas |
-| `zama_projects_list_v2` | `p_owner: uuid` | Mesma listagem autorizada, com suporte confirmado às listas manuais |
-| `zama_project_save` | `p_owner: uuid`, `p_project: jsonb` | Projeto completo gravado, sem senha |
-| `zama_project_secret` | `p_owner: uuid`, `p_id: uuid` | Senha em texto; string vazia quando não cadastrada |
-| `zama_project_delete` | `p_owner: uuid`, `p_id: uuid` | Sem conteúdo; somente proprietário |
+## Dados e credenciais
 
-O objeto do projeto contém `id`, `title`, `client_name`, `company_name`, `client_email`, `access_url`, `responsible_email`, `responsible_name`, `status`, `due_date`, `notes`, `production_lists`, `catalog_steps`, `onboarding_steps`, `revision`, `created_at`, `updated_at` e `has_password`.
+As senhas de login ficam no Supabase Auth, sem cópia recuperável no ZAMA. A senha de uma conta recém-criada fica mascarada para cópia e é apagada ao fechar a janela, perder o foco, sair da sessão ou após um minuto.
 
-`title` e `client_name` são obrigatórios e não aceitam somente espaços, tabulações ou quebras de linha; espaços externos são removidos. Gravações parciais preservam esses campos quando não forem enviados. `status` aceita `planning`, `in_progress`, `waiting` e `completed`. `due_date` é `null` ou data `YYYY-MM-DD`. Texto curto aceita até 254 caracteres; observações, 20.000; URL HTTP(S), 2.048; senha, 4.096. E-mails são normalizados para minúsculas sem espaços externos.
+As senhas dos clientes são cifradas com `pgcrypto` e AES-256 em `public.zama_projects`. A chave fica em `zama_private.project_key`; tabelas e schema privado não concedem acesso direto a `anon`, `authenticated` ou `service_role`. A listagem de projetos retorna apenas `has_password`. **Mostrar senha** faz uma consulta autorizada, reservada ao administrador ou ao responsável confirmado com perfil de escrita. A senha é apagada da interface ao fechar, trocar de aba ou depois de um minuto e não entra no estado persistido do navegador.
 
-`production_lists` é um array com até 20 objetos contendo exatamente `{id, title, steps}`. IDs de listas são únicos no projeto e têm até 80 caracteres; títulos têm até 254. `steps` aceita até 100 objetos com exatamente `{id, label, done}`: IDs são únicos dentro da respectiva lista, com até 80 caracteres, rótulos têm até 254 caracteres e `done` é booleano. IDs, títulos e rótulos não podem ser vazios nem conter somente espaços, tabulações ou quebras de linha. Array vazio é válido para listas e etapas; `null`, propriedades extras e tipos incorretos são rejeitados. O limite total do JSON enviado é 4 MiB, suficiente para os limites de listas e textos em UTF-8.
+O backup JSON administrativo baseado em `app_state` não inclui projetos, modelos ou credenciais de clientes. A recuperação completa exige backup do banco Supabase, incluindo o schema `zama_private` e sua chave.
 
-Os campos `catalog_steps` e `onboarding_steps` continuam disponíveis para clientes antigos e correspondem às listas com IDs `catalog` e `onboarding`. Atualizações parciais desses campos preservam as demais listas manuais. Quando `production_lists` é enviado, ele prevalece e sincroniza os campos antigos; remover uma dessas listas também limpa o campo legado correspondente. Clientes novos devem enviar `production_lists` para editar listas. Em todos os casos, campos de etapas não enviados permanecem intactos, salvo a sincronização das respectivas listas.
+## Contratos das funções
 
-Criação aceita `revision` ausente ou zero e devolve `revision: 1`. Edição exige a revisão recebida na última leitura; cada alteração incrementa a revisão. Revisão desatualizada gera `PROJECT_CONFLICT` (SQLSTATE `40001`) e cancela toda a gravação, inclusive uma substituição de senha. A interface deve recarregar antes de tentar novamente. Não refazer automaticamente uma edição inteira sobre dados mais novos.
+| RPC | Uso |
+| --- | --- |
+| `zama_projects_list_v3(p_owner)` | Projetos da empresa, listas e prazos por etapa, sem senhas |
+| `zama_project_save(p_owner, p_project)` | Criar/editar com revisão; campos protegidos só para administrador |
+| `zama_project_secret(p_owner, p_id)` | Consultar senha sob autorização separada |
+| `zama_project_delete(p_owner, p_id)` | Excluir como administrador |
+| `zama_project_templates_list()` | Modelos da própria conta |
+| `zama_project_template_save(p_template)` | Salvar estrutura, sem progresso, prazos ou dados de cliente |
+| `zama_project_template_delete(p_id, p_revision)` | Excluir modelo com revisão |
+| `zama_team_ideas_get(p_owner)` | Ideias compartilhadas e revisão, sem links de tarefas privadas |
+| `zama_team_ideas_save(p_owner, p_revision, p_ideas)` | Alterar somente as ideias, preservando o restante do estado |
 
-O campo opcional `password` só é aceito do proprietário: ausente preserva a senha, string vazia remove, outra string substitui. Ele nunca aparece no retorno. Gravações parciais são aceitas. O responsável pode reenviar campos protegidos inalterados junto com o formulário, mas qualquer modificação nesses campos gera `PROJECT_ACCESS_DENIED` (SQLSTATE `42501`). Dados inválidos geram erros `PROJECT_INVALID_*` (`22023`; formatos UUID/data inválidos também podem retornar os códigos nativos do PostgreSQL).
+Etapas aceitam `{id, label, done, due_date?}`. `due_date` deve ser uma data real `YYYY-MM-DD` ou `null`. Clientes antigos que omitem a propriedade preservam a data existente da mesma lista/etapa; `null` remove explicitamente o prazo. O limite do JSON do projeto é 4 MiB. As listas mantêm a compatibilidade com os campos legados `catalog_steps` e `onboarding_steps`.
+
+Projetos e modelos usam revisão incremental. Ideias usam o timestamp de revisão da linha da empresa, com bloqueio durante a gravação; mudanças simultâneas em ideias ou outros dados do administrador invalidam a revisão antiga. Conflitos (`40001`) não gravam parcialmente nem são repetidos automaticamente. A interface mantém o rascunho e orienta consultar a versão atual. Acesso negado usa `42501` e dados inválidos usam `22023`.
 
 ## Verificação local
 
 ```text
-node --test tests/project-access.test.js tests/workspaces-database.test.js tests/projects-database.test.js
-npx playwright test tests/browser/projects.spec.js
+npm test
+npx playwright test
+node scripts/build-projects-setup.mjs --check
 ```
 
-Os testes usam PostgreSQL em WASM (PGlite) e a extensão `pgcrypto` real, sem acesso a dados de produção. Cobrem convite e confirmação, bloqueio de financeiro, isolamento entre empresas e responsáveis, consulta de senhas, revisão concorrente, revogação, troca de atribuição/e-mail, bloqueio de acesso direto, reexecução das migrations e extensão preexistente em outro schema. Também verificam conversão das etapas antigas, projetos sem listas, edição e remoção de listas manuais, compatibilidade com clientes antigos, limites de tamanho, rejeição atômica de dados inválidos e permissões da listagem v2.
-
-Os testes do cadastro direto simulam o Supabase Auth e verificam administrador autorizado, preservação de contas existentes, desfazimento de cadastros incompletos, limite do corpo em bytes e senhas UTF-8 recebidas em partes. No navegador, verificam criação e cópia dos dados de acesso, limpeza da senha, troca de sessão, resposta atrasada, uso da tecla Enter nos convites e apresentação em computador e celular.
+Os testes com PGlite e `pgcrypto` real verificam isolamento entre empresas e agendas, acesso a senhas, revisões concorrentes, preservação dos vínculos privados de ideias, compatibilidade dos prazos, modelos e reaplicação do instalador. Os testes de navegador cobrem as três abas, agendas pessoais, ideias compartilhadas, troca de sessão/perfil, convites, criação de acesso, rascunhos, prioridades, modelos e telas de 320, 390 e 1.440 pixels. Não usam dados de produção.

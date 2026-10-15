@@ -13,12 +13,14 @@
 
     function resetAccountState() {
       cloudEpoch++;
+      if (typeof ZamaIdeas !== 'undefined') ZamaIdeas.reset?.();
       cloudUserId = cloudOwnerId = cloudRevision = cloudSnapshot = null;
       cloudWritePending = false;
       state = null;
     }
 
     function requireWriteAccess() {
+      if (typeof ZamaWorkspace !== 'undefined' && ZamaWorkspace.isTeamSpace?.()) return;
       if (typeof ZamaWorkspace !== "undefined" && !ZamaWorkspace.canEdit()) {
         throw new Error("Seu acesso a esta empresa é somente leitura.");
       }
@@ -92,22 +94,23 @@
       if (epoch !== cloudEpoch) throw new Error("A sessão mudou. Entre novamente.");
       if (!supabaseClient || !user) throw new Error("Sua sessão expirou. Entre novamente.");
       cloudUserId = user.id;
-      const ownerId = typeof ZamaWorkspace !== "undefined" ? ZamaWorkspace.ownerId(user.id) : user.id;
+      const personal = typeof ZamaWorkspace !== 'undefined' && ZamaWorkspace.isTeamSpace?.();
+      const ownerId = personal ? user.id : typeof ZamaWorkspace !== "undefined" ? ZamaWorkspace.ownerId(user.id) : user.id;
       cloudOwnerId = ownerId;
-      // A project collaborator never downloads the company's all-in-one state.
-      if (typeof ZamaWorkspace !== "undefined" && ZamaWorkspace.isProjectsOnly()) {
-        cloudRevision = null;
-        const empty = createInitialState();
-        empty.setupDone = true;
-        return empty;
-      }
+      // Team members load their OWN agenda; shared ideas use a separate narrow RPC.
+      try {
+        const sharedCachePrefix = `${storageKey}:${user.id}:`;
+        Object.keys(localStorage).filter(key => key.startsWith(sharedCachePrefix)).forEach(key => localStorage.removeItem(key));
+      } catch {}
       const { data, error } = await supabaseClient.from(cloudStateTable)
         .select("data,updated_at").eq("user_id", ownerId).maybeSingle();
       if (epoch !== cloudEpoch || cloudUserId !== user.id || cloudOwnerId !== ownerId) throw new Error("A sessão mudou. Entre novamente.");
       if (error) throw new Error("Não foi possível carregar seus dados. Verifique a conexão e tente novamente.");
       if (!data && ownerId !== user.id) throw new Error("Esta empresa não está disponível. Seu acesso pode ter sido removido.");
       cloudRevision = data?.updated_at || null;
-      return data?.data ? prepareState(data.data) : null;
+      const loaded = data?.data ? prepareState(data.data) : personal ? createInitialState() : null;
+      if (personal && loaded) loaded.setupDone = true;
+      return loaded;
     }
 
     async function saveCloudState(candidate = state) {
@@ -116,6 +119,10 @@
       const user = await getCurrentUser();
       if (epoch !== cloudEpoch || !supabaseClient || !user || user.id !== cloudUserId || !candidate) {
         throw new Error("Sua sessão expirou. Entre novamente para salvar.");
+      }
+      if (typeof ZamaWorkspace !== 'undefined' && ZamaWorkspace.isTeamSpace?.() && cloudSnapshot) {
+        const personalFields = ['agenda','agendaSettings','reminderReceipts','ideias'];
+        if ([...new Set([...Object.keys(candidate), ...Object.keys(cloudSnapshot)])].some(key => !personalFields.includes(key) && JSON.stringify(candidate[key]) !== JSON.stringify(cloudSnapshot[key]))) throw new Error('Neste espaço, somente sua agenda pessoal pode ser alterada.');
       }
       const payload = { user_id: ownerId, data: candidate, updated_at: new Date().toISOString() };
       const query = cloudRevision
@@ -159,7 +166,6 @@
 
     async function subscribeToCloudChanges(user) {
       if (!supabaseClient || !user) return;
-      if (typeof ZamaWorkspace !== "undefined" && ZamaWorkspace.isProjectsOnly()) return;
       const epoch = cloudEpoch, ownerId = cloudOwnerId || user.id;
       await unsubscribeFromCloudChanges();
       if (epoch !== cloudEpoch || cloudUserId !== user.id) return;
@@ -262,7 +268,7 @@
     // two devices compete for a single receipt without requiring a new SQL table.
     async function claimCloudReminder(key, now = Date.now()) {
       if (cloudWritePending) return false;
-      if (typeof ZamaWorkspace !== "undefined" && !ZamaWorkspace.canEdit()) return false;
+      if (typeof ZamaWorkspace !== "undefined" && !ZamaWorkspace.canEdit() && !ZamaWorkspace.isTeamSpace?.()) return false;
       const epoch = cloudEpoch, ownerId = cloudOwnerId || cloudUserId;
       cloudWritePending = true;
       try {
@@ -308,7 +314,7 @@
     // Troca de aba no menu lateral e permite abrir sub-abas como financeiro/fixos.
     function goToModule(module, options = {}) {
       if (!['dashboard', 'financeiro', 'investimentos', 'agenda', 'ideias', 'jarvis', 'projetos'].includes(module) || module === 'jarvis' && !jarvisVisible) module = 'dashboard';
-      if (typeof ZamaWorkspace !== "undefined" && ZamaWorkspace.isProjectsOnly()) module = 'projetos';
+      if (typeof ZamaWorkspace !== "undefined" && ZamaWorkspace.isTeamSpace?.() && !['agenda','projetos','ideias'].includes(module)) module = 'projetos';
       if (module !== 'projetos' && typeof ZamaProjects !== 'undefined') ZamaProjects.leave();
       activeModule = module;
       if (options.financeView) financeView = options.financeView;
@@ -329,7 +335,7 @@
     function render() {
       if (!state) return;
       if (!['dashboard', 'financeiro', 'investimentos', 'agenda', 'ideias', 'jarvis', 'projetos'].includes(activeModule) || activeModule === 'jarvis' && !jarvisVisible) activeModule = 'dashboard';
-      if (typeof ZamaWorkspace !== "undefined" && ZamaWorkspace.isProjectsOnly()) activeModule = 'projetos';
+      if (typeof ZamaWorkspace !== "undefined" && ZamaWorkspace.isTeamSpace?.() && !['agenda','projetos','ideias'].includes(activeModule)) activeModule = 'projetos';
       navButtons.forEach(item => item.classList.toggle('active', item.dataset.module === activeModule));
       if (typeof renderCeoModule === "function") renderCeoModule();
       else setCloudStatus("Não foi possível abrir a tela. Atualize a página.", "error");

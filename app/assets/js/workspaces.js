@@ -4,7 +4,7 @@
   let account = null, selected = null, spaces = [], available = false, generation = 0;
   let roster = { members: [], invites: [] }, inviteUrl = '', inviteId = null, notice = '', timer = null;
   let rosterSequence = 0;
-  const labels = { owner: 'Proprietário', editor: 'Pode editar', viewer: 'Somente leitura', projects: 'Somente projetos' };
+  const labels = { owner: 'Administrador', editor: 'Equipe ZAMA', viewer: 'Equipe · leitura', projects: 'Equipe ZAMA' };
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const tokenKey = 'zama-pending-invite';
   // Capture a fragment token before Auth handles its own fragments. Never send it as a URL query.
@@ -19,7 +19,8 @@
   const canEdit = () => !account || !selected || selected === account.id || active()?.role === 'editor';
   const isOwner = () => Boolean(account && (!selected || selected === account.id));
   const role = () => active()?.role || 'owner';
-  const isProjectsOnly = () => role() === 'projects';
+  const isTeamSpace = () => Boolean(account && selected && selected !== account.id);
+  const isProjectsOnly = isTeamSpace; // Compatibility for restricted admin/backup guards.
   const hasPendingInvite = () => { try { return Boolean(sessionStorage.getItem(tokenKey)); } catch { return false; } };
   const capture = () => ({ generation, owner: selected });
   const current = ticket => ticket.generation === generation && ticket.owner === selected;
@@ -33,9 +34,9 @@
   function applyVisibility() {
     const restricted = isProjectsOnly();
     document.querySelectorAll('.nav [data-module]').forEach(el => {
-      el.hidden = restricted ? el.dataset.module !== 'projetos' : el.dataset.module === 'jarvis' && !jarvisVisible;
+      el.hidden = restricted ? !['agenda','projetos','ideias'].includes(el.dataset.module) : el.dataset.module === 'jarvis' && !jarvisVisible;
     });
-    document.querySelectorAll('#companyForm, #exportBtn, #importBtn, #monthlyBackupBtn, #resetBtn, #projectBackupNote, [data-push-region]').forEach(el => { el.hidden = restricted; });
+    document.querySelectorAll('#companyForm, #exportBtn, #importBtn, #monthlyBackupBtn, #resetBtn, #projectBackupNote').forEach(el => { el.hidden = restricted; });
     const legacy = document.getElementById('legacyBackupBtn');
     if (restricted && legacy) legacy.hidden = true;
     const launcher = document.getElementById('jarvisLauncher');
@@ -66,8 +67,8 @@
       spaces = list; available = true;
       let saved;
       try { saved = sessionStorage.getItem(`zama-workspace:${user.id}`); } catch {}
-      if (spaces.some(item => item.owner_id === saved)) selected = saved;
-      else if (spaces.some(item => item.role === 'projects')) selected = spaces.find(item => item.role === 'projects').owner_id;
+      const teamSpaces = spaces.filter(item => item.owner_id !== user.id);
+      if (teamSpaces.length) selected = (teamSpaces.find(item => item.owner_id === saved) || teamSpaces[0]).owner_id;
       timer = global.setInterval(refreshAccess, 60000);
     } catch { if (gen === generation) notice = 'O compartilhamento de equipe ainda não está disponível nesta instalação.'; }
     if (gen === generation) render();
@@ -160,21 +161,21 @@
     applyVisibility();
     const badge = document.getElementById('workspaceBadge');
     if (badge) { badge.hidden = false; badge.textContent = `${active()?.name || 'Minha empresa'} · ${labels[role]}`; }
-    const readonly = role === 'viewer' || role === 'projects';
+    const readonly = isTeamSpace();
     document.querySelectorAll('#companyForm input, #companyForm button, #importBtn, #loadExamplesBtn').forEach(el => { el.disabled = readonly; });
     const resetButton = document.getElementById('resetBtn'); if (resetButton) resetButton.disabled = !isOwner();
     let pending = false; try { pending = Boolean(sessionStorage.getItem(tokenKey)); } catch {}
     section.innerHTML = `<span class="settings-label">Empresa e equipe</span>
-      <label class="workspace-field">Empresa em uso<select data-company aria-label="Empresa em uso">${spaces.map(item => `<option value="${esc(item.owner_id)}" ${item.owner_id === selected ? 'selected' : ''}>${esc(item.name)} · ${labels[item.role]}</option>`).join('')}</select></label>
-      <p class="settings-note">${role === 'owner' ? 'Você gerencia os dados e os acessos desta empresa.' : role === 'projects' ? 'Seu acesso está limitado aos projetos atribuídos a você. Entre com seu próprio e-mail e senha.' : role === 'editor' ? 'Você pode consultar e editar os registros desta empresa.' : 'Você pode consultar e exportar os registros. Alterações são reservadas aos editores.'}</p>
+      <label class="workspace-field">Empresa em uso<select data-company aria-label="Empresa em uso">${spaces.filter(item => !isTeamSpace() || item.owner_id !== account.id).map(item => `<option value="${esc(item.owner_id)}" ${item.owner_id === selected ? 'selected' : ''}>${esc(item.name)} · ${labels[item.role]}</option>`).join('')}</select></label>
+      <p class="settings-note">${role === 'owner' ? 'Você gerencia os dados e os acessos desta empresa.' : 'Projetos e ideias são compartilhados com a equipe. Sua agenda é pessoal e só aparece para você.'}</p>
       ${pending ? `<div class="workspace-invite"><strong>Você recebeu um convite</strong><p>Entre com o e-mail destinatário e confirme para acessar a empresa.</p><button type="button" class="button primary" data-accept ${available ? '' : 'disabled'}>Aceitar convite</button><button type="button" class="button" data-dismiss>Descartar convite</button></div>` : ''}
       ${!available ? `<p class="settings-note">${esc(notice || 'O compartilhamento de equipe ainda não está disponível nesta instalação.')}</p>` : isOwner() ? `<form data-invite-form class="workspace-invite">
         <label class="workspace-field">E-mail do convidado<input name="email" type="email" required maxlength="254" placeholder="pessoa@empresa.com" autocomplete="off"></label>
-        <label class="workspace-field">Permissão<select name="role"><option value="projects">Somente projetos</option><option value="viewer">Somente leitura</option><option value="editor">Pode editar</option></select></label>
+        <label class="workspace-field">Permissão<select name="role"><option value="projects">Equipe ZAMA</option><option value="viewer">Somente leitura</option><option value="editor">Pode editar</option></select></label>
         <p class="settings-note">O convite vale por 7 dias e só pode ser aceito pela conta com este e-mail confirmado.</p>
         <button class="button primary" type="submit">Gerar link de convite</button></form>
         ${inviteUrl ? `<label class="workspace-field">Link para compartilhar<input value="${esc(inviteUrl)}" readonly aria-label="Link do convite"></label><button class="button" type="button" data-copy>Copiar link</button>` : ''}
-        <div class="workspace-roster"><strong>Pessoas com acesso</strong>${roster.members.length ? roster.members.map(member => `<div class="workspace-person"><span>${esc(member.email)}</span><select aria-label="Permissão de ${esc(member.email)}" data-role="${esc(member.user_id)}"><option value="projects" ${member.role === 'projects' ? 'selected' : ''}>Somente projetos</option><option value="viewer" ${member.role === 'viewer' ? 'selected' : ''}>Somente leitura</option><option value="editor" ${member.role === 'editor' ? 'selected' : ''}>Pode editar</option></select><button type="button" class="button" data-revoke="${esc(member.user_id)}">Remover</button></div>`).join('') : '<p class="settings-note">Somente você tem acesso no momento.</p>'}
+        <div class="workspace-roster"><strong>Pessoas com acesso</strong>${roster.members.length ? roster.members.map(member => `<div class="workspace-person"><span>${esc(member.email)}</span><select aria-label="Permissão de ${esc(member.email)}" data-role="${esc(member.user_id)}"><option value="projects" ${member.role === 'projects' ? 'selected' : ''}>Equipe ZAMA</option><option value="viewer" ${member.role === 'viewer' ? 'selected' : ''}>Somente leitura</option><option value="editor" ${member.role === 'editor' ? 'selected' : ''}>Pode editar</option></select><button type="button" class="button" data-revoke="${esc(member.user_id)}">Remover</button></div>`).join('') : '<p class="settings-note">Somente você tem acesso no momento.</p>'}
         ${roster.invites.length ? '<strong>Convites pendentes</strong>' + roster.invites.map(invite => `<div class="workspace-person"><span>${esc(invite.email)} · ${labels[invite.role]}</span><button type="button" class="button" data-cancel="${esc(invite.id)}">Revogar convite</button></div>`).join('') : ''}</div>` : '<p class="settings-note">Os acessos são gerenciados pelo proprietário desta empresa.</p>'}
       ${available && notice ? `<p role="status" class="settings-note">${esc(notice)}</p>` : ''}`;
     section.querySelector('[data-company]').onchange = event => { void switchTo(event.target.value); };
@@ -226,5 +227,5 @@
     if (loadRoster && available && isOwner()) void updateRoster();
   }
   global.addEventListener('focus', refreshAccess);
-  global.ZamaWorkspace = { init, reset, render, ownerId, canEdit, isOwner, role, isProjectsOnly, hasPendingInvite, inviteProjects, refreshAccess, openTeam };
+  global.ZamaWorkspace = { init, reset, render, ownerId, canEdit, isOwner, role, isProjectsOnly, isTeamSpace, email: () => account?.email, hasPendingInvite, inviteProjects, refreshAccess, openTeam };
 })(window);

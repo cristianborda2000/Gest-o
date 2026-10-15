@@ -73,4 +73,16 @@ function values(extra = {}) { return { titulo: "Automatizar cobrança", descrica
   assert.throws(() => ideas.convert(state, row.id, { prazo: "2026-10-05", hora: "11:00", duracao: 1 }), /duração/);
   assert.equal(state.agenda.length, 0, "Conversões inválidas não criam tarefas");
 }
+{
+  const state = baseState();
+  const row = ideas.upsert(state, values());
+  const schedule = { prazo: '2026-10-20', hora: '09:30' };
+  const own = ideas.convert(state, row.id, schedule);
+  const first = ideas.convert(state, row.id, schedule, 'company-a');
+  const second = ideas.convert(state, row.id, schedule, 'company-b');
+  assert.equal(new Set([own.id, first.id, second.id]).size, 3, 'Vínculos privados e de empresas diferentes não se confundem');
+  assert.equal(ideas.convert(state, row.id, {}, 'company-a').id, first.id);
+  assert.equal(first.ideaOwnerId, 'company-a');
+  assert.equal(second.ideaOwnerId, 'company-b');
+}
 console.log("Banco de ideias: normalização, edição, etapas, arquivamento, pesquisa, validação e conversão idempotente OK.");

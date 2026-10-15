@@ -118,7 +118,7 @@ test('direct project account validation blocks mismatched and oversized password
   expect(api.calls.filter(call => call.method === 'POST')).toEqual([]);
   await fillAccountPassword(page, 'Different-password-2026!');
   await dialog(page).getByRole('button', { name: 'Gerar link de acesso', exact: true }).click();
-  await expect(dialog(page).getByLabel('Link de acesso a Projetos', { exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
+  await expect(dialog(page).getByLabel('Link de acesso à equipe', { exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
   expect(api.calls.filter(call => call.method === 'POST')).toEqual([]);
   await noPersistedAccountPassword(page);
 });
@@ -134,7 +134,7 @@ test('direct project account existing-email conflict keeps the current account i
   await expect(dialog(page).getByLabel('Senha de acesso', { exact: true })).toHaveValue('');
   await expect(dialog(page).getByLabel('Confirmar senha', { exact: true })).toHaveValue('');
   await dialog(page).getByRole('button', { name: 'Gerar link de acesso', exact: true }).click();
-  await expect(dialog(page).getByLabel('Link de acesso a Projetos', { exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
+  await expect(dialog(page).getByLabel('Link de acesso à equipe', { exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
   expect(api.calls.filter(call => call.method === 'POST')).toHaveLength(1);
   await noPersistedAccountPassword(page);
 });
@@ -148,7 +148,7 @@ test('direct project account controls never replace an existing member password'
   await expect(dialog(page).getByRole('button', { name: 'Criar acesso com senha', exact: true })).not.toBeVisible();
   await expect(dialog(page).getByLabel('Senha de acesso', { exact: true })).toHaveValue('');
   await expect(dialog(page).getByLabel('Senha de acesso', { exact: true })).toBeDisabled();
-  await dialog(page).getByRole('button', { name: 'Limitar acesso a Projetos', exact: true }).click();
+  await dialog(page).getByRole('button', { name: 'Usar perfil da equipe', exact: true }).click();
   await expect(dialog(page).getByRole('button', { name: 'Acesso já ativo', exact: true })).toBeDisabled();
   expect(api.calls.filter(call => call.method === 'POST')).toEqual([]);
 });
@@ -163,7 +163,7 @@ test('project access Enter creates an invitation when password accounts are unav
   await expect(dialog(page).locator('[data-team-capability]')).toContainText('indisponível');
   await expect(dialog(page).getByRole('button', { name: 'Gerar link de acesso', exact: true })).toBeEnabled();
   await email.press('Enter');
-  await expect(dialog(page).getByLabel('Link de acesso a Projetos', { exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
+  await expect(dialog(page).getByLabel('Link de acesso à equipe', { exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
   expect(methods).toEqual(['GET']);
 });
 
@@ -173,10 +173,10 @@ test('project access Enter limits an existing member without creating a password
   await page.locator('#ceoWorkspace').getByRole('button', { name: 'Criar acesso', exact: true }).click();
   const email = dialog(page).getByLabel('E-mail da pessoa', { exact: true });
   await email.fill(accountEmail);
-  await expect(dialog(page).getByRole('button', { name: 'Limitar acesso a Projetos', exact: true })).toBeEnabled();
+  await expect(dialog(page).getByRole('button', { name: 'Usar perfil da equipe', exact: true })).toBeEnabled();
   await email.press('Enter');
   await expect(dialog(page).getByRole('button', { name: 'Acesso já ativo', exact: true })).toBeDisabled();
-  await expect(dialog(page).locator('[data-team-notice]')).toContainText('atualizado: somente Projetos');
+  await expect(dialog(page).locator('[data-team-notice]')).toContainText('atualizado para a equipe');
   expect(api.calls.filter(call => call.method === 'POST')).toEqual([]);
   expect(await page.evaluate(() => window.testRpcCalls.filter(call => call.name === 'zama_workspace_set_role'))).toEqual([{ name: 'zama_workspace_set_role', params: { p_user: 'member-editor', p_role: 'projects' } }]);
 });
@@ -191,10 +191,10 @@ test('project access Enter during capability loading creates only the visible in
   await expect(dialog(page).getByRole('button', { name: 'Gerar link de acesso', exact: true })).toBeEnabled();
   await expect(dialog(page).getByRole('button', { name: 'Criar acesso com senha', exact: true })).not.toBeVisible();
   await email.press('Enter');
-  await expect(dialog(page).getByLabel('Link de acesso a Projetos', { exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
+  await expect(dialog(page).getByLabel('Link de acesso à equipe', { exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
   await api.respond(api.pending[0]);
   await expect(dialog(page).getByRole('button', { name: 'Criar acesso com senha', exact: true })).toBeEnabled();
-  await expect(dialog(page).getByLabel('Link de acesso a Projetos', { exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
+  await expect(dialog(page).getByLabel('Link de acesso à equipe', { exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
   await expect(dialog(page).getByLabel('Senha cadastrada', { exact: true })).toHaveCount(0);
   expect(api.calls.filter(call => call.method === 'POST')).toEqual([]);
 });
@@ -371,15 +371,15 @@ test.beforeEach(async ({ page }) => {
   await page.route('**/@vite/client', route => route.fulfill({ contentType: 'application/javascript', body: '' }));
 });
 
-test('projects-only access loads assigned projects without reading finance or exposing other modules', async ({ page }) => {
+test('team access loads all projects and a private agenda without reading company finances', async ({ page }) => {
   const requests=[]; page.on('request',request=>requests.push(request.url()));
   await restricted(page);
-  await expect(page.locator('#workspaceBadge')).toContainText('Somente projetos');
+  await expect(page.locator('#workspaceBadge')).toContainText('Equipe ZAMA');
   await expect(page.locator('#ceoWorkspace').getByRole('button', { name: 'Criar acesso', exact: true })).toHaveCount(0);
   await expect(page.locator('body')).not.toContainText('Receita confidencial da empresa');
-  await expect(page.locator('body')).not.toContainText('Projeto reservado a outra pessoa');
-  for(const module of ['dashboard','financeiro','investimentos','agenda','ideias','jarvis']) await expect(page.locator(`.nav [data-module="${module}"]`)).not.toBeVisible();
-  expect(await page.evaluate(() => window.testDbReads)).toEqual([]);
+  await expect(page.locator('body')).toContainText('Projeto reservado a outra pessoa');
+  for(const module of ['dashboard','financeiro','investimentos','jarvis']) await expect(page.locator(`.nav [data-module="${module}"]`)).not.toBeVisible();
+  expect(await page.evaluate(() => window.testDbReads)).toEqual([{userId:'test-account'}]);
   expect(await page.evaluate(() => ceoCommit(draft => { draft.financeiro = [{ nome: 'Tentativa' }]; }))).toBe(false);
   await page.evaluate(() => goToModule('financeiro'));
   await expect(page.getByRole('heading', { name: 'Projetos de clientes' })).toBeVisible();
@@ -388,42 +388,42 @@ test('projects-only access loads assigned projects without reading finance or ex
   const downloads=[]; page.on('download', value=>downloads.push(value));
   await page.evaluate(() => ['exportBtn','monthlyBackupBtn','legacyBackupBtn'].forEach(id=>document.getElementById(id).click()));
   expect(downloads).toHaveLength(0);
-  expect(requests.filter(url=>/\/api\/(jarvis|reminders)/.test(url))).toEqual([]);
+  expect(requests.filter(url=>/\/api\/jarvis/.test(url))).toEqual([]);
   await noPersistedPassword(page);
 });
 
-test('owner creates a projects-only invitation inside the project area and previews assigned projects', async ({ page }) => {
+test('owner creates a team invitation and previews all shared projects', async ({ page }) => {
   await ownerProjects(page, [{ ...assigned, responsible_email: 'time@example.invalid' }]);
   await page.locator('#ceoWorkspace').getByRole('button', { name: 'Criar acesso', exact: true }).click();
-  await expect(dialog(page).getByRole('heading', { name: 'Acesso somente a Projetos', exact: true })).toBeVisible();
+  await expect(dialog(page).getByRole('heading', { name: 'Acesso à equipe ZAMA', exact: true })).toBeVisible();
   await expect(dialog(page).getByLabel('E-mail da pessoa', { exact: true })).toBeFocused();
   await expect(dialog(page).getByRole('combobox', { name: 'Permissão', exact: true })).toHaveCount(0);
   await dialog(page).getByLabel('E-mail da pessoa', { exact: true }).fill('TIME@EXAMPLE.INVALID');
   await expect(dialog(page).locator('[data-team-preview]')).toContainText('Catálogo Aurora');
   await dialog(page).getByRole('button', { name: 'Gerar link de acesso', exact: true }).click();
-  await expect(dialog(page).getByRole('textbox', { name: 'Link de acesso a Projetos', exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
+  await expect(dialog(page).getByRole('textbox', { name: 'Link de acesso à equipe', exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
   expect(await page.evaluate(() => window.testRpcCalls.find(call => call.name === 'zama_workspace_invite').params)).toEqual({ p_email: 'time@example.invalid', p_role: 'projects' });
   await expect(dialog(page)).toContainText(/senha/i);
   await expect(dialog(page)).toContainText(/aceit/i);
   await expect(dialog(page)).toContainText(/financ/i);
   await expect(page.locator('#settingsPanel')).not.toBeVisible();
   await dialog(page).getByLabel('E-mail da pessoa', { exact: true }).fill('another-person@example.invalid');
-  await expect(dialog(page).getByRole('textbox', { name: 'Link de acesso a Projetos', exact: true })).not.toBeVisible();
-  await expect(dialog(page).locator('[data-team-preview]')).not.toContainText('Catálogo Aurora');
+  await expect(dialog(page).getByRole('textbox', { name: 'Link de acesso à equipe', exact: true })).not.toBeVisible();
+  await expect(dialog(page).locator('[data-team-preview]')).toContainText('Catálogo Aurora');
 });
 
-test('project access explains how to assign projects without granting unrelated projects', async ({ page }) => {
+test('team access explains shared projects independently of responsibility', async ({ page }) => {
   await ownerProjects(page);
   await page.locator('#ceoWorkspace').getByRole('button', { name: 'Criar acesso', exact: true }).click();
   await dialog(page).getByLabel('E-mail da pessoa', { exact: true }).fill('new-person@example.invalid');
-  await expect(dialog(page).locator('[data-team-preview]')).toContainText(/E-mail do responsável/i);
-  await expect(dialog(page).locator('[data-team-preview]')).not.toContainText('Catálogo Aurora');
+  await expect(dialog(page)).toContainText(/compartilhados|equipe/i);
+  await expect(dialog(page).locator('[data-team-preview]')).toContainText('Catálogo Aurora');
   await dialog(page).getByRole('button', { name: 'Gerar link de acesso', exact: true }).click();
-  await expect(dialog(page).getByLabel('Link de acesso a Projetos', { exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
+  await expect(dialog(page).getByLabel('Link de acesso à equipe', { exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
   expect(await page.evaluate(() => window.testRpcCalls.filter(call => call.name === 'zama_project_save'))).toEqual([]);
 });
 
-test('project access lists only restricted members and invitations and supports revoking both', async ({ page }) => {
+test('team access lists all members and invitations and supports revoking both', async ({ page }) => {
   await ownerProjects(page, [{ ...assigned, responsible_email: 'time@example.invalid' }, { ...assigned, id: 'b1c31366-fbc7-4a81-9cc7-138677c12b81', title: 'Produção futura', responsible_email: 'invited@example.invalid' }], {
     roster: {
       members: [{ user_id: 'member-projects', email: 'time@example.invalid', role: 'projects' }, { user_id: 'member-editor', email: 'editor@example.invalid', role: 'editor' }, { user_id: 'member-viewer', email: 'viewer@example.invalid', role: 'viewer' }],
@@ -432,9 +432,9 @@ test('project access lists only restricted members and invitations and supports 
   });
   await page.locator('#ceoWorkspace').getByRole('button', { name: 'Criar acesso', exact: true }).click();
   const roster = dialog(page).locator('[data-team-roster]');
-  await expect(roster.locator('[data-team-entry]')).toHaveCount(2);
-  await expect(roster).not.toContainText('editor@example.invalid');
-  await expect(roster).not.toContainText('viewer@example.invalid');
+  await expect(roster.locator('[data-team-entry]')).toHaveCount(5);
+  await expect(roster).toContainText('editor@example.invalid');
+  await expect(roster).toContainText('viewer@example.invalid');
   const member = roster.locator('[data-team-entry]').filter({ hasText: 'time@example.invalid' });
   const invite = roster.locator('[data-team-entry]').filter({ hasText: 'invited@example.invalid' });
   await expect(member).toContainText('Catálogo Aurora');
@@ -453,14 +453,14 @@ test('project access lists only restricted members and invitations and supports 
   expect(await page.evaluate(() => window.testRpcCalls.find(call => call.name === 'zama_workspace_cancel_invite').params)).toEqual({ p_id: 'pending-projects' });
 });
 
-for (const role of ['editor', 'viewer']) test(`owner explicitly replaces existing ${role} access with projects-only access`, async ({ page }) => {
+for (const role of ['editor', 'viewer']) test(`owner explicitly sets the team profile for an existing ${role} member`, async ({ page }) => {
   await ownerProjects(page, [{ ...assigned, responsible_email: 'time@example.invalid' }], { roster: { members: [{ user_id: 'existing-member', email: 'time@example.invalid', role }], invites: [] } });
   await page.locator('#ceoWorkspace').getByRole('button', { name: 'Criar acesso', exact: true }).click();
   await dialog(page).getByLabel('E-mail da pessoa', { exact: true }).fill('TIME@example.invalid');
-  await expect(dialog(page).getByRole('button', { name: 'Limitar acesso a Projetos', exact: true })).toBeEnabled();
-  await expect(dialog(page)).toContainText(/acesso atual|acesso amplo|outros módulos/i);
+  await expect(dialog(page).getByRole('button', { name: 'Usar perfil da equipe', exact: true })).toBeEnabled();
+  await expect(dialog(page)).toContainText(/perfil da equipe|Agenda privada/i);
   expect(await page.evaluate(() => window.testRpcCalls.filter(call => call.name === 'zama_workspace_set_role'))).toEqual([]);
-  await dialog(page).getByRole('button', { name: 'Limitar acesso a Projetos', exact: true }).click();
+  await dialog(page).getByRole('button', { name: 'Usar perfil da equipe', exact: true }).click();
   await expect(dialog(page).getByRole('button', { name: 'Acesso já ativo', exact: true })).toBeDisabled();
   expect(await page.evaluate(() => window.testRpcCalls.find(call => call.name === 'zama_workspace_set_role').params)).toEqual({ p_user: 'existing-member', p_role: 'projects' });
   expect(await page.evaluate(() => window.testRpcCalls.filter(call => call.name === 'zama_workspace_invite'))).toEqual([]);
@@ -480,11 +480,11 @@ test('canceling a freshly generated project invitation also clears its displayed
   await page.locator('#ceoWorkspace').getByRole('button', { name: 'Criar acesso', exact: true }).click();
   await dialog(page).getByLabel('E-mail da pessoa', { exact: true }).fill('time@example.invalid');
   await dialog(page).getByRole('button', { name: 'Gerar link de acesso', exact: true }).click();
-  await expect(dialog(page).getByLabel('Link de acesso a Projetos', { exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
+  await expect(dialog(page).getByLabel('Link de acesso à equipe', { exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
   const entry = dialog(page).locator('[data-team-entry]').filter({ hasText: 'time@example.invalid' });
   await entry.getByRole('button', { name: 'Cancelar convite', exact: true }).click();
   await expect(entry).toHaveCount(0);
-  await expect(dialog(page).getByLabel('Link de acesso a Projetos', { exact: true })).not.toBeVisible();
+  await expect(dialog(page).getByLabel('Link de acesso à equipe', { exact: true })).not.toBeVisible();
 });
 
 test('roster failures prevent creating ambiguous project access and a reopened dialog can retry', async ({ page }) => {
@@ -544,7 +544,7 @@ for (const action of ['close', 'switch account']) test(`a late project invitatio
     await expect(dialog(page)).toHaveCount(0);
   }
   await page.evaluate(() => window.testReleaseTeamInvite());
-  await expect(page.getByLabel('Link de acesso a Projetos', { exact: true })).not.toBeVisible();
+  await expect(page.getByLabel('Link de acesso à equipe', { exact: true })).not.toBeVisible();
   if (action === 'close') await expect(dialog(page).getByLabel('E-mail da pessoa', { exact: true })).toHaveValue('');
   else await expect(dialog(page)).toHaveCount(0);
 });
@@ -556,7 +556,7 @@ for (const width of [320, 390]) test(`projects-only access and invitation links 
   await page.locator('#ceoWorkspace').getByRole('button', { name: 'Criar acesso', exact: true }).click();
   await dialog(page).getByLabel('E-mail da pessoa', { exact: true }).fill(email);
   await dialog(page).getByRole('button', { name: 'Gerar link de acesso', exact: true }).click();
-  await expect(dialog(page).getByLabel('Link de acesso a Projetos', { exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
+  await expect(dialog(page).getByLabel('Link de acesso à equipe', { exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(await dialog(page).evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
   await page.setViewportSize({ width, height: 360 });
@@ -568,7 +568,7 @@ test('viewer can follow assigned projects but cannot edit or reveal client passw
   await restricted(page, 'viewer');
   await expect(page.locator('#ceoWorkspace').getByRole('button', { name: 'Criar acesso', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '+ Novo projeto', exact: true })).toHaveCount(0);
-  await expect(page.locator('body')).not.toContainText('Projeto reservado a outra pessoa');
+  await expect(page.locator('body')).toContainText('Projeto reservado a outra pessoa');
   await openProject(page);
   await expect(dialog(page).getByLabel('Senha do cliente', { exact: true })).toHaveValue('');
   for (const name of ['Mostrar senha', 'Atualizar andamento', 'Editar projeto', 'Excluir projeto', 'Gerenciar acesso do responsável']) {
@@ -602,7 +602,7 @@ test('responsible person can customize legacy production lists and stages with p
   expect(savedLists[0].steps.map(step => ({ label: step.label, done: step.done }))).toEqual([
     { label: 'Revisar fotos recebidas', done: true }, { label: 'Aprovar capa com o cliente', done: true }
   ]);
-  expect(savedLists[1].steps).toEqual(assigned.onboarding_steps);
+  expect(savedLists[1].steps).toEqual(assigned.onboarding_steps.map(step => ({...step,due_date:null})));
   await page.reload(); await openProject(page);
   const stages = dialog(page).locator('.ceo-project-detail-track').first();
   await expect(stages).toContainText('Produção personalizada');
@@ -650,7 +650,7 @@ test('responsible person updates both tracks and notes, with persistence across 
   await dialog(page).getByRole('button', { name: 'Salvar alterações', exact: true }).click();
   await expect(dialog(page)).toContainText('Aguardando a aprovação das fotos.');
   await dialog(page).getByRole('button', { name: 'Fechar', exact: true }).click();
-  await expect(page.locator('[data-project-id]').first()).toContainText('67%');
+  await expect(page.locator(`[data-project-id="${assigned.id}"]`)).toContainText('2/3 etapas');
   await page.reload(); await openProject(page);
   await expect(dialog(page)).toContainText('Aguardando a aprovação das fotos.');
   await expect(dialog(page)).toContainText('Aguardando cliente');
@@ -722,12 +722,12 @@ test('owner creates credentials and manual project stages, invites with projects
   await expect(dialog(page)).toContainText('Identidade visual');
   await expect(dialog(page)).toContainText('Definir paleta de cores');
   const createdLists = await page.evaluate(() => window.testRpcCalls.find(call => call.name === 'zama_project_save').params.p_project.production_lists);
-  expect(createdLists).toEqual([{ id: expect.any(String), title: 'Identidade visual', steps: [{ id: expect.any(String), label: 'Definir paleta de cores', done: true }] }]);
+  expect(createdLists).toEqual([{ id: expect.any(String), title: 'Identidade visual', steps: [{ id: expect.any(String), label: 'Definir paleta de cores', done: true, due_date:null }] }]);
   await expect(dialog(page).getByLabel('Senha do cliente', { exact: true })).toHaveValue('');
   await dialog(page).getByRole('button', { name: 'Gerenciar acesso do responsável', exact: true }).click();
   await expect(dialog(page).getByLabel('E-mail da pessoa', { exact: true })).toHaveValue('pedro@example.invalid');
   await dialog(page).getByRole('button', { name: 'Gerar link de acesso', exact: true }).click();
-  await expect(dialog(page).getByLabel('Link de acesso a Projetos', { exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
+  await expect(dialog(page).getByLabel('Link de acesso à equipe', { exact: true })).toHaveValue(/#invite=[a-f0-9]{64}$/);
   expect(await page.evaluate(() => window.testRpcCalls.find(call=>call.name==='zama_workspace_invite').params)).toEqual({p_email:'pedro@example.invalid',p_role:'projects'});
   await dialog(page).getByRole('button', { name: 'Fechar', exact: true }).click();
   await noPersistedPassword(page);
@@ -741,26 +741,27 @@ test('owner creates credentials and manual project stages, invites with projects
   await expect(dialog(page).getByLabel('Senha do cliente', { exact: true })).toHaveValue(password);
 });
 
-test('a live role downgrade clears shared finance, its cache and unsaved dialogs', async ({ page }) => {
+test('a live role downgrade closes unsaved project dialogs and keeps company finances private', async ({ page }) => {
   await page.addInitScript(() => sessionStorage.setItem('zama-workspace:test-account', 'shared-company'));
   await mock(page, seed, fixture('editor'));
-  await expect(page.locator('#ceoWorkspace')).toContainText('Receita confidencial da empresa');
-  await page.locator('.nav [data-module="financeiro"]').click();
-  await page.getByRole('button', { name: 'Editar Receita confidencial da empresa', exact: true }).click();
+  await openProject(page);
+  await dialog(page).getByRole('button', { name: 'Atualizar andamento', exact: true }).click();
   await page.evaluate(() => {
-    window.testWorkspaceLists['test-account'].find(item=>item.owner_id==='shared-company').role='projects';
+    window.testWorkspaceLists['test-account'].find(item=>item.owner_id==='shared-company').role='viewer';
     window.testDbReads=[]; window.testRefreshProjectsRole=ZamaWorkspace.refreshAccess();
   });
   await expect(page.getByRole('heading', { name: 'Projetos de clientes' })).toBeVisible();
   await expect(page.locator('dialog[open]')).toHaveCount(0);
   await expect(page.locator('body')).not.toContainText('Receita confidencial da empresa');
-  expect(await page.evaluate(() => ({ finance:state.financeiro, reads:window.testDbReads, cached:Object.keys(localStorage).filter(key=>!key.startsWith('test-')).map(key=>localStorage.getItem(key)).join('') }))).toEqual({ finance:[], reads:[], cached:expect.not.stringContaining('Receita confidencial da empresa') });
+  expect(await page.evaluate(() => ({ reads:window.testDbReads, cached:JSON.stringify({state,cloudSnapshot})+Object.keys(localStorage).filter(key=>!key.startsWith('test-')).map(key=>localStorage.getItem(key)).join('') }))).toEqual({ reads:[{userId:'test-account'}], cached:expect.not.stringContaining('Receita confidencial da empresa') });
+  await openProject(page);
+  await expect(dialog(page).getByRole('button',{name:'Atualizar andamento',exact:true})).toHaveCount(0);
 });
 
-test('accepting a projects invite while using the same company replaces previous financial access', async ({ page }) => {
+test('accepting a team invite while using the same company preserves private agenda isolation', async ({ page }) => {
   await page.addInitScript(() => sessionStorage.setItem('zama-workspace:test-account', 'shared-company'));
   await mock(page, seed, fixture('editor'));
-  await expect(page.locator('#ceoWorkspace')).toContainText('Receita confidencial da empresa');
+  await expect(page.getByRole('heading', {name:'Projetos de clientes'})).toBeVisible();
   await page.locator('#settingsBtn').click();
   await page.evaluate(() => {
     sessionStorage.setItem('zama-pending-invite','a'.repeat(64));
@@ -775,7 +776,8 @@ test('accepting a projects invite while using the same company replaces previous
   await page.getByRole('button', {name:'Aceitar convite',exact:true}).click();
   await expect(page.getByRole('heading', {name:'Projetos de clientes'})).toBeVisible();
   await expect(page.locator('body')).not.toContainText('Receita confidencial da empresa');
-  expect(await page.evaluate(()=>state.financeiro)).toEqual([]);
+  expect(await page.evaluate(()=>cloudOwnerId)).toBe('test-account');
+  expect(await page.evaluate(()=>JSON.stringify(state))).not.toContain('Receita confidencial da empresa');
   await expect(page.locator('.nav [data-module="financeiro"]')).not.toBeVisible();
 });
 
@@ -791,7 +793,7 @@ test('failed saves preserve project edits for retry and late list responses cann
   await dialog(page).getByRole('button', {name:'Salvar alterações',exact:true}).click();
   await expect(dialog(page)).toContainText('Andamento preservado para nova tentativa.');
   await dialog(page).getByRole('button', {name:'Fechar',exact:true}).click();
-  await page.evaluate(()=>{window.testDelayNextProjectRpc='zama_projects_list_v2';});
+  await page.evaluate(()=>{window.testDelayNextProjectRpc='zama_projects_list_v3';});
   await page.getByRole('button', {name:'Atualizar',exact:true}).click();
   await expect.poll(()=>page.evaluate(()=>window.testPendingProjectRpcs.length)).toBe(1);
   await page.evaluate(()=>window.testAuthEvent('SIGNED_OUT'));

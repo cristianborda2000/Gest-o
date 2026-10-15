@@ -7,6 +7,7 @@ test.beforeEach(async ({ page }) => {
 const user = id => ({ id, email: `${id}@example.invalid` });
 const company = (name, entry) => ({ ...structuredClone(seed), companyProfile: { nome: name }, financeiro: [{ ...seed.financeiro[0], nome: entry }] });
 const spaces = role => ({ 'test-account': [{ owner_id: 'test-account', role: 'owner', name: 'Minha empresa' }, { owner_id: 'shared-company', role, name: 'Empresa compartilhada' }] });
+const ownSpace = () => ({ 'test-account': [{ owner_id: 'test-account', role: 'owner', name: 'Minha empresa' }] });
 const rows = () => ({ 'shared-company': company('Empresa compartilhada', 'Receita da equipe'), 'account-b': company('Empresa B', 'Receita confidencial B'), 'account-c': company('Empresa C', 'Receita confidencial C') });
 
 test('SIGNED_OUT clears financial data, state, dialogs, settings and detached callbacks', async ({ page }) => {
@@ -129,45 +130,45 @@ for (const action of ['login', 'signup']) test(`a delayed ${action} cannot reope
   expect(await page.evaluate(() => ({ state, cloudUserId, cloudOwnerId }))).toEqual({ state: null, cloudUserId: null, cloudOwnerId: null });
 });
 
-test('viewer switches to the correct company and cannot save financial changes', async ({ page }) => {
+test('viewer joins the team and cannot read or save company finances', async ({ page }) => {
   await mock(page, seed, { workspaces: spaces('viewer'), rows: rows() });
-  await page.locator('#settingsBtn').click(); await page.getByLabel('Empresa em uso').selectOption('shared-company');
-  await expect(page.locator('#ceoWorkspace')).toContainText('Receita da equipe');
-  await expect(page.locator('#workspaceBadge')).toContainText('Somente leitura');
+  await expect(page.locator('#workspaceBadge')).toContainText('Equipe · leitura');
+  await expect(page.locator('#ceoWorkspace')).not.toContainText('Receita da equipe');
   await page.locator('#settingsBtn').click();
-  await expect(page.locator('#importBtn')).toBeDisabled();
+  await expect(page.locator('#importBtn')).not.toBeVisible();
   await expect(page.locator('#companyForm input').first()).toBeDisabled();
-  await expect(page.locator('#resetBtn')).toBeDisabled();
+  await expect(page.locator('#resetBtn')).not.toBeVisible();
   await expect(page.getByRole('button', { name: 'Gerar link de convite' })).toHaveCount(0);
   await page.locator('#settingsCloseBtn').click();
-  await page.locator('.nav [data-module="financeiro"]').click();
+  await expect(page.locator('.nav [data-module="financeiro"]')).not.toBeVisible();
   await expect(page.getByRole('button', { name: 'Editar Receita da equipe', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Nova movimentação' })).toHaveCount(0);
   // The data boundary also rejects a stale callback from an earlier editor session.
   expect(await page.evaluate(() => ceoCommit(draft => { draft.financeiro[0].nome = 'Tentativa de alteração'; }))).toBe(false);
-  await expect(page.locator('.toast').last()).toContainText('somente leitura');
+  await expect(page.locator('.toast').last()).toContainText('somente sua agenda pessoal');
   expect(await page.evaluate(() => window.testDbWrites.length)).toBe(0);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('test-cloud:shared-company')).data.financeiro[0].nome)).toBe('Receita da equipe');
 });
 
-test('editor writes to the shared owner row and switching back restores the private company', async ({ page }) => {
+test('team editor saves only the personal agenda and cannot select an administrative workspace', async ({ page }) => {
   await mock(page, seed, { workspaces: spaces('editor'), rows: rows() });
-  await page.locator('#settingsBtn').click(); await page.getByLabel('Empresa em uso').selectOption('shared-company');
-  await expect(page.locator('#workspaceBadge')).toContainText('Pode editar');
+  await expect(page.locator('#workspaceBadge')).toContainText('Equipe ZAMA');
   await page.locator('#settingsBtn').click();
-  await page.locator('#companyForm [name="nome"]').fill('Equipe atualizada');
-  await page.getByRole('button', { name: 'Salvar dados da empresa' }).click();
-  await expect(page.locator('.toast').last()).toContainText('Dados salvos');
-  expect(await page.evaluate(() => window.testDbWrites.at(-1).userId)).toBe('shared-company');
+  await expect(page.locator('#companyForm')).not.toBeVisible();
+  expect(await page.evaluate(() => ceoCommit(draft => { draft.agenda[0].nome = 'Agenda particular atualizada'; }))).toBe(true);
+  expect(await page.evaluate(() => window.testDbWrites.at(-1).userId)).toBe('test-account');
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('test-cloud')).data.companyProfile.nome)).toBe('ZAMA');
-  await page.getByLabel('Empresa em uso').selectOption('test-account');
-  await expect(page.locator('#ceoWorkspace')).toContainText('Projeto entregue');
+  await expect(page.getByLabel('Empresa em uso').locator('option')).toHaveCount(1);
+  await expect(page.getByLabel('Empresa em uso')).toHaveValue('shared-company');
+  await page.locator('#settingsCloseBtn').click();
+  await page.locator('.nav [data-module="agenda"]').click();
+  await expect(page.locator('#ceoWorkspace')).toContainText('Agenda particular atualizada');
   expect(await page.evaluate(() => cloudOwnerId)).toBe('test-account');
-  await expect(page.locator('#workspaceBadge')).toContainText('Proprietário');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('test-cloud:shared-company')).data.agenda[0].nome)).toBe(seed.agenda[0].nome);
 });
 
 test('owner invitation uses an explicit role, private fragment link and revocation confirmation', async ({ page }) => {
-  await mock(page, seed, { workspaces: spaces('viewer'), rows: rows() });
+  await mock(page, seed, { workspaces: ownSpace(), rows: rows() });
   await page.locator('#settingsBtn').click();
   await page.getByLabel('E-mail do convidado').fill('parceiro@example.invalid');
   await page.getByRole('combobox', { name: 'Permissão', exact: true }).selectOption('editor');
@@ -176,7 +177,7 @@ test('owner invitation uses an explicit role, private fragment link and revocati
   await expect(link).toBeVisible();
   expect(await link.inputValue()).toMatch(/\/#invite=[a-f0-9]{64}$/);
   expect(await page.evaluate(() => window.testRpcCalls.find(call => call.name === 'zama_workspace_invite').params)).toEqual({ p_email: 'parceiro@example.invalid', p_role: 'editor' });
-  await expect(page.locator('#workspaceSection')).toContainText('parceiro@example.invalid · Pode editar');
+  await expect(page.locator('#workspaceSection')).toContainText('parceiro@example.invalid · Equipe ZAMA');
   await page.getByRole('button', { name: 'Revogar convite' }).click();
   await expect(page.locator('#confirmDialog')).toBeVisible();
   await page.locator('#confirmCancelBtn').click();
@@ -189,7 +190,7 @@ test('owner invitation uses an explicit role, private fragment link and revocati
 
 test('a late team permission failure cannot change a newer account settings', async ({ page }) => {
   await mock(page, seed, {
-    workspaces: spaces('viewer'), rows: rows(),
+    workspaces: ownSpace(), rows: rows(),
     roster: { members: [{ user_id: 'project-member', email: 'equipe@example.invalid', role: 'editor' }], invites: [] }
   });
   await page.locator('#settingsBtn').click();
@@ -212,7 +213,7 @@ test('a late team permission failure cannot change a newer account settings', as
 });
 
 test('an older team roster response cannot hide a newly created projects invite', async ({ page }) => {
-  await mock(page, seed, { workspaces: spaces('viewer'), rows: rows() });
+  await mock(page, seed, { workspaces: ownSpace(), rows: rows() });
   await page.locator('#settingsBtn').click();
   await page.evaluate(() => {
     const original = supabaseClient.rpc.bind(supabaseClient);
@@ -233,28 +234,28 @@ test('an older team roster response cannot hide a newly created projects invite'
   await expect(page.getByRole('textbox', { name: 'Link do convite' })).toBeVisible();
   await page.evaluate(() => window.testReleaseRoster());
   await expect(page.getByRole('textbox', { name: 'Link do convite' })).toBeVisible();
-  await expect(page.locator('.workspace-roster')).toContainText('projetos@example.invalid · Somente projetos');
+  await expect(page.locator('.workspace-roster')).toContainText('projetos@example.invalid · Equipe ZAMA');
 });
 
 test('revoking the current workspace closes unsaved dialogs and clears access without asking to keep it', async ({ page }) => {
   await mock(page, seed, { workspaces: spaces('editor'), rows: rows() });
-  await page.locator('#settingsBtn').click(); await page.getByLabel('Empresa em uso').selectOption('shared-company');
-  await expect(page.locator('#ceoWorkspace')).toContainText('Receita da equipe');
-  await page.locator('.nav [data-module="financeiro"]').click();
-  await page.getByRole('button', { name: 'Editar Receita da equipe', exact: true }).click();
+  await page.locator('.nav [data-module="ideias"]').click();
+  await page.getByRole('button', { name: '+ Nova ideia', exact: true }).click();
+  await page.getByRole('dialog').getByLabel('Título',{exact:true}).fill('Rascunho da equipe');
   await page.evaluate(() => {
     window.testWorkspaceLists['test-account'] = window.testWorkspaceLists['test-account'].filter(item => item.owner_id === 'test-account');
     window.testRefreshAccess = ZamaWorkspace.refreshAccess();
   });
-  await expect.poll(() => page.evaluate(() => cloudOwnerId)).toBe('test-account');
+  await expect.poll(() => page.evaluate(() => ZamaWorkspace.isTeamSpace())).toBe(false);
   await expect(page.locator('dialog[open]')).toHaveCount(0);
   await expect(page.locator('#confirmDialog')).not.toBeVisible();
+  await page.locator('.nav [data-module="dashboard"]').click();
   await expect(page.locator('#ceoWorkspace')).toContainText('Projeto entregue');
   await expect(page.locator('#ceoWorkspace')).not.toContainText('Receita da equipe');
 });
 
 test('invitation errors preserve the email and selected permission for retry', async ({ page }) => {
-  await mock(page, seed, { workspaces: spaces('viewer'), rows: rows() });
+  await mock(page, seed, { workspaces: ownSpace(), rows: rows() });
   await page.locator('#settingsBtn').click();
   await page.getByLabel('E-mail do convidado').fill('parceiro@example.invalid');
   await page.getByRole('combobox', { name: 'Permissão', exact: true }).selectOption('editor');

@@ -293,7 +293,7 @@
       }
       render();
       const projectsOnly = typeof ZamaWorkspace !== "undefined" && ZamaWorkspace.isProjectsOnly();
-      if (projectsOnly) setCloudStatus('Acesso a projetos');
+      if (projectsOnly) setCloudStatus('Equipe ZAMA · Agenda privada');
       const pendingInvite = typeof ZamaWorkspace !== "undefined" && ZamaWorkspace.hasPendingInvite();
       if (pendingInvite) openSettings();
       else if (typeof ZamaWorkspace === "undefined" || ZamaWorkspace.canEdit()) maybeShowOnboarding();
@@ -301,10 +301,10 @@
         const legacyButton = document.getElementById("legacyBackupBtn");
         if (legacyButton) legacyButton.hidden = projectsOnly || !localStorage.getItem(storageKey);
       } catch {}
-      if (!projectsOnly && typeof ZamaAgenda !== "undefined") ZamaAgenda.startReminders();
+      if (typeof ZamaAgenda !== "undefined") ZamaAgenda.startReminders();
       if (!projectsOnly && typeof ZamaJarvis !== "undefined") ZamaJarvis.init(session?.user);
       if (typeof ZamaWorkspace !== "undefined") ZamaWorkspace.render();
-      if (!projectsOnly && typeof ZamaPushReminders !== "undefined") void ZamaPushReminders.init();
+      if (typeof ZamaPushReminders !== "undefined") void ZamaPushReminders.init();
     }
 
     function clearRecoveryUrl() {
