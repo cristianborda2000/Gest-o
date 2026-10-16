@@ -345,6 +345,14 @@
 .ceo-project-quick-status select { width:100%; min-width:0; background:var(--surface); border:1px solid var(--line); border-radius:6px; color:var(--text); padding:7px; min-height:36px; font:inherit; }
 .ceo-project-save-state { margin:7px 0 0; font-size:10px; color:var(--muted); line-height:1.6; }
 .ceo-project-save-state:empty { display:none; }
+.ceo-project-whatsapp { display:flex; align-items:center; justify-content:center; gap:8px; min-height:44px; text-decoration:none; }
+.ceo-project-whatsapp svg { width:17px; height:17px; flex:none; }
+.ceo-project-whatsapp span:last-child { margin-left:auto; }
+.ceo-project-card .ceo-project-whatsapp { margin-bottom:8px; width:100%; font-size:11px; }
+.ceo-project-contact { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px; padding:16px; margin-bottom:22px; border:1px solid var(--line); border-radius:10px; background:var(--soft); }
+.ceo-project-contact h3 { margin:0 0 5px; }
+.ceo-project-contact p { margin:0; font-size:13px; overflow-wrap:anywhere; }
+.ceo-project-contact .ceo-project-whatsapp { min-width:180px; }
 .ceo-projects .ceo-button,.ceo-project-dialog .ceo-button { background:var(--surface); border-color:var(--line); color:var(--text); box-shadow:none; }
 .ceo-projects .ceo-button:hover,.ceo-project-dialog .ceo-button:hover { background:#f2f3f5; border-color:#bcc2ca; }
 .ceo-projects .ceo-button.primary,.ceo-project-dialog .ceo-button.primary { background:#17191d; border-color:#17191d; color:#fff; }

@@ -6,6 +6,8 @@ A equipe tem três abas: **Agenda**, **Projetos** e **Ideias**. Projetos e ideia
 
 O quadro segue o visual branco e preto do sistema: cartões e formulários brancos, colunas em cinza claro e ações principais em preto. As colunas são Planejamento, Em andamento, Aguardando cliente e Concluído. Cada cartão permite marcar/desmarcar etapas diretamente, com salvamento automático e confirmação. O controle **Mover para** altera a coluna sem concluir etapas automaticamente. **Adicionar projeto** em uma coluna já inicia o cadastro naquela situação.
 
+Em **Cliente e projeto**, o campo opcional **WhatsApp do cliente** aceita DDD e número brasileiro, como `(11) 99999-9999`. Para outro país, informe `+` e o código do país. Depois de salvar, **Abrir WhatsApp** aparece no cartão e nos detalhes do projeto, apontando para o telefone cadastrado. Apagar o campo remove o botão. O atalho usa o [formato oficial de clique para conversa do WhatsApp](https://faq.whatsapp.com/5913398998672934/?locale=pt_BR) e abre em outra aba, sem enviar uma mensagem automaticamente.
+
 O painel destaca todos os projetos, atrasos de projetos ou etapas, entregas dos próximos sete dias e projetos aguardando o cliente. As métricas funcionam como filtros e combinam com a busca e a situação. A ordenação permite priorizar os prazos, os nomes ou as alterações recentes. Projetos concluídos não entram nas pendências de prazo.
 
 1. Qualquer membro confirmado da equipe abre **Projetos → Novo projeto** e preenche o título e o cliente. Empresa, acesso, responsável e prazo são opcionais.
@@ -52,10 +54,11 @@ Execute o conteúdo completo de [`database/instalar-projetos.sql`](../database/i
 4. `20261015_project_planning.sql` — prazos por etapa e modelos.
 5. `20261015_team_space.sql` — projetos/ideias compartilhados e agendas privadas.
 6. `20261015_project_collaboration.sql` — criação/edição de projetos por todos os membros e marcação direta de etapas.
+7. `20261016_project_phone.sql` — telefone do cliente e capacidade de cadastro para o atalho do WhatsApp.
 
 O instalador pode ser reaplicado: preserva dados, membros, progresso, modelos e a chave de criptografia. As listas legadas só são convertidas quando `production_lists` está ausente ou nulo. A migration `20261015_team_space.sql` retira dos perfis antigos `editor` e `viewer` o acesso amplo ao `app_state` de outra conta e aplica o modelo da equipe às associações existentes.
 
-**Aplique o instalador completo para ativar todas as permissões desta versão.** Se as cinco primeiras migrations já estão instaladas, basta executar `database/migrations/20261015_project_collaboration.sql`. Publicar o site não executa SQL no Supabase. Sem a nova migration, o quadro mantém as permissões anteriores: membros de leitura não criam ou editam projetos e os demais membros editam apenas o andamento. Não reaplique apenas uma migration antiga depois desta atualização, pois ela pode restaurar permissões anteriores. Não execute `database/supabase-setup.sql` sobre uma base existente.
+**Aplique o instalador completo para ativar todas as permissões e o WhatsApp desta versão.** Se as seis primeiras migrations já estão instaladas, basta executar `database/migrations/20261016_project_phone.sql`. Publicar o site não executa SQL no Supabase. Sem a migration de colaboração, o quadro mantém as permissões anteriores: membros de leitura não criam ou editam projetos e os demais membros editam apenas o andamento. Sem a migration de telefone, o campo de WhatsApp fica desabilitado para evitar um salvamento sem persistência. Não reaplique apenas uma migration antiga depois desta atualização, pois ela pode restaurar permissões anteriores. Não execute `database/supabase-setup.sql` sobre uma base existente.
 
 Após mudar migrations, gere novamente o instalador com `npm run build:projects-sql`. A interface usa `zama_projects_list_v3`; em instalações antigas com v2, os campos de prazo por etapa e modelos ficam indisponíveis. Ideias compartilhadas exigem a migration de equipe e apresentam uma mensagem de configuração pendente quando ela falta.
 
@@ -81,6 +84,7 @@ O backup JSON administrativo baseado em `app_state` não inclui projetos, modelo
 | `zama_project_save(p_owner, p_project)` | Criar/editar com revisão; senha e atribuição com senha só para administrador |
 | `zama_project_step_set(p_owner, p_id, p_list_id, p_step_id, p_done, p_revision)` | Alterar somente uma etapa sob revisão |
 | `zama_project_collaboration_capabilities(p_owner)` | Verificar a instalação da edição colaborativa |
+| `zama_project_phone_capabilities(p_owner)` | Verificar se o banco aceita o telefone do cliente |
 | `zama_project_secret(p_owner, p_id)` | Consultar senha sob autorização separada |
 | `zama_project_delete(p_owner, p_id)` | Excluir como administrador |
 | `zama_project_templates_list()` | Modelos da própria conta |
@@ -90,6 +94,8 @@ O backup JSON administrativo baseado em `app_state` não inclui projetos, modelo
 | `zama_team_ideas_save(p_owner, p_revision, p_ideas)` | Alterar somente as ideias, preservando o restante do estado |
 
 Etapas aceitam `{id, label, done, due_date?}`. `due_date` deve ser uma data real `YYYY-MM-DD` ou `null`. Clientes antigos que omitem a propriedade preservam a data existente da mesma lista/etapa; `null` remove explicitamente o prazo. O limite do JSON do projeto é 4 MiB. As listas mantêm a compatibilidade com os campos legados `catalog_steps` e `onboarding_steps`.
+
+`client_phone` contém de 8 a 15 dígitos internacionais, sem `+`, iniciando por 1–9; `''` remove o telefone. A interface normaliza o número antes de salvar. Atualizações que omitem esse campo, inclusive marcações de etapas, preservam o telefone existente. Ele é compartilhado somente com os membros autorizados da empresa, como os demais dados do cliente.
 
 Projetos e modelos usam revisão incremental. Ideias usam o timestamp de revisão da linha da empresa, com bloqueio durante a gravação; mudanças simultâneas em ideias ou outros dados do administrador invalidam a revisão antiga. Conflitos (`40001`) não gravam parcialmente nem são repetidos automaticamente. A interface mantém o rascunho e orienta consultar a versão atual. Acesso negado usa `42501` e dados inválidos usam `22023`.
 

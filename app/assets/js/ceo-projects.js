@@ -24,7 +24,7 @@
   let container = null, activeDialog = null, rows = [], loaded = false, loading = false;
   let generation = 0, requestSequence = 0, activeOwner = null, activeAccount = null, activeRole = null;
   let errorMessage = '', notice = '', secretSequence = 0, secretTimer = null, planningAvailable = false;
-  let collaborationAvailable = false;
+  let collaborationAvailable = false, phoneAvailable = false;
   const pendingChanges = new Map(), expandedLists = new Map();
   const filters = { search: '', status: '', priority: 'all', order: 'priority' };
   const summary = row => root.ZamaProjectPlanning.summarize(row, today());
@@ -43,7 +43,7 @@
   function metadata(source) {
     if (!source || typeof source !== 'object' || !source.id) throw new Error('PROJECT_INVALID_RESPONSE');
     const record = {};
-    ['id', 'title', 'client_name', 'company_name', 'client_email', 'access_url', 'responsible_email', 'responsible_name', 'status', 'due_date', 'notes', 'created_at', 'updated_at'].forEach(key => { record[key] = text(source[key]); });
+    ['id', 'title', 'client_name', 'company_name', 'client_email', 'client_phone', 'access_url', 'responsible_email', 'responsible_name', 'status', 'due_date', 'notes', 'created_at', 'updated_at'].forEach(key => { record[key] = text(source[key]); });
     record.revision = Number(source.revision || 0);
     record.has_password = Boolean(source.has_password);
     record.production_lists = productionLists(source);
@@ -63,6 +63,7 @@
     if (/40001|PROJECT_CONFLICT/.test(value)) return 'Este projeto foi atualizado por outra pessoa. Feche esta janela, atualize a lista e tente novamente.';
     if (/42501|PROJECT_ACCESS_DENIED|permission denied/i.test(value)) return 'Seu acesso a este projeto mudou. Atualize a lista para verificar os projetos disponíveis.';
     if (/PGRST202|42883|does not exist|schema cache|PROJECT_UNAVAILABLE/i.test(value)) return 'A área de projetos ainda não está disponível nesta instalação. A configuração do banco de dados precisa ser concluída. Depois, tente novamente.';
+    if (/PROJECT_INVALID_PHONE|PROJECT_INVALID_FIELD: client_phone/.test(value)) return 'Confira o WhatsApp do cliente. Informe o DDD e o número; para outro país, use + e o código do país.';
     if (/22023|PROJECT_INVALID/.test(value)) return 'Confira os campos e as etapas do projeto antes de salvar. Use um e-mail válido e preencha o nome do cliente e o título.';
     return 'Não foi possível concluir a operação. Verifique sua conexão e tente novamente.';
   }
@@ -104,7 +105,7 @@
   function reset() {
     const previous = container;
     leave(); pendingChanges.clear(); rows = []; loaded = false; activeOwner = activeAccount = activeRole = null;
-    filters.search = filters.status = ''; filters.priority = 'all'; filters.order = 'priority'; planningAvailable = collaborationAvailable = false; errorMessage = notice = '';
+    filters.search = filters.status = ''; filters.priority = 'all'; filters.order = 'priority'; planningAvailable = collaborationAvailable = phoneAvailable = false; errorMessage = notice = '';
     previous?.replaceChildren();
   }
   function newDialog(title, markup) {
@@ -141,7 +142,7 @@
       ${canEdit() ? `<button type="button" class="ceo-button ceo-project-add-steps" data-project-edit-inline="${esc(row.id)}">+ Editar listas e etapas</button>` : ''}
       <div class="ceo-project-card-footer"><span class="ceo-project-person"><span class="ceo-project-avatar" aria-hidden="true">${esc((person || '?').slice(0,1).toUpperCase())}</span><span>${esc(person || 'Sem responsável')}</span></span><span class="ceo-project-due ${completion.overdue ? 'is-late' : ''}">${completion.overdue ? 'Atrasado · ' : ''}${dateLabel(row.due_date)}</span></div>
       <label class="ceo-project-quick-status">Mover para<select data-quick-status="${esc(row.id)}" aria-label="Situação de ${esc(row.title)}" ${canEdit() ? '' : 'disabled'}>${options(row.status)}</select></label>
-      <button class="ceo-button ceo-project-open" type="button" data-project-open="${esc(row.id)}" aria-label="Abrir projeto ${esc(row.title)}">Abrir projeto <span aria-hidden="true">↗</span></button>
+      ${whatsappLink(row)}<button class="ceo-button ceo-project-open" type="button" data-project-open="${esc(row.id)}" aria-label="Abrir projeto ${esc(row.title)}">Abrir projeto <span aria-hidden="true">↗</span></button>
       <p class="ceo-project-save-state" role="status">${pendingChanges.has(row.id) ? 'Salvando alterações…' : ''}</p>
     </article>`;
   }
@@ -290,6 +291,11 @@
       catch (error) { if (!['PGRST202','42883'].includes(error?.code)) throw error; }
       if (!current(ticket) || sequence !== requestSequence) return;
       collaborationAvailable = capability?.can_edit === true && capability?.shared_creation === true;
+      let phoneCapability;
+      try { phoneCapability = await rpc('zama_project_phone_capabilities', { p_owner: ticket.owner }); }
+      catch (error) { if (!['PGRST202','42883'].includes(error?.code)) throw error; }
+      if (!current(ticket) || sequence !== requestSequence) return;
+      phoneAvailable = phoneCapability?.client_phone === true;
       rows = result.map(metadata).sort((a, b) => b.updated_at.localeCompare(a.updated_at)); loaded = true;
     } catch (error) {
       if (!current(ticket) || sequence !== requestSequence) return;
@@ -300,6 +306,34 @@
   }
   function safeUrl(value) {
     try { const url = new URL(value); return ['https:', 'http:'].includes(url.protocol) ? url.href : ''; } catch { return ''; }
+  }
+  function storedPhone(value) {
+    const phone = text(value);
+    return /^[1-9]\d{7,14}$/.test(phone) ? phone : '';
+  }
+  function normalizePhone(value) {
+    const raw = text(value).trim();
+    if (!raw) return '';
+    const invalid = () => { throw new Error('Informe o WhatsApp com DDD, como (11) 99999-9999. Para outro país, use + e o código do país.'); };
+    if (raw.length > 40 || !/^\+?[\d\s().-]+$/.test(raw)) invalid();
+    let digits = raw.replace(/\D/g, '');
+    if (!raw.startsWith('+') && digits.startsWith('00')) digits = digits.slice(2);
+    else if (!raw.startsWith('+')) {
+      if (/^\d{10,11}$/.test(digits)) digits = `55${digits}`;
+      else if (!/^55\d{10,11}$/.test(digits)) invalid();
+    }
+    if (!storedPhone(digits) || digits.startsWith('55') && !/^55[1-9]{2}[2-9]\d{7,8}$/.test(digits)) invalid();
+    return digits;
+  }
+  function phoneLabel(value) {
+    const phone = storedPhone(value);
+    if (!phone) return '';
+    const brazil = phone.match(/^55(\d{2})(\d{4,5})(\d{4})$/);
+    return brazil ? `+55 (${brazil[1]}) ${brazil[2]}-${brazil[3]}` : `+${phone}`;
+  }
+  function whatsappLink(row) {
+    const phone = storedPhone(row.client_phone);
+    return phone ? `<a class="ceo-button ceo-project-whatsapp" href="https://wa.me/${phone}" target="_blank" rel="noopener noreferrer" aria-label="Abrir WhatsApp de ${esc(row.client_name || row.title)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5 9 9 0 0 1-4-.9L3 21l1.8-5.5a9 9 0 0 1-.8-4A8.5 8.5 0 0 1 12.5 3H13a8.5 8.5 0 0 1 8 8v.5Z"/><path d="M8.5 7.5c0 4 3 7 7 7l1-2-2-1-1 1-2-2 1-1-1-2h-3Z"/></svg><span>Abrir WhatsApp</span><span aria-hidden="true">↗</span></a>` : '';
   }
   function openTeamAccess(initialEmail = '') {
     if (!isOwner() || !loaded || loading || errorMessage) return;
@@ -528,6 +562,7 @@
     const ticket = capture(), url = safeUrl(row.access_url);
     const dialog = newDialog(row.title, `<div class="ceo-project-detail-meta"><span class="ceo-project-status is-${row.status}"><i></i>${statuses[row.status]}</span><span>Prazo: ${dateLabel(row.due_date)}</span></div>
       <dl class="ceo-project-info"><div><dt>Cliente</dt><dd>${esc(row.client_name || 'Não informado')}</dd></div><div><dt>Empresa</dt><dd>${esc(row.company_name || 'Não informada')}</dd></div><div><dt>Responsável</dt><dd>${esc(row.responsible_name || 'Não definido')}${row.responsible_email ? `<small>${esc(row.responsible_email)}</small>` : ''}</dd></div></dl>
+      ${storedPhone(row.client_phone) ? `<section class="ceo-project-contact"><div><h3>Contato do cliente</h3><p>${esc(phoneLabel(row.client_phone))}</p></div>${whatsappLink(row)}</section>` : ''}
       <section class="ceo-project-credentials"><div><h3>Acessos do cliente</h3><p>Dados usados para trabalhar neste projeto.</p></div><dl class="ceo-project-info"><div><dt>E-mail de acesso</dt><dd>${esc(row.client_email || 'Não informado')}</dd></div><div><dt>Página de acesso</dt><dd>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Abrir página de acesso ↗</a>` : esc(row.access_url || 'Não informada')}</dd></div></dl>
       <div class="ceo-project-secret"><label class="ceo-field">Senha<input type="password" readonly data-private-value aria-label="Senha do cliente" placeholder="${row.has_password ? '••••••••••••' : 'Não cadastrada'}" autocomplete="off"></label>${row.has_password && canReveal(row) ? '<button class="ceo-button" type="button" data-reveal aria-pressed="false">Mostrar senha</button>' : ''}</div><p class="ceo-project-secret-note">A senha é reservada ao administrador e ao responsável atribuído, e é ocultada ao sair desta janela.</p></section>
       <div class="ceo-project-detail-tracks" data-detail-tracks="${esc(row.id)}">${row.production_lists.length ? row.production_lists.map(list => checklist(row, list)).join('') : '<p class="ceo-project-no-stages">Nenhuma lista de produção cadastrada.</p>'}</div>
@@ -591,11 +626,11 @@
   function openEditor(id = null, initialStatus = 'planning') {
     if (!canEdit() || (!id && !canEditDetails())) return;
     if (pendingChanges.has(id)) { notice = 'Aguarde a conclusão do salvamento das etapas.'; updateSummary(); return; }
-    const row = id ? rows.find(item => item.id === id) : { title: '', client_name: '', company_name: '', client_email: '', access_url: '', responsible_name: '', responsible_email: '', due_date: '', status: statuses[initialStatus] ? initialStatus : 'planning', notes: '', production_lists: [{ id: makeId(), title: 'Lista de produção', steps: [] }] };
+    const row = id ? rows.find(item => item.id === id) : { title: '', client_name: '', company_name: '', client_email: '', client_phone: '', access_url: '', responsible_name: '', responsible_email: '', due_date: '', status: statuses[initialStatus] ? initialStatus : 'planning', notes: '', production_lists: [{ id: makeId(), title: 'Lista de produção', steps: [] }] };
     if (!row) return;
     const ticket = capture();
     const dialog = newDialog(id ? canEditDetails() ? 'Editar projeto' : 'Atualizar andamento' : 'Novo projeto', `<form class="ceo-project-form" autocomplete="off">
-      ${canEditDetails() ? `<section><h3>Cliente e projeto</h3><div class="ceo-project-form-grid"><label class="ceo-field ceo-project-wide">Nome do projeto<input name="title" required maxlength="180" value="${esc(row.title)}" placeholder="Dê um nome ao seu projeto"></label><label class="ceo-field">Nome do cliente<input name="client_name" required maxlength="180" value="${esc(row.client_name)}" placeholder="Nome do contato"></label><label class="ceo-field">Nome da empresa<input name="company_name" maxlength="180" value="${esc(row.company_name)}" placeholder="Empresa do cliente"></label></div></section>
+      ${canEditDetails() ? `<section><h3>Cliente e projeto</h3><div class="ceo-project-form-grid"><label class="ceo-field ceo-project-wide">Nome do projeto<input name="title" required maxlength="180" value="${esc(row.title)}" placeholder="Dê um nome ao seu projeto"></label><label class="ceo-field">Nome do cliente<input name="client_name" required maxlength="180" value="${esc(row.client_name)}" placeholder="Nome do contato"></label><label class="ceo-field">Nome da empresa<input name="company_name" maxlength="180" value="${esc(row.company_name)}" placeholder="Empresa do cliente"></label><label class="ceo-field ceo-project-wide">WhatsApp do cliente<input name="client_phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="40" value="${esc(phoneLabel(row.client_phone))}" placeholder="(11) 99999-9999" aria-describedby="projectPhoneHelp" ${phoneAvailable ? '' : 'disabled'}></label></div><p id="projectPhoneHelp">${phoneAvailable ? 'Opcional. No Brasil, informe DDD e número. Para outro país, use + e o código do país.' : 'O cadastro de WhatsApp ainda não está disponível. Os demais campos podem ser salvos.'}</p></section>
       <section><h3>Acessos do cliente</h3><div class="ceo-project-form-grid"><label class="ceo-field">E-mail de acesso<input name="client_email" type="email" maxlength="254" value="${esc(row.client_email)}" placeholder="cliente@empresa.com" autocomplete="off"></label><label class="ceo-field">Página de acesso<input name="access_url" type="url" maxlength="2000" value="${esc(row.access_url)}" placeholder="https://" autocomplete="off"></label>${isOwner() ? `<label class="ceo-field ceo-project-wide">${row.has_password ? 'Nova senha (opcional)' : 'Senha do cliente'}<input name="password" type="password" data-private-value maxlength="2000" autocomplete="new-password" placeholder="${row.has_password ? 'Deixe vazio para manter a senha atual' : 'Informe a senha de acesso do cliente'}"></label>${row.has_password ? '<label class="ceo-project-remove-secret ceo-project-wide"><input type="checkbox" name="remove_password"> Remover a senha cadastrada</label>' : ''}` : '<p class="ceo-project-wide">As senhas do cliente são gerenciadas pelo administrador.</p>'}</div><p>A senha não aparece nas listagens ou nos backups da central.</p></section>
       <section><h3>Responsável pela entrega</h3><div class="ceo-project-form-grid"><label class="ceo-field">Nome do responsável<input name="responsible_name" maxlength="180" value="${esc(row.responsible_name)}" placeholder="Quem cuidará do projeto?"></label><label class="ceo-field">E-mail do responsável<input name="responsible_email" ${!isOwner() && row.has_password ? 'disabled title="O administrador altera o responsável quando o projeto possui uma senha cadastrada."' : ''} type="email" maxlength="254" value="${esc(row.responsible_email)}" placeholder="responsavel@empresa.com"></label><label class="ceo-field">Prazo da entrega<input name="due_date" type="date" value="${esc(row.due_date)}"></label></div><p>Todos da equipe podem criar e editar projetos. A agenda permanece privada. ${!isOwner() && row.has_password ? 'Neste projeto, o administrador altera o e-mail responsável porque há uma senha de cliente vinculada.' : ''}</p></section>` : `<p class="ceo-project-edit-summary">${esc(row.title)} · ${esc(row.client_name)}</p>`}
       <label class="ceo-field">Situação do projeto<select name="status">${options(row.status)}</select></label>
@@ -655,6 +690,10 @@
       }
       if (canEditDetails()) {
         ['title', 'client_name', 'company_name', 'client_email', 'access_url', 'responsible_name', 'responsible_email', 'due_date'].forEach(key => { project[key] = form.elements[key].value.trim(); });
+        if (phoneAvailable) {
+          try { project.client_phone = normalizePhone(form.elements.client_phone.value); }
+          catch (error) { output.textContent = error.message; output.hidden = false; form.elements.client_phone.focus(); return; }
+        }
         if (form.elements.remove_password?.checked) project.password = '';
         else if (isOwner() && form.elements.password?.value) project.password = form.elements.password.value;
       }

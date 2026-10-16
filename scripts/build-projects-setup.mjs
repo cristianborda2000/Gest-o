@@ -9,7 +9,8 @@ const migrations = [
   '20261013_project_lists.sql',
   '20261015_project_planning.sql',
   '20261015_team_space.sql',
-  '20261015_project_collaboration.sql'
+  '20261015_project_collaboration.sql',
+  '20261016_project_phone.sql'
 ];
 const outputPath = resolve(root, 'database/instalar-projetos.sql');
 

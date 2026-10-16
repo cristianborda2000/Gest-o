@@ -115,7 +115,7 @@ function sdk(seed, options = {}) {
     channel:()=>({on(){return this;},subscribe(fn){fn('SUBSCRIBED');return this;}}),removeChannel:async()=>{}
   })};
 }
-async function mock(page, data = seed, { jarvisVisible = false, projects, templates = [], planningUnavailable = false, collaborationUnavailable = false, ...sdkOptions } = {}) {
+async function mock(page, data = seed, { jarvisVisible = false, projects, templates = [], planningUnavailable = false, collaborationUnavailable = false, phoneUnavailable = false, ...sdkOptions } = {}) {
   await page.route('**/api/project-access', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ code: 'NOT_CONFIGURED', error: 'Cadastro com senha indisponível neste teste.' }) }));
   if(projects) {
     // This fixture lives in the test process, like the real remote store. It must
@@ -123,7 +123,7 @@ async function mock(page, data = seed, { jarvisVisible = false, projects, templa
     const projectRows=structuredClone(projects);
     Object.values(projectRows).flat().forEach(row=>{if(!Array.isArray(row.production_lists)) row.production_lists=[{id:'catalog',title:'Catálogo',steps:row.catalog_steps},{id:'onboarding',title:'Estruturação',steps:row.onboarding_steps}].filter(list=>Array.isArray(list.steps)&&list.steps.length);});
     const templateRows=structuredClone(templates);
-    const publicProject=row=>Object.fromEntries(Object.entries({...row,has_password:Boolean(row.password)}).filter(([key])=>key!=='password'&&key!=='owner_id'));
+    const publicProject=row=>Object.fromEntries(Object.entries({client_phone:'',...row,has_password:Boolean(row.password)}).filter(([key])=>key!=='password'&&key!=='owner_id'));
     await page.route('**/__test/projects',async route=>{
       const {name,params,user}=route.request().postDataJSON();
       const rows=projectRows[params.p_owner] ||= [];
@@ -134,6 +134,7 @@ async function mock(page, data = seed, { jarvisVisible = false, projects, templa
       if(name==='zama_projects_list_v3' && planningUnavailable) result={error:{code:'PGRST202',message:'Missing migration'}};
       else if(name==='zama_projects_list_v2'||name==='zama_projects_list_v3') result={data:rows.map(publicProject)};
       else if(name==='zama_project_collaboration_capabilities') result=collaborationUnavailable?{error:{code:'PGRST202',message:'Missing migration'}}:{data:{can_edit:true,shared_creation:true}};
+      else if(name==='zama_project_phone_capabilities') result=phoneUnavailable?{error:{code:'PGRST202',message:'Missing migration'}}:{data:{client_phone:true}};
       else if(name==='zama_project_step_set') {
         const row=rows.find(item=>item.id===params.p_id);
         const list=row?.production_lists?.find(item=>item.id===params.p_list_id),step=list?.steps.find(item=>item.id===params.p_step_id);
