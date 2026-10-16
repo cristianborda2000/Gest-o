@@ -564,14 +564,14 @@ for (const width of [320, 390]) test(`projects-only access and invitation links 
   await page.screenshot({ path: info.outputPath(`project-access-${width}.png`) });
 });
 
-test('viewer can follow assigned projects but cannot edit or reveal client passwords', async ({ page }) => {
+test('viewer can create and edit shared projects without revealing client passwords', async ({ page }) => {
   await restricted(page, 'viewer');
   await expect(page.locator('#ceoWorkspace').getByRole('button', { name: 'Criar acesso', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: '+ Novo projeto', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '+ Novo projeto', exact: true })).toBeEnabled();
   await expect(page.locator('body')).toContainText('Projeto reservado a outra pessoa');
   await openProject(page);
   await expect(dialog(page).getByLabel('Senha do cliente', { exact: true })).toHaveValue('');
-  for (const name of ['Mostrar senha', 'Atualizar andamento', 'Editar projeto', 'Excluir projeto', 'Gerenciar acesso do responsável']) {
+  for (const name of ['Mostrar senha', 'Excluir projeto', 'Gerenciar acesso do responsável']) {
     await expect(dialog(page).getByRole('button', { name, exact: true })).toHaveCount(0);
   }
   expect(await page.evaluate(() => window.testRpcCalls.filter(call => ['zama_project_secret', 'zama_project_save'].includes(call.name)))).toEqual([]);
@@ -583,7 +583,7 @@ test('responsible person can customize legacy production lists and stages with p
   await expect(dialog(page).locator('.ceo-project-detail-track')).toHaveCount(2);
   await expect(dialog(page).locator('.ceo-project-detail-track').first()).toContainText('Catálogo');
   await expect(dialog(page).locator('.ceo-project-detail-track').last()).toContainText('Estruturação');
-  await dialog(page).getByRole('button', { name: 'Atualizar andamento', exact: true }).click();
+  await dialog(page).getByRole('button', { name: 'Editar projeto', exact: true }).click();
   const catalog = dialog(page).locator('[data-production-list]').first();
   await expect(catalog.locator('[data-list-title]')).toHaveValue('Catálogo');
   await catalog.locator('[data-list-title]').fill('Produção personalizada');
@@ -639,10 +639,10 @@ test('owner can keep, replace and remove the client password without exposing it
 
 test('responsible person updates both tracks and notes, with persistence across reload', async ({ page }) => {
   await restricted(page); await openProject(page);
-  await expect(dialog(page).getByRole('button', { name: 'Editar projeto', exact: true })).toHaveCount(0);
+  await expect(dialog(page).getByRole('button', { name: 'Editar projeto', exact: true })).toBeEnabled();
   await expect(dialog(page).getByRole('button', { name: 'Excluir projeto', exact: true })).toHaveCount(0);
-  await dialog(page).getByRole('button', { name: 'Atualizar andamento', exact: true }).click();
-  await expect(dialog(page).locator('[name="client_name"]')).toHaveCount(0);
+  await dialog(page).getByRole('button', { name: 'Editar projeto', exact: true }).click();
+  await expect(dialog(page).locator('[name="client_name"]')).toBeEnabled();
   await dialog(page).getByRole('checkbox', { name: 'Concluir etapa: Receber fotos dos produtos', exact: true }).check();
   await dialog(page).getByRole('checkbox', { name: 'Concluir etapa: Estruturar o cliente', exact: true }).check();
   await dialog(page).getByLabel('Situação do projeto', { exact: true }).selectOption('waiting');
@@ -745,7 +745,7 @@ test('a live role downgrade closes unsaved project dialogs and keeps company fin
   await page.addInitScript(() => sessionStorage.setItem('zama-workspace:test-account', 'shared-company'));
   await mock(page, seed, fixture('editor'));
   await openProject(page);
-  await dialog(page).getByRole('button', { name: 'Atualizar andamento', exact: true }).click();
+  await dialog(page).getByRole('button', { name: 'Editar projeto', exact: true }).click();
   await page.evaluate(() => {
     window.testWorkspaceLists['test-account'].find(item=>item.owner_id==='shared-company').role='viewer';
     window.testDbReads=[]; window.testRefreshProjectsRole=ZamaWorkspace.refreshAccess();
@@ -755,7 +755,7 @@ test('a live role downgrade closes unsaved project dialogs and keeps company fin
   await expect(page.locator('body')).not.toContainText('Receita confidencial da empresa');
   expect(await page.evaluate(() => ({ reads:window.testDbReads, cached:JSON.stringify({state,cloudSnapshot})+Object.keys(localStorage).filter(key=>!key.startsWith('test-')).map(key=>localStorage.getItem(key)).join('') }))).toEqual({ reads:[{userId:'test-account'}], cached:expect.not.stringContaining('Receita confidencial da empresa') });
   await openProject(page);
-  await expect(dialog(page).getByRole('button',{name:'Atualizar andamento',exact:true})).toHaveCount(0);
+  await expect(dialog(page).getByRole('button',{name:'Editar projeto',exact:true})).toBeEnabled();
 });
 
 test('accepting a team invite while using the same company preserves private agenda isolation', async ({ page }) => {
@@ -783,7 +783,7 @@ test('accepting a team invite while using the same company preserves private age
 
 test('failed saves preserve project edits for retry and late list responses cannot reopen a signed-out workspace', async ({ page }) => {
   await restricted(page); await openProject(page);
-  await dialog(page).getByRole('button', {name:'Atualizar andamento',exact:true}).click();
+  await dialog(page).getByRole('button', {name:'Editar projeto',exact:true}).click();
   await dialog(page).getByLabel('Notas e próximos passos', {exact:true}).fill('Andamento preservado para nova tentativa.');
   await page.evaluate(()=>{window.testFailRpc='zama_project_save';});
   await dialog(page).getByRole('button', {name:'Salvar alterações',exact:true}).click();
@@ -818,7 +818,7 @@ for(const width of [320,390]) test(`project progress and credential dialog fit a
   await expect(dialog(page).getByRole('button', { name: 'Mostrar senha', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   expect(await dialog(page).evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
-  await dialog(page).getByRole('button', { name: 'Atualizar andamento', exact: true }).click();
+  await dialog(page).getByRole('button', { name: 'Editar projeto', exact: true }).click();
   await expect(dialog(page).getByRole('button', { name: 'Salvar alterações', exact: true })).toBeInViewport({ratio:1});
   await page.setViewportSize({width,height:360});
   await expect(dialog(page).getByRole('button', { name: 'Salvar alterações', exact: true })).toBeInViewport({ratio:1});

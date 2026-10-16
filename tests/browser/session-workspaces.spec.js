@@ -132,7 +132,7 @@ for (const action of ['login', 'signup']) test(`a delayed ${action} cannot reope
 
 test('viewer joins the team and cannot read or save company finances', async ({ page }) => {
   await mock(page, seed, { workspaces: spaces('viewer'), rows: rows() });
-  await expect(page.locator('#workspaceBadge')).toContainText('Equipe · leitura');
+  await expect(page.locator('#workspaceBadge')).toContainText('Equipe · ideias em leitura');
   await expect(page.locator('#ceoWorkspace')).not.toContainText('Receita da equipe');
   await page.locator('#settingsBtn').click();
   await expect(page.locator('#importBtn')).not.toBeVisible();

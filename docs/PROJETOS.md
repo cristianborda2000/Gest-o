@@ -4,12 +4,14 @@ A equipe tem três abas: **Agenda**, **Projetos** e **Ideias**. Projetos e ideia
 
 ## Projetos
 
+O quadro usa preto e cinza, com colunas de Planejamento, Em andamento, Aguardando cliente e Concluído. Cada cartão permite marcar/desmarcar etapas diretamente, com salvamento automático e confirmação. O controle **Mover para** altera a coluna sem concluir etapas automaticamente. **Adicionar projeto** em uma coluna já inicia o cadastro naquela situação.
+
 O painel destaca todos os projetos, atrasos de projetos ou etapas, entregas dos próximos sete dias e projetos aguardando o cliente. As métricas funcionam como filtros e combinam com a busca e a situação. A ordenação permite priorizar os prazos, os nomes ou as alterações recentes. Projetos concluídos não entram nas pendências de prazo.
 
-1. O administrador abre **Projetos → Novo projeto** e preenche o título e o cliente. Empresa, acesso, responsável e prazo são opcionais.
+1. Qualquer membro confirmado da equipe abre **Projetos → Novo projeto** e preenche o título e o cliente. Empresa, acesso, responsável e prazo são opcionais.
 2. Cria as listas e etapas necessárias. É possível renomear, reordenar, remover e marcar etapas, além de definir um prazo individual para cada uma.
-3. Em **Modelos de produção**, pode salvar a estrutura atual com um nome e reutilizá-la em outro projeto. Aplicar um modelo acrescenta listas ao rascunho; substitui apenas a lista inicial vazia. O modelo não copia dados do cliente, senha, notas, progresso ou datas. As listas copiadas recebem identificadores novos.
-4. A equipe usa **Atualizar andamento** para editar listas, etapas, prazos das etapas, situação e notas. Os dados do cliente, a atribuição, o prazo geral, a criação e a exclusão de projetos ficam com o administrador.
+3. O administrador pode usar **Modelos de produção** para salvar a estrutura atual com um nome e reutilizá-la em outro projeto. Aplicar um modelo acrescenta listas ao rascunho; substitui apenas a lista inicial vazia. O modelo não copia dados do cliente, senha, notas, progresso ou datas. As listas copiadas recebem identificadores novos.
+4. Toda a equipe, inclusive o perfil com ideias em leitura, usa **Editar projeto** para alterar título, cliente, empresa, dados de acesso, responsável, prazos, listas, situação e notas. Senhas e exclusão continuam com o administrador. Quando o projeto tem uma senha cadastrada, somente o administrador altera o e-mail responsável, pois esse campo também controla acesso à senha.
 
 Projetos antigos preservam as listas **Catálogo** e **Estruturação**. Um projeto aceita até 20 listas, com até 100 etapas por lista; listas vazias e projetos sem listas são válidos. Cada administrador pode guardar até 50 modelos. Use **Atualizar** para consultar alterações de outras pessoas. Revisões concorrentes são recusadas para evitar sobrescrever trabalho recente.
 
@@ -34,8 +36,8 @@ A lista de equipe mostra membros e convites de todos os perfis. É possível can
 | Perfil | Projetos e ideias | Agenda | Senhas de clientes |
 | --- | --- | --- | --- |
 | Administrador (`owner`) | Todos da própria empresa; administração completa | Somente a própria | Consultar, substituir e remover |
-| Equipe (`projects` ou `editor`) | Todos da empresa; andamento dos projetos e edição de ideias | Somente a própria, com edição | Consultar apenas nos projetos atribuídos ao seu e-mail confirmado |
-| Leitura (`viewer`) | Todos da empresa, sem edição | Somente a própria, com edição | Sem acesso |
+| Equipe (`projects` ou `editor`) | Todos da empresa; criar/editar projetos e editar ideias | Somente a própria, com edição | Consultar apenas nos projetos atribuídos ao seu e-mail confirmado |
+| Ideias em leitura (`viewer`) | Todos da empresa; criar/editar projetos e consultar ideias | Somente a própria, com edição | Sem acesso |
 | Pessoa sem vínculo | Sem acesso à empresa | Somente a própria | Sem acesso |
 
 O e-mail do responsável organiza o trabalho e restringe a consulta de senhas; não restringe mais a visibilidade dos projetos. Preencher esse e-mail no projeto não cria uma associação à empresa.
@@ -49,12 +51,13 @@ Execute o conteúdo completo de [`database/instalar-projetos.sql`](../database/i
 3. `20261013_project_lists.sql` — listas manuais.
 4. `20261015_project_planning.sql` — prazos por etapa e modelos.
 5. `20261015_team_space.sql` — projetos/ideias compartilhados e agendas privadas.
+6. `20261015_project_collaboration.sql` — criação/edição de projetos por todos os membros e marcação direta de etapas.
 
-O instalador pode ser reaplicado: preserva dados, membros, progresso, modelos e a chave de criptografia. As listas legadas só são convertidas quando `production_lists` está ausente ou nulo. A última migration retira dos perfis antigos `editor` e `viewer` o acesso amplo ao `app_state` de outra conta e aplica o modelo da equipe às associações existentes.
+O instalador pode ser reaplicado: preserva dados, membros, progresso, modelos e a chave de criptografia. As listas legadas só são convertidas quando `production_lists` está ausente ou nulo. A migration `20261015_team_space.sql` retira dos perfis antigos `editor` e `viewer` o acesso amplo ao `app_state` de outra conta e aplica o modelo da equipe às associações existentes.
 
-**Aplique o instalador completo antes de publicar esta versão da interface.** Publicar o site não executa SQL no Supabase. Não reaplique apenas uma migration antiga depois desta atualização, pois ela pode restaurar permissões anteriores. Não execute `database/supabase-setup.sql` sobre uma base existente.
+**Aplique o instalador completo para ativar todas as permissões desta versão.** Se as cinco primeiras migrations já estão instaladas, basta executar `database/migrations/20261015_project_collaboration.sql`. Publicar o site não executa SQL no Supabase. Sem a nova migration, o quadro mantém as permissões anteriores: membros de leitura não criam ou editam projetos e os demais membros editam apenas o andamento. Não reaplique apenas uma migration antiga depois desta atualização, pois ela pode restaurar permissões anteriores. Não execute `database/supabase-setup.sql` sobre uma base existente.
 
-Após mudar migrations, gere novamente o instalador com `npm run build:projects-sql`. A interface usa `zama_projects_list_v3`; em instalações antigas com v2, os campos de prazo por etapa e modelos ficam indisponíveis. Ideias compartilhadas exigem a última migration e apresentam uma mensagem de configuração pendente quando ela falta.
+Após mudar migrations, gere novamente o instalador com `npm run build:projects-sql`. A interface usa `zama_projects_list_v3`; em instalações antigas com v2, os campos de prazo por etapa e modelos ficam indisponíveis. Ideias compartilhadas exigem a migration de equipe e apresentam uma mensagem de configuração pendente quando ela falta.
 
 ## Cadastro de login pelo servidor
 
@@ -75,7 +78,9 @@ O backup JSON administrativo baseado em `app_state` não inclui projetos, modelo
 | RPC | Uso |
 | --- | --- |
 | `zama_projects_list_v3(p_owner)` | Projetos da empresa, listas e prazos por etapa, sem senhas |
-| `zama_project_save(p_owner, p_project)` | Criar/editar com revisão; campos protegidos só para administrador |
+| `zama_project_save(p_owner, p_project)` | Criar/editar com revisão; senha e atribuição com senha só para administrador |
+| `zama_project_step_set(p_owner, p_id, p_list_id, p_step_id, p_done, p_revision)` | Alterar somente uma etapa sob revisão |
+| `zama_project_collaboration_capabilities(p_owner)` | Verificar a instalação da edição colaborativa |
 | `zama_project_secret(p_owner, p_id)` | Consultar senha sob autorização separada |
 | `zama_project_delete(p_owner, p_id)` | Excluir como administrador |
 | `zama_project_templates_list()` | Modelos da própria conta |
@@ -97,3 +102,5 @@ node scripts/build-projects-setup.mjs --check
 ```
 
 Os testes com PGlite e `pgcrypto` real verificam isolamento entre empresas e agendas, acesso a senhas, revisões concorrentes, preservação dos vínculos privados de ideias, compatibilidade dos prazos, modelos e reaplicação do instalador. Os testes de navegador cobrem as três abas, agendas pessoais, ideias compartilhadas, troca de sessão/perfil, convites, criação de acesso, rascunhos, prioridades, modelos e telas de 320, 390 e 1.440 pixels. Não usam dados de produção.
+
+Marcações rápidas são processadas em sequência por projeto. Em falha ou conflito, a interface desfaz as marcações ainda não confirmadas e orienta atualizar. Respostas antigas após troca de sessão não restauram o conteúdo. O navegador só habilita criação/edição completa aos membros após confirmar a nova capacidade no banco.

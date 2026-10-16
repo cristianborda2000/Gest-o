@@ -12,7 +12,9 @@
   const ownerId = () => workspace()?.ownerId();
   const role = () => workspace()?.role?.() || (workspace()?.isOwner?.() ? 'owner' : 'viewer');
   const isOwner = () => Boolean(workspace()?.isOwner?.());
-  const canEdit = () => isOwner() || ['editor', 'projects'].includes(role());
+  const canEdit = () => isOwner() || collaborationAvailable || ['editor', 'projects'].includes(role());
+  const canEditDetails = () => isOwner() || collaborationAvailable;
+  const canReveal = row => isOwner() || ['editor','projects'].includes(role()) && row.responsible_email === workspace()?.email?.()?.toLowerCase();
   const today = () => {
     if (root.ZamaTime?.today) return root.ZamaTime.today();
     const values = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()).map(item => [item.type, item.value]));
@@ -22,6 +24,8 @@
   let container = null, activeDialog = null, rows = [], loaded = false, loading = false;
   let generation = 0, requestSequence = 0, activeOwner = null, activeAccount = null, activeRole = null;
   let errorMessage = '', notice = '', secretSequence = 0, secretTimer = null, planningAvailable = false;
+  let collaborationAvailable = false;
+  const pendingChanges = new Map(), expandedLists = new Map();
   const filters = { search: '', status: '', priority: 'all', order: 'priority' };
   const summary = row => root.ZamaProjectPlanning.summarize(row, today());
   const icon = name => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="${({ all: 'M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v6H4zM14 15h6v6h-6z', overdue: 'M12 3 2 21h20L12 3ZM12 9v5m0 3v.1', upcoming: 'M5 5h14v15H5zM8 3v4m8-4v4M5 10h14m-10 4h2m2 0h2', waiting: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 5v5l3 2' })[name]}"></path></svg>`;
@@ -93,12 +97,14 @@
   }
   function leave() {
     generation++; requestSequence++; loading = false; closeDialog();
-    container = null; rows = []; loaded = false;
+    container = null; expandedLists.clear();
+    // Module navigation must not discard checks that are waiting for an RPC.
+    if (!pendingChanges.size) { rows = []; loaded = false; }
   }
   function reset() {
     const previous = container;
-    leave(); rows = []; loaded = false; activeOwner = activeAccount = activeRole = null;
-    filters.search = filters.status = ''; filters.priority = 'all'; filters.order = 'priority'; planningAvailable = false; errorMessage = notice = '';
+    leave(); pendingChanges.clear(); rows = []; loaded = false; activeOwner = activeAccount = activeRole = null;
+    filters.search = filters.status = ''; filters.priority = 'all'; filters.order = 'priority'; planningAvailable = collaborationAvailable = false; errorMessage = notice = '';
     previous?.replaceChildren();
   }
   function newDialog(title, markup) {
@@ -119,60 +125,154 @@
     document.body.appendChild(dialog); dialog.showModal();
     return dialog;
   }
+  function stepControl(row, list, step, detail = false) {
+    return `<label class="${detail ? 'ceo-project-step' : 'ceo-project-quick-step'} ${step.done ? 'is-done' : ''}"><input type="checkbox" data-quick-step="${esc(step.id)}" data-project="${esc(row.id)}" data-list="${esc(list.id)}" ${step.done ? 'checked' : ''} ${!canEdit() ? 'disabled' : ''} aria-label="Concluir etapa: ${esc(step.label)}"><span class="ceo-project-step-copy">${esc(step.label)}${step.due_date ? `<small class="${!step.done && step.due_date < today() ? 'is-late' : ''}">${dateLabel(step.due_date)}</small>` : ''}</span></label>`;
+  }
   function card(row) {
-    const completion = summary(row), late = completion.overdue;
-    const person = row.responsible_name || row.responsible_email;
-    return `<article class="ceo-project-card ${late ? 'is-overdue' : completion.upcoming ? 'is-upcoming' : ''}" data-project-id="${esc(row.id)}">
-      <div class="ceo-project-card-meta"><span class="ceo-project-status is-${row.status}"><i></i>${statuses[row.status]}</span>${late ? '<span class="ceo-project-urgency">Prazo vencido</span>' : `<span class="ceo-project-total">${completion.done}/${completion.total} etapas</span>`}</div>
-      <h3>${esc(row.title)}</h3><p class="ceo-project-company">${esc(row.company_name || row.client_name)}</p>${row.company_name ? `<p class="ceo-project-client">${esc(row.client_name)}</p>` : ''}
-      <div class="ceo-project-tracks">${row.production_lists.length ? row.production_lists.slice(0, 3).map(list => meter(list.title, list.steps)).join('') : '<p class="ceo-project-no-stages">Adicione as etapas da sua produção.</p>'}${row.production_lists.length > 3 ? `<small>Mais ${row.production_lists.length - 3} listas neste projeto</small>` : ''}</div>
-      ${completion.next && row.status !== 'completed' ? `<div class="ceo-project-next"><span>PRÓXIMA ETAPA</span><strong>${esc(completion.next.label)}</strong>${completion.next.due_date ? `<small>${dateLabel(completion.next.due_date)}</small>` : ''}</div>` : ''}
-      <div class="ceo-project-card-footer"><span class="ceo-project-person"><span class="ceo-project-avatar" aria-hidden="true">${esc((person || '?').slice(0, 1).toUpperCase())}</span><span>${esc(person || 'Sem responsável')}</span></span><span class="ceo-project-due ${row.due_date && row.due_date < today() && row.status !== 'completed' ? 'is-late' : ''}">${dateLabel(row.due_date)}</span></div>
-      <button class="ceo-button ceo-project-open" type="button" data-project-open="${esc(row.id)}" aria-label="Abrir projeto ${esc(row.title)}">Acompanhar projeto <span aria-hidden="true">↗</span></button>
+    const completion = summary(row), person = row.responsible_name || row.responsible_email;
+    return `<article class="ceo-project-card ${completion.overdue ? 'is-overdue' : ''}" data-project-id="${esc(row.id)}" aria-busy="${pendingChanges.has(row.id)}">
+      <div class="ceo-project-card-meta"><span class="ceo-project-status is-${row.status}"><i></i>${statuses[row.status]}</span><span class="ceo-project-total">${completion.done}/${completion.total} etapas</span></div>
+      <h3><button type="button" data-project-open="${esc(row.id)}" aria-label="Ver detalhes de ${esc(row.title)}">${esc(row.title)}</button></h3><p class="ceo-project-company">${esc(row.company_name || row.client_name)}</p>
+      ${meter('Progresso', row.production_lists.flatMap(list => list.steps))}
+      <div class="ceo-project-quick-lists">${row.production_lists.length ? row.production_lists.map((list,index) => {
+        const key = `${row.id}:${list.id}`, open = expandedLists.has(key) ? expandedLists.get(key) : index === 0;
+        return `<details class="ceo-project-quick-list" data-list-preview="${esc(key)}" ${open ? 'open' : ''}><summary><span>${esc(list.title)}</span><small>${list.steps.filter(step=>step.done).length}/${list.steps.length}</small></summary><div class="ceo-project-quick-steps">${list.steps.length ? list.steps.map(step=>stepControl(row,list,step)).join('') : '<p class="ceo-project-no-stages">Nenhuma etapa ainda.</p>'}</div></details>`;
+      }).join('') : '<p class="ceo-project-no-stages">Adicione uma lista para organizar as etapas.</p>'}</div>
+      ${canEdit() ? `<button type="button" class="ceo-button ceo-project-add-steps" data-project-edit-inline="${esc(row.id)}">+ Editar listas e etapas</button>` : ''}
+      <div class="ceo-project-card-footer"><span class="ceo-project-person"><span class="ceo-project-avatar" aria-hidden="true">${esc((person || '?').slice(0,1).toUpperCase())}</span><span>${esc(person || 'Sem responsável')}</span></span><span class="ceo-project-due ${completion.overdue ? 'is-late' : ''}">${completion.overdue ? 'Atrasado · ' : ''}${dateLabel(row.due_date)}</span></div>
+      <label class="ceo-project-quick-status">Mover para<select data-quick-status="${esc(row.id)}" aria-label="Situação de ${esc(row.title)}" ${canEdit() ? '' : 'disabled'}>${options(row.status)}</select></label>
+      <button class="ceo-button ceo-project-open" type="button" data-project-open="${esc(row.id)}" aria-label="Abrir projeto ${esc(row.title)}">Abrir projeto <span aria-hidden="true">↗</span></button>
+      <p class="ceo-project-save-state" role="status">${pendingChanges.has(row.id) ? 'Salvando alterações…' : ''}</p>
     </article>`;
+  }
+  function rememberBoard() {
+    container?.querySelectorAll('[data-list-preview]').forEach(node=>expandedLists.set(node.dataset.listPreview,node.open));
   }
   function renderBoard() {
     const board = container?.querySelector('[data-project-board]'); if (!board) return;
+    rememberBoard();
     const query = fold(filters.search).trim();
-    const visible = rows.filter(row => (!filters.status || row.status === filters.status) && (filters.priority === 'all' || filters.priority === 'waiting' && row.status === 'waiting' || summary(row)[filters.priority] === true) && (!query || fold(`${row.title} ${row.client_name} ${row.company_name} ${row.client_email} ${row.responsible_name} ${row.responsible_email}`).includes(query))).sort((a, b) => root.ZamaProjectPlanning.compare(a, b, filters.order, today()));
-    container.querySelectorAll('[data-priority]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.priority === filters.priority)));
-    container.querySelector('[data-project-count]').textContent = `${visible.length} ${visible.length === 1 ? 'projeto encontrado' : 'projetos encontrados'}`;
-    if (!visible.length) {
-      board.innerHTML = `<div class="ceo-project-empty"><span class="ceo-project-empty-icon" aria-hidden="true">▤</span><h3>${rows.length ? 'Nenhum projeto com estes filtros' : 'Cada cliente, uma entrega bem acompanhada'}</h3><p>${rows.length ? 'Tente outro nome, prioridade ou situação para encontrar seu projeto.' : isOwner() ? 'Cadastre o cliente, defina o responsável e crie as listas de produção do seu jeito.' : 'Os projetos da equipe ZAMA aparecerão aqui.'}</p>${rows.length ? '<button type="button" class="ceo-button" data-clear-project-filters>Limpar filtros</button>' : isOwner() ? '<button type="button" class="ceo-button primary" data-project-new>+ Criar primeiro projeto</button>' : ''}</div>`;
-      board.querySelector('[data-clear-project-filters]')?.addEventListener('click', () => { filters.search = filters.status = ''; filters.priority = 'all'; paint(); });
-      board.querySelector('[data-project-new]')?.addEventListener('click', () => openEditor());
-    } else board.innerHTML = visible.map(card).join('');
+    const visible = rows.filter(row => (!filters.status || row.status === filters.status) && (filters.priority === 'all' || filters.priority === 'waiting' && row.status === 'waiting' || summary(row)[filters.priority] === true) && (!query || fold(`${row.title} ${row.client_name} ${row.company_name} ${row.client_email} ${row.responsible_name} ${row.responsible_email}`).includes(query))).sort((a,b)=>root.ZamaProjectPlanning.compare(a,b,filters.order,today()));
+    container.querySelectorAll('[data-priority]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.priority===filters.priority)));
+    container.querySelector('[data-project-count]').textContent = `${visible.length} ${visible.length===1 ? 'projeto encontrado' : 'projetos encontrados'}`;
+    const filtered = Boolean(filters.search || filters.status || filters.priority !== 'all');
+    board.innerHTML = `${!visible.length && filtered ? '<div class="ceo-project-empty"><h3>Nenhum projeto com estes filtros</h3><button type="button" class="ceo-button" data-clear-project-filters>Limpar filtros</button></div>' : ''}${Object.entries(statuses).map(([status,label])=>{
+      const items = visible.filter(row=>row.status===status);
+      return `<section class="ceo-project-column" data-project-column="${status}" aria-label="${label}"><header class="ceo-project-column-heading"><h3>${label}</h3><span>${items.length}</span></header><div class="ceo-project-column-cards">${items.map(card).join('') || '<p class="ceo-project-column-empty">Nenhum projeto nesta coluna.</p>'}</div>${canEditDetails() ? `<button type="button" class="ceo-project-column-add" data-column-add="${status}" aria-label="Adicionar projeto em ${label}">+ Adicionar projeto</button>` : ''}</section>`;
+    }).join('')}`;
+  }
+  function updateSummary() {
+    const summaries = rows.map(summary);
+    const values = {all:rows.length, overdue:summaries.filter(item=>item.overdue).length, upcoming:summaries.filter(item=>item.upcoming).length, waiting:rows.filter(row=>row.status==='waiting').length};
+    container?.querySelectorAll('[data-priority]').forEach(button=>{button.querySelector('strong').textContent=values[button.dataset.priority];});
+    const refresh = container?.querySelector('[data-project-refresh]'); if(refresh) refresh.disabled=loading || pendingChanges.size>0;
+    const message = container?.querySelector('[data-project-feedback]'); if(message) {message.textContent=notice;message.hidden=!notice;}
   }
   function paint() {
     if (!container?.isConnected) return;
-    const active = rows.filter(row => row.status !== 'completed').length;
-    const summaries = rows.map(summary), total = summaries.reduce((sum, item) => sum + item.total, 0), done = summaries.reduce((sum, item) => sum + item.done, 0);
-    const focus = rows.filter(row => summary(row).attention).sort((a, b) => root.ZamaProjectPlanning.compare(a, b, 'priority', today())).slice(0, 4);
-    const priorities = [ ['all','Todos os projetos',rows.length,`${active} em produção`], ['overdue','Precisam de atenção',summaries.filter(item => item.overdue).length,'Projetos ou etapas atrasados'], ['upcoming','Próximos 7 dias',summaries.filter(item => item.upcoming).length,'Entregas chegando'], ['waiting','Aguardando cliente',rows.filter(row => row.status === 'waiting').length,'Retornos e aprovações'] ];
-    container.innerHTML = `<section class="ceo-projects"><div class="ceo-project-hero"><div class="ceo-project-heading"><div class="ceo-project-hero-copy"><span class="ceo-project-eyebrow">ZAMA / ESPAÇO DA EQUIPE</span><h2>Projetos de clientes</h2><p>Uma visão clara da produção.<br>Cada etapa, mais perto da entrega.</p></div><div class="ceo-project-hero-summary"><strong>${total ? Math.round(done / total * 100) : 0}<span>%</span></strong><span>das etapas concluídas</span><small>${done} de ${total} etapas · ${active} projetos ativos</small></div></div><div class="ceo-project-heading-actions"><span class="ceo-project-shared-label">${icon('all')} Compartilhado com a equipe</span><button type="button" class="ceo-button" data-project-refresh ${loading ? 'disabled' : ''}>${loading ? 'Atualizando…' : 'Atualizar'}</button>${isOwner() ? `<button type="button" class="ceo-button" data-project-team ${!loaded || loading || errorMessage ? 'disabled' : ''}>Criar acesso</button><button type="button" class="ceo-button primary" data-project-new ${!loaded || loading || errorMessage ? 'disabled' : ''}>+ Novo projeto</button>` : ''}</div></div>
-      ${role() === 'viewer' ? '<p class="ceo-project-access-note">Você pode acompanhar todos os projetos. As atualizações ficam com os responsáveis pela produção.</p>' : ''}
-      <div class="ceo-project-priorities" aria-label="Prioridades dos projetos">${priorities.map(([key,label,count,hint]) => `<button type="button" class="ceo-project-priority is-${key}" data-priority="${key}" aria-pressed="${filters.priority === key}" ${!loaded || loading ? 'disabled' : ''}><span class="ceo-project-priority-icon">${icon(key)}</span><strong>${count}</strong><span>${label}</span><small>${hint}</small></button>`).join('')}</div>
-      ${notice ? `<p class="ceo-project-notice" role="status">${esc(notice)}</p>` : ''}
+    rememberBoard();
+    const priorities = [['all','Todos os projetos'],['overdue','Em atraso'],['upcoming','Próximos 7 dias'],['waiting','Aguardando cliente']];
+    container.innerHTML = `<section class="ceo-projects"><div class="ceo-project-hero"><div class="ceo-project-heading"><div class="ceo-project-hero-copy"><span class="ceo-project-eyebrow">ZAMA / QUADRO DA EQUIPE</span><h2>Projetos de clientes</h2><p>Marque as etapas no cartão. Cada avanço fica salvo para a equipe.</p></div></div><div class="ceo-project-heading-actions"><span class="ceo-project-shared-label">${icon('all')} Quadro compartilhado</span><button type="button" class="ceo-button" data-project-refresh ${loading || pendingChanges.size ? 'disabled' : ''}>${loading ? 'Atualizando…' : 'Atualizar'}</button>${isOwner() ? `<button type="button" class="ceo-button" data-project-team ${!loaded || loading || errorMessage ? 'disabled' : ''}>Criar acesso</button>` : ''}${canEditDetails() ? `<button type="button" class="ceo-button primary" data-project-new ${!loaded || loading || errorMessage ? 'disabled' : ''}>+ Novo projeto</button>` : ''}</div></div>
+      <div class="ceo-project-priorities" aria-label="Prioridades dos projetos">${priorities.map(([key,label])=>`<button type="button" class="ceo-project-priority is-${key}" data-priority="${key}" aria-pressed="${filters.priority===key}" ${!loaded || loading ? 'disabled' : ''}><span class="ceo-project-priority-icon">${icon(key)}</span><strong>0</strong><span>${label}</span></button>`).join('')}</div>
+      <p class="ceo-project-notice" data-project-feedback role="status" ${notice ? '' : 'hidden'}>${esc(notice)}</p>
       ${errorMessage ? `<div class="ceo-project-error" role="alert"><strong>Não foi possível carregar os projetos</strong><p>${esc(errorMessage)}</p><button class="ceo-button" type="button" data-project-retry>Tentar novamente</button></div>` : ''}
-      ${loading && !loaded ? '<div class="ceo-project-empty" role="status"><h3>Carregando seus projetos…</h3><p>Consultando a produção da equipe.</p></div>' : !errorMessage && loaded ? `${focus.length ? `<section class="ceo-project-focus"><div><span class="ceo-project-eyebrow">PARA ACOMPANHAR DE PERTO</span><h3>Próximas entregas</h3></div><div class="ceo-project-focus-list">${focus.map(row => { const info = summary(row); return `<button type="button" class="ceo-project-focus-item" data-focus-project="${esc(row.id)}"><span class="ceo-project-focus-dot ${info.overdue ? 'is-late' : ''}"></span><span><strong>${esc(row.title)}</strong><small>${esc(info.attention.label)}</small></span><time class="${info.overdue ? 'is-late' : ''}">${info.overdue ? 'Atrasado · ' : ''}${dateLabel(info.attention.date)}</time><span aria-hidden="true">↗</span></button>`; }).join('')}</div></section>` : ''}<div class="ceo-project-board-heading"><h3>Produção da equipe</h3><p class="ceo-project-results" data-project-count aria-live="polite"></p></div><div class="ceo-project-filters"><label class="ceo-field ceo-project-search">Pesquisar projetos<input type="search" data-project-search value="${esc(filters.search)}" placeholder="Cliente, projeto ou responsável"></label><label class="ceo-field">Situação<select data-project-status><option value="">Todas as situações</option>${options(filters.status)}</select></label><label class="ceo-field">Ordenar por<select data-project-order><option value="priority" ${filters.order === 'priority' ? 'selected' : ''}>Prioridade e prazo</option><option value="updated" ${filters.order === 'updated' ? 'selected' : ''}>Atualizados recentemente</option><option value="name" ${filters.order === 'name' ? 'selected' : ''}>Nome do projeto</option></select></label></div><div class="ceo-project-board" data-project-board></div>` : ''}
+      ${loading && !loaded ? '<div class="ceo-project-empty" role="status"><h3>Carregando seus projetos…</h3></div>' : !errorMessage && loaded ? `<div class="ceo-project-board-heading"><h3>Produção da equipe</h3><p class="ceo-project-results" data-project-count aria-live="polite"></p></div><div class="ceo-project-filters"><label class="ceo-field ceo-project-search">Pesquisar projetos<input type="search" data-project-search value="${esc(filters.search)}" placeholder="Cliente, projeto ou responsável"></label><label class="ceo-field">Situação<select data-project-status><option value="">Todas as situações</option>${options(filters.status)}</select></label><label class="ceo-field">Ordenar por<select data-project-order><option value="priority" ${filters.order==='priority' ? 'selected' : ''}>Prioridade e prazo</option><option value="updated" ${filters.order==='updated' ? 'selected' : ''}>Atualizados recentemente</option><option value="name" ${filters.order==='name' ? 'selected' : ''}>Nome do projeto</option></select></label></div><div class="ceo-project-board" data-project-board></div>` : ''}
     </section>`;
-    container.querySelector('[data-project-new]')?.addEventListener('click', () => openEditor());
-    container.querySelector('[data-project-team]')?.addEventListener('click', () => openTeamAccess());
-    container.querySelector('[data-project-refresh]')?.addEventListener('click', () => void load());
-    container.querySelector('[data-project-retry]')?.addEventListener('click', () => void load());
-    container.querySelector('[data-project-search]')?.addEventListener('input', event => { filters.search = event.target.value; renderBoard(); });
-    container.querySelector('[data-project-status]')?.addEventListener('change', event => { filters.status = event.target.value; renderBoard(); });
-    container.querySelector('[data-project-order]')?.addEventListener('change', event => { filters.order = event.target.value; renderBoard(); });
-    container.querySelectorAll('[data-priority]').forEach(button => button.addEventListener('click', () => { filters.priority = button.dataset.priority; renderBoard(); }));
-    container.querySelectorAll('[data-focus-project]').forEach(button => button.addEventListener('click', () => openDetail(button.dataset.focusProject)));
-    container.querySelector('[data-project-board]')?.addEventListener('click', event => {
-      const button = event.target.closest('[data-project-open]');
-      if (button) openDetail(button.dataset.projectOpen);
+    container.querySelector('[data-project-new]')?.addEventListener('click',()=>openEditor());
+    container.querySelector('[data-project-team]')?.addEventListener('click',()=>openTeamAccess());
+    container.querySelector('[data-project-refresh]')?.addEventListener('click',()=>void load());
+    container.querySelector('[data-project-retry]')?.addEventListener('click',()=>void load());
+    container.querySelector('[data-project-search]')?.addEventListener('input',event=>{filters.search=event.target.value;renderBoard();});
+    container.querySelector('[data-project-status]')?.addEventListener('change',event=>{filters.status=event.target.value;renderBoard();});
+    container.querySelector('[data-project-order]')?.addEventListener('change',event=>{filters.order=event.target.value;renderBoard();});
+    container.querySelectorAll('[data-priority]').forEach(button=>button.addEventListener('click',()=>{filters.priority=button.dataset.priority;renderBoard();}));
+    const board = container.querySelector('[data-project-board]');
+    board?.addEventListener('click',event=>{
+      const open=event.target.closest('[data-project-open]'), edit=event.target.closest('[data-project-edit-inline]'), add=event.target.closest('[data-column-add]');
+      if(open) openDetail(open.dataset.projectOpen);
+      if(edit) openEditor(edit.dataset.projectEditInline);
+      if(add) openEditor(null,add.dataset.columnAdd);
+      if(event.target.closest('[data-clear-project-filters]')) {filters.search=filters.status='';filters.priority='all';paint();}
     });
-    renderBoard();
+    board?.addEventListener('change',quickChange);
+    renderBoard(); updateSummary();
   }
+  function quickChange(event) {
+    const input=event.target.closest('[data-quick-step]'), status=event.target.closest('[data-quick-status]');
+    if(input) queueChange(input.dataset.project,{type:'step',list:input.dataset.list,step:input.dataset.quickStep,done:input.checked});
+    if(status) queueChange(status.dataset.quickStatus,{type:'status',status:status.value});
+  }
+  function applyChange(row, change) {
+    if(change.type==='status') row.status=change.status;
+    else { const step=row.production_lists.find(list=>list.id===change.list)?.steps.find(step=>step.id===change.step); if(step) step.done=change.done; }
+  }
+  function refreshQuickUI() {
+    const focused=document.activeElement, focusData=focused?.matches('[data-quick-step],[data-quick-status]') ? {...focused.dataset} : null;
+    const inDialog=Boolean(activeDialog?.contains(focused));
+    const details=activeDialog?.querySelector('[data-detail-tracks]'), detailId=details?.dataset.detailTracks;
+    const detailScroll=activeDialog?.scrollTop;
+    renderBoard(); updateSummary();
+    if(details) {
+      const row=rows.find(item=>item.id===detailId);
+      if(row) details.innerHTML=row.production_lists.map(list=>checklist(row,list)).join('');
+      const edit=activeDialog.querySelector('[data-project-edit]'); if(edit) edit.disabled=pendingChanges.has(detailId);
+      const message=activeDialog.querySelector('[data-quick-feedback]'); if(message) message.textContent=pendingChanges.has(detailId)?'Salvando alterações…':notice;
+      activeDialog.scrollTop=detailScroll;
+    }
+    if(focusData) {
+      const scope=inDialog?activeDialog:container;
+      const control=[...(scope?.querySelectorAll('[data-quick-step],[data-quick-status]')||[])].find(node=>focusData.quickStatus ? node.dataset.quickStatus===focusData.quickStatus : node.dataset.project===focusData.project&&node.dataset.list===focusData.list&&node.dataset.quickStep===focusData.quickStep);
+      control?.focus({preventScroll:true});
+    }
+  }
+  function queueChange(id, change) {
+    if(!canEdit() || loading) {refreshQuickUI();return;}
+    const row=rows.find(item=>item.id===id); if(!row) return;
+    let entry=pendingChanges.get(id);
+    if(!entry) {entry={base:structuredClone(row),queue:[],running:false,ticket:capture()};pendingChanges.set(id,entry);}
+    entry.queue.push(change); applyChange(row,change); notice=''; refreshQuickUI();
+    if(!entry.running) void flushChanges(id,entry);
+  }
+  function writeCurrent(id,entry) {
+    const ticket=entry.ticket;
+    // A write belongs to its account/company, independently of the open module.
+    // reset() removes the entry, so logout and context changes still cancel it.
+    return pendingChanges.get(id)===entry && ticket.owner===activeOwner && ticket.owner===ownerId()
+      && ticket.account===activeAccount && ticket.account===accountId() && ticket.role===activeRole && ticket.role===role();
+  }
+  function finishQuickUI() {
+    if(!container?.isConnected && !pendingChanges.size) { rows=[]; loaded=false; }
+    refreshQuickUI();
+  }
+  async function flushChanges(id,entry) {
+    entry.running=true;
+    try {
+      while(entry.queue.length && writeCurrent(id,entry)) {
+        const change=entry.queue[0], project={id,revision:entry.base.revision};
+        let result;
+        if(change.type==='step' && collaborationAvailable) result=await rpc('zama_project_step_set',{p_owner:entry.ticket.owner,p_id:id,p_list_id:change.list,p_step_id:change.step,p_done:change.done,p_revision:entry.base.revision});
+        else {
+          if(change.type==='status') project.status=change.status;
+          else {const draft=structuredClone(entry.base);applyChange(draft,change);project.production_lists=draft.production_lists;}
+          result=await rpc('zama_project_save',{p_owner:entry.ticket.owner,p_project:project});
+        }
+        if(!writeCurrent(id,entry)) return;
+        entry.base=metadata(result);entry.queue.shift();
+        const projected=structuredClone(entry.base);entry.queue.forEach(change=>applyChange(projected,change));
+        rows=rows.map(row=>row.id===id?projected:row);
+      }
+      if(writeCurrent(id,entry)) {pendingChanges.delete(id);notice='Alterações salvas para a equipe.';finishQuickUI();}
+    } catch(error) {
+      if(!writeCurrent(id,entry)) return;
+      rows=rows.map(row=>row.id===id?entry.base:row);pendingChanges.delete(id);
+      notice=/40001|PROJECT_CONFLICT/.test(`${error.code} ${error.message}`)?'Não foi possível salvar: este projeto mudou em outra sessão. Clique em Atualizar e confira as etapas.':'Alterações não salvas. '+friendly(error);
+      if(!container?.isConnected && typeof showToast==='function') showToast('Alterações de projetos não salvas','Volte ao quadro de Projetos e confira as etapas antes de tentar novamente.','error');
+      finishQuickUI();
+    }
+  }
+
   async function load() {
-    if (!container || loading) return;
+    if (!container || loading || pendingChanges.size) return;
     closeDialog(); loading = true; errorMessage = ''; notice = '';
     const ticket = capture(), sequence = ++requestSequence;
     paint();
@@ -185,6 +285,11 @@
       }
       if (!current(ticket) || sequence !== requestSequence) return;
       if (!Array.isArray(result)) throw new Error('PROJECT_INVALID_RESPONSE');
+      let capability;
+      try { capability = await rpc('zama_project_collaboration_capabilities', { p_owner: ticket.owner }); }
+      catch (error) { if (!['PGRST202','42883'].includes(error?.code)) throw error; }
+      if (!current(ticket) || sequence !== requestSequence) return;
+      collaborationAvailable = capability?.can_edit === true && capability?.shared_creation === true;
       rows = result.map(metadata).sort((a, b) => b.updated_at.localeCompare(a.updated_at)); loaded = true;
     } catch (error) {
       if (!current(ticket) || sequence !== requestSequence) return;
@@ -292,7 +397,7 @@
     function renderRoster() {
       const members = roster.members;
       const invites = roster.invites;
-      rosterBox.innerHTML = members.map(member => `<article class="ceo-project-team-entry" data-team-entry><div><strong>${esc(member.email)}</strong><span class="ceo-project-team-badge">Acesso ativo · ${member.role === 'viewer' ? 'Leitura' : 'Equipe ZAMA'}</span>${assignmentList(normalize(member.email))}</div><div data-team-actions><button type="button" class="ceo-button danger" data-team-revoke="${esc(member.user_id)}">Remover acesso</button></div></article>`).join('')
+      rosterBox.innerHTML = members.map(member => `<article class="ceo-project-team-entry" data-team-entry><div><strong>${esc(member.email)}</strong><span class="ceo-project-team-badge">Acesso ativo · ${member.role === 'viewer' ? 'Projetos · Ideias em leitura' : 'Equipe ZAMA'}</span>${assignmentList(normalize(member.email))}</div><div data-team-actions><button type="button" class="ceo-button danger" data-team-revoke="${esc(member.user_id)}">Remover acesso</button></div></article>`).join('')
         + invites.map(invite => `<article class="ceo-project-team-entry" data-team-entry><div><strong>${esc(invite.email)}</strong><span class="ceo-project-team-badge is-pending">Convite pendente · Equipe ZAMA</span>${assignmentList(normalize(invite.email))}</div><div data-team-actions><button type="button" class="ceo-button" data-team-cancel="${esc(invite.id)}">Cancelar convite</button></div></article>`).join('');
       if (!members.length && !invites.length) rosterBox.innerHTML = '<p>Nenhuma pessoa cadastrada na equipe ainda. Cadastre o primeiro acesso usando o formulário acima.</p>';
     }
@@ -398,8 +503,8 @@
         button.parentElement.innerHTML = `<p>Remover o acesso desta pessoa à empresa? Os projetos serão mantidos.</p><button type="button" class="ceo-button danger" data-team-confirm="${esc(button.dataset.teamRevoke)}">Confirmar remoção</button><button type="button" class="ceo-button" data-team-keep>Manter acesso</button>`;
         return;
       }
-      const member = roster.members.find(item => item.user_id === button.dataset.teamConfirm && item.role === 'projects');
-      const invite = roster.invites.find(item => item.id === button.dataset.teamCancel && item.role === 'projects');
+      const member = roster.members.find(item => item.user_id === button.dataset.teamConfirm);
+      const invite = roster.invites.find(item => item.id === button.dataset.teamCancel);
       if (!member && !invite) return;
       let saved = false;
       busy = true; errorBox.hidden = status.hidden = true; syncForm();
@@ -415,8 +520,8 @@
     });
     syncForm(); emailInput.focus(); void reloadRoster(); void loadCapability();
   }
-  function checklist(label, steps) {
-    return `<section class="ceo-project-detail-track"><h3>${esc(label)}</h3>${meter('Etapas concluídas', steps)}<ul class="ceo-project-checklist">${steps.length ? steps.map(step => `<li class="${step.done ? 'is-done' : ''}"><span class="ceo-project-check" aria-hidden="true">${step.done ? '✓' : ''}</span><span class="ceo-project-step-copy">${esc(step.label)}${step.done ? '<span class="ceo-project-sr"> — Concluída</span>' : ''}${step.due_date ? `<small class="${!step.done && step.due_date < today() ? 'is-late' : ''}">${!step.done && step.due_date < today() ? 'Atrasada · ' : 'Prazo · '}${dateLabel(step.due_date)}</small>` : ''}</span></li>`).join('') : '<li class="ceo-muted">Nenhuma etapa cadastrada.</li>'}</ul></section>`;
+  function checklist(row, list) {
+    return `<section class="ceo-project-detail-track"><h3>${esc(list.title)}</h3>${meter('Etapas concluídas',list.steps)}<ul class="ceo-project-checklist">${list.steps.length ? list.steps.map(step=>`<li class="${step.done ? 'is-done' : ''}">${stepControl(row,list,step,true)}</li>`).join('') : '<li>Nenhuma etapa cadastrada.</li>'}</ul></section>`;
   }
   function openDetail(id) {
     const row = rows.find(item => item.id === id); if (!row) return;
@@ -424,11 +529,13 @@
     const dialog = newDialog(row.title, `<div class="ceo-project-detail-meta"><span class="ceo-project-status is-${row.status}"><i></i>${statuses[row.status]}</span><span>Prazo: ${dateLabel(row.due_date)}</span></div>
       <dl class="ceo-project-info"><div><dt>Cliente</dt><dd>${esc(row.client_name || 'Não informado')}</dd></div><div><dt>Empresa</dt><dd>${esc(row.company_name || 'Não informada')}</dd></div><div><dt>Responsável</dt><dd>${esc(row.responsible_name || 'Não definido')}${row.responsible_email ? `<small>${esc(row.responsible_email)}</small>` : ''}</dd></div></dl>
       <section class="ceo-project-credentials"><div><h3>Acessos do cliente</h3><p>Dados usados para trabalhar neste projeto.</p></div><dl class="ceo-project-info"><div><dt>E-mail de acesso</dt><dd>${esc(row.client_email || 'Não informado')}</dd></div><div><dt>Página de acesso</dt><dd>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Abrir página de acesso ↗</a>` : esc(row.access_url || 'Não informada')}</dd></div></dl>
-      <div class="ceo-project-secret"><label class="ceo-field">Senha<input type="password" readonly data-private-value aria-label="Senha do cliente" placeholder="${row.has_password ? '••••••••••••' : 'Não cadastrada'}" autocomplete="off"></label>${row.has_password && canEdit() && (isOwner() || row.responsible_email === workspace()?.email?.()?.toLowerCase()) ? '<button class="ceo-button" type="button" data-reveal aria-pressed="false">Mostrar senha</button>' : ''}</div><p class="ceo-project-secret-note">A senha é reservada ao administrador e ao responsável atribuído, e é ocultada ao sair desta janela.</p></section>
-      <div class="ceo-project-detail-tracks">${row.production_lists.length ? row.production_lists.map(list => checklist(list.title, list.steps)).join('') : '<p class="ceo-project-no-stages">Nenhuma lista de produção cadastrada.</p>'}</div>
+      <div class="ceo-project-secret"><label class="ceo-field">Senha<input type="password" readonly data-private-value aria-label="Senha do cliente" placeholder="${row.has_password ? '••••••••••••' : 'Não cadastrada'}" autocomplete="off"></label>${row.has_password && canReveal(row) ? '<button class="ceo-button" type="button" data-reveal aria-pressed="false">Mostrar senha</button>' : ''}</div><p class="ceo-project-secret-note">A senha é reservada ao administrador e ao responsável atribuído, e é ocultada ao sair desta janela.</p></section>
+      <div class="ceo-project-detail-tracks" data-detail-tracks="${esc(row.id)}">${row.production_lists.length ? row.production_lists.map(list => checklist(row, list)).join('') : '<p class="ceo-project-no-stages">Nenhuma lista de produção cadastrada.</p>'}</div>
       <section class="ceo-project-notes"><h3>Notas e próximos passos</h3><p>${esc(row.notes || 'Nenhuma observação por enquanto.')}</p></section>
       ${isOwner() && row.responsible_email ? `<section class="ceo-project-invite"><h3>Acesso do responsável</h3><p>Crie ou gerencie o acesso de <strong>${esc(row.responsible_email)}</strong> aos projetos desta empresa.</p><button type="button" class="ceo-button" data-project-invite>Gerenciar acesso do responsável</button></section>` : ''}
-      <p class="ceo-form-error" data-dialog-error role="alert" hidden></p><footer class="ceo-project-dialog-footer">${isOwner() ? '<button type="button" class="ceo-button danger" data-project-delete>Excluir projeto</button>' : ''}<div><button type="button" class="ceo-button" data-close>Fechar</button>${canEdit() ? `<button type="button" class="ceo-button primary" data-project-edit>${isOwner() ? 'Editar projeto' : 'Atualizar andamento'}</button>` : ''}</div></footer>`);
+      <p class="ceo-form-error" data-dialog-error role="alert" hidden></p><footer class="ceo-project-dialog-footer">${isOwner() ? '<button type="button" class="ceo-button danger" data-project-delete>Excluir projeto</button>' : ''}<div><button type="button" class="ceo-button" data-close>Fechar</button>${canEdit() ? `<button type="button" class="ceo-button primary" data-project-edit ${pendingChanges.has(row.id) ? 'disabled' : ''}>${canEditDetails() ? 'Editar projeto' : 'Atualizar andamento'}</button>` : ''}</div></footer>`);
+    dialog.querySelector('[data-detail-tracks]').insertAdjacentHTML('afterend','<p class="ceo-project-save-state" data-quick-feedback role="status"></p>');
+    dialog.querySelector('[data-detail-tracks]').addEventListener('change',quickChange);
     dialog.querySelector('[data-project-edit]')?.addEventListener('click', () => { if (dialogCurrent(ticket, dialog)) openEditor(id); });
     dialog.querySelector('[data-project-delete]')?.addEventListener('click', () => { if (dialogCurrent(ticket, dialog)) openDelete(row); });
     dialog.querySelector('[data-reveal]')?.addEventListener('click', async event => {
@@ -481,15 +588,16 @@
       });
     });
   }
-  function openEditor(id = null) {
-    if (!canEdit() || (!id && !isOwner())) return;
-    const row = id ? rows.find(item => item.id === id) : { title: '', client_name: '', company_name: '', client_email: '', access_url: '', responsible_name: '', responsible_email: '', due_date: '', status: 'planning', notes: '', production_lists: [{ id: makeId(), title: 'Lista de produção', steps: [] }] };
+  function openEditor(id = null, initialStatus = 'planning') {
+    if (!canEdit() || (!id && !canEditDetails())) return;
+    if (pendingChanges.has(id)) { notice = 'Aguarde a conclusão do salvamento das etapas.'; updateSummary(); return; }
+    const row = id ? rows.find(item => item.id === id) : { title: '', client_name: '', company_name: '', client_email: '', access_url: '', responsible_name: '', responsible_email: '', due_date: '', status: statuses[initialStatus] ? initialStatus : 'planning', notes: '', production_lists: [{ id: makeId(), title: 'Lista de produção', steps: [] }] };
     if (!row) return;
     const ticket = capture();
-    const dialog = newDialog(id ? isOwner() ? 'Editar projeto' : 'Atualizar andamento' : 'Novo projeto', `<form class="ceo-project-form" autocomplete="off">
-      ${isOwner() ? `<section><h3>Cliente e projeto</h3><div class="ceo-project-form-grid"><label class="ceo-field ceo-project-wide">Nome do projeto<input name="title" required maxlength="180" value="${esc(row.title)}" placeholder="Dê um nome ao seu projeto"></label><label class="ceo-field">Nome do cliente<input name="client_name" required maxlength="180" value="${esc(row.client_name)}" placeholder="Nome do contato"></label><label class="ceo-field">Nome da empresa<input name="company_name" maxlength="180" value="${esc(row.company_name)}" placeholder="Empresa do cliente"></label></div></section>
-      <section><h3>Acessos do cliente</h3><div class="ceo-project-form-grid"><label class="ceo-field">E-mail de acesso<input name="client_email" type="email" maxlength="254" value="${esc(row.client_email)}" placeholder="cliente@empresa.com" autocomplete="off"></label><label class="ceo-field">Página de acesso<input name="access_url" type="url" maxlength="2000" value="${esc(row.access_url)}" placeholder="https://" autocomplete="off"></label><label class="ceo-field ceo-project-wide">${row.has_password ? 'Nova senha (opcional)' : 'Senha do cliente'}<input name="password" type="password" data-private-value maxlength="2000" autocomplete="new-password" placeholder="${row.has_password ? 'Deixe vazio para manter a senha atual' : 'Informe a senha de acesso do cliente'}"></label>${row.has_password ? '<label class="ceo-project-remove-secret ceo-project-wide"><input type="checkbox" name="remove_password"> Remover a senha cadastrada</label>' : ''}</div><p>A senha não aparece nas listagens ou nos backups da central.</p></section>
-      <section><h3>Responsável pela entrega</h3><div class="ceo-project-form-grid"><label class="ceo-field">Nome do responsável<input name="responsible_name" maxlength="180" value="${esc(row.responsible_name)}" placeholder="Quem cuidará do projeto?"></label><label class="ceo-field">E-mail do responsável<input name="responsible_email" type="email" maxlength="254" value="${esc(row.responsible_email)}" placeholder="responsavel@empresa.com"></label><label class="ceo-field">Prazo da entrega<input name="due_date" type="date" value="${esc(row.due_date)}"></label></div><p>Após salvar, abra o projeto para gerar o convite. O responsável usa sua própria conta. Todos da equipe acompanham os projetos e as ideias; a agenda permanece privada.</p></section>` : `<p class="ceo-project-edit-summary">${esc(row.title)} · ${esc(row.client_name)}</p>`}
+    const dialog = newDialog(id ? canEditDetails() ? 'Editar projeto' : 'Atualizar andamento' : 'Novo projeto', `<form class="ceo-project-form" autocomplete="off">
+      ${canEditDetails() ? `<section><h3>Cliente e projeto</h3><div class="ceo-project-form-grid"><label class="ceo-field ceo-project-wide">Nome do projeto<input name="title" required maxlength="180" value="${esc(row.title)}" placeholder="Dê um nome ao seu projeto"></label><label class="ceo-field">Nome do cliente<input name="client_name" required maxlength="180" value="${esc(row.client_name)}" placeholder="Nome do contato"></label><label class="ceo-field">Nome da empresa<input name="company_name" maxlength="180" value="${esc(row.company_name)}" placeholder="Empresa do cliente"></label></div></section>
+      <section><h3>Acessos do cliente</h3><div class="ceo-project-form-grid"><label class="ceo-field">E-mail de acesso<input name="client_email" type="email" maxlength="254" value="${esc(row.client_email)}" placeholder="cliente@empresa.com" autocomplete="off"></label><label class="ceo-field">Página de acesso<input name="access_url" type="url" maxlength="2000" value="${esc(row.access_url)}" placeholder="https://" autocomplete="off"></label>${isOwner() ? `<label class="ceo-field ceo-project-wide">${row.has_password ? 'Nova senha (opcional)' : 'Senha do cliente'}<input name="password" type="password" data-private-value maxlength="2000" autocomplete="new-password" placeholder="${row.has_password ? 'Deixe vazio para manter a senha atual' : 'Informe a senha de acesso do cliente'}"></label>${row.has_password ? '<label class="ceo-project-remove-secret ceo-project-wide"><input type="checkbox" name="remove_password"> Remover a senha cadastrada</label>' : ''}` : '<p class="ceo-project-wide">As senhas do cliente são gerenciadas pelo administrador.</p>'}</div><p>A senha não aparece nas listagens ou nos backups da central.</p></section>
+      <section><h3>Responsável pela entrega</h3><div class="ceo-project-form-grid"><label class="ceo-field">Nome do responsável<input name="responsible_name" maxlength="180" value="${esc(row.responsible_name)}" placeholder="Quem cuidará do projeto?"></label><label class="ceo-field">E-mail do responsável<input name="responsible_email" ${!isOwner() && row.has_password ? 'disabled title="O administrador altera o responsável quando o projeto possui uma senha cadastrada."' : ''} type="email" maxlength="254" value="${esc(row.responsible_email)}" placeholder="responsavel@empresa.com"></label><label class="ceo-field">Prazo da entrega<input name="due_date" type="date" value="${esc(row.due_date)}"></label></div><p>Todos da equipe podem criar e editar projetos. A agenda permanece privada. ${!isOwner() && row.has_password ? 'Neste projeto, o administrador altera o e-mail responsável porque há uma senha de cliente vinculada.' : ''}</p></section>` : `<p class="ceo-project-edit-summary">${esc(row.title)} · ${esc(row.client_name)}</p>`}
       <label class="ceo-field">Situação do projeto<select name="status">${options(row.status)}</select></label>
       <section class="ceo-project-production"><h3>Listas de produção</h3><p>Crie suas listas e escreva as etapas na ordem que você precisa. Os nomes e as etapas ficam por sua conta.</p><div data-production-lists>${row.production_lists.map(listEditor).join('')}</div><p data-lists-empty ${row.production_lists.length ? 'hidden' : ''}>Nenhuma lista criada. Você pode adicionar uma agora ou depois.</p><button type="button" class="ceo-button" data-list-add>+ Adicionar lista</button></section>
       <label class="ceo-field">Notas e próximos passos<textarea name="notes" rows="4" maxlength="10000" placeholder="O que já foi feito, o que falta e o que depende do cliente.">${esc(row.notes)}</textarea></label>
@@ -545,10 +653,10 @@
       if (project.production_lists.some(list => !list.title || list.steps.some(step => !step.label))) {
         output.textContent = 'Preencha o nome de cada lista e de cada etapa antes de salvar.'; output.hidden = false; return;
       }
-      if (isOwner()) {
+      if (canEditDetails()) {
         ['title', 'client_name', 'company_name', 'client_email', 'access_url', 'responsible_name', 'responsible_email', 'due_date'].forEach(key => { project[key] = form.elements[key].value.trim(); });
         if (form.elements.remove_password?.checked) project.password = '';
-        else if (form.elements.password.value) project.password = form.elements.password.value;
+        else if (isOwner() && form.elements.password?.value) project.password = form.elements.password.value;
       }
       const oldLabel = submit.textContent; submit.disabled = true; submit.textContent = 'Salvando…'; output.hidden = true;
       try {
@@ -556,7 +664,7 @@
         delete project.password;
         if (!current(ticket)) return;
         const saved = metadata(result); rows = [saved, ...rows.filter(item => item.id !== saved.id)];
-        notice = id ? 'Projeto atualizado.' : 'Projeto criado. Você já pode acompanhar as etapas e convidar o responsável.';
+        notice = id ? 'Projeto atualizado.' : 'Projeto criado e compartilhado com a equipe.';
         paint();
         if (dialogCurrent(ticket, dialog)) { closeDialog(); openDetail(saved.id); }
       } catch (error) { if (dialogCurrent(ticket, dialog)) { output.textContent = friendly(error); output.hidden = false; } }

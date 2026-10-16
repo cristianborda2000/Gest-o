@@ -115,12 +115,13 @@ function sdk(seed, options = {}) {
     channel:()=>({on(){return this;},subscribe(fn){fn('SUBSCRIBED');return this;}}),removeChannel:async()=>{}
   })};
 }
-async function mock(page, data = seed, { jarvisVisible = false, projects, templates = [], planningUnavailable = false, ...sdkOptions } = {}) {
+async function mock(page, data = seed, { jarvisVisible = false, projects, templates = [], planningUnavailable = false, collaborationUnavailable = false, ...sdkOptions } = {}) {
   await page.route('**/api/project-access', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ code: 'NOT_CONFIGURED', error: 'Cadastro com senha indisponível neste teste.' }) }));
   if(projects) {
     // This fixture lives in the test process, like the real remote store. It must
     // not put client credentials in browser storage to simulate persistence.
     const projectRows=structuredClone(projects);
+    Object.values(projectRows).flat().forEach(row=>{if(!Array.isArray(row.production_lists)) row.production_lists=[{id:'catalog',title:'Catálogo',steps:row.catalog_steps},{id:'onboarding',title:'Estruturação',steps:row.onboarding_steps}].filter(list=>Array.isArray(list.steps)&&list.steps.length);});
     const templateRows=structuredClone(templates);
     const publicProject=row=>Object.fromEntries(Object.entries({...row,has_password:Boolean(row.password)}).filter(([key])=>key!=='password'&&key!=='owner_id'));
     await page.route('**/__test/projects',async route=>{
@@ -132,14 +133,22 @@ async function mock(page, data = seed, { jarvisVisible = false, projects, templa
       let result;
       if(name==='zama_projects_list_v3' && planningUnavailable) result={error:{code:'PGRST202',message:'Missing migration'}};
       else if(name==='zama_projects_list_v2'||name==='zama_projects_list_v3') result={data:rows.map(publicProject)};
+      else if(name==='zama_project_collaboration_capabilities') result=collaborationUnavailable?{error:{code:'PGRST202',message:'Missing migration'}}:{data:{can_edit:true,shared_creation:true}};
+      else if(name==='zama_project_step_set') {
+        const row=rows.find(item=>item.id===params.p_id);
+        const list=row?.production_lists?.find(item=>item.id===params.p_list_id),step=list?.steps.find(item=>item.id===params.p_step_id);
+        if(!step) result={error:{code:'22023',message:'PROJECT_STEP_NOT_FOUND'}};
+        else if(row.revision!==params.p_revision) result={error:{code:'40001',message:'PROJECT_CONFLICT'}};
+        else {step.done=params.p_done;row.revision++;result={data:publicProject(row)};}
+      }
       else if(name==='zama_project_templates_list') result={data:templateRows};
       else if(name==='zama_project_template_save') {
         const saved={...structuredClone(params.p_template),id:require('node:crypto').randomUUID(),revision:1}; templateRows.push(saved); result={data:saved};
       } else if(name==='zama_project_template_delete') { const index=templateRows.findIndex(item=>item.id===params.p_id); if(index!==-1) templateRows.splice(index,1); result={data:null}; }
       else if(name==='zama_project_save') {
         const input=params.p_project, old=rows.find(row=>row.id===input.id);
-        if(!own&&!old) result=error('Acesso não autorizado.');
-        else if(old&&input.revision!==old.revision) result=error('Os dados foram alterados. Atualize antes de salvar.');
+        if(!own&&!old&&collaborationUnavailable) result=error('Acesso não autorizado.');
+        else if(old&&input.revision!==old.revision) result={error:{code:'40001',message:'PROJECT_CONFLICT'}};
         else {
           const saved={...old,...structuredClone(input),id:old?.id||require('node:crypto').randomUUID(),revision:(old?.revision||0)+1,created_at:old?.created_at||'2026-09-29T15:00:00Z',updated_at:'2026-09-29T15:00:00Z'};
           if(old) rows.splice(rows.indexOf(old),1,saved); else rows.push(saved);

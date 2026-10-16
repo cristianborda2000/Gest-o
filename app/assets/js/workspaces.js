@@ -4,7 +4,7 @@
   let account = null, selected = null, spaces = [], available = false, generation = 0;
   let roster = { members: [], invites: [] }, inviteUrl = '', inviteId = null, notice = '', timer = null;
   let rosterSequence = 0;
-  const labels = { owner: 'Administrador', editor: 'Equipe ZAMA', viewer: 'Equipe · leitura', projects: 'Equipe ZAMA' };
+  const labels = { owner: 'Administrador', editor: 'Equipe ZAMA', viewer: 'Equipe · ideias em leitura', projects: 'Equipe ZAMA' };
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const tokenKey = 'zama-pending-invite';
   // Capture a fragment token before Auth handles its own fragments. Never send it as a URL query.
@@ -171,11 +171,11 @@
       ${pending ? `<div class="workspace-invite"><strong>Você recebeu um convite</strong><p>Entre com o e-mail destinatário e confirme para acessar a empresa.</p><button type="button" class="button primary" data-accept ${available ? '' : 'disabled'}>Aceitar convite</button><button type="button" class="button" data-dismiss>Descartar convite</button></div>` : ''}
       ${!available ? `<p class="settings-note">${esc(notice || 'O compartilhamento de equipe ainda não está disponível nesta instalação.')}</p>` : isOwner() ? `<form data-invite-form class="workspace-invite">
         <label class="workspace-field">E-mail do convidado<input name="email" type="email" required maxlength="254" placeholder="pessoa@empresa.com" autocomplete="off"></label>
-        <label class="workspace-field">Permissão<select name="role"><option value="projects">Equipe ZAMA</option><option value="viewer">Somente leitura</option><option value="editor">Pode editar</option></select></label>
+        <label class="workspace-field">Permissão<select name="role"><option value="projects">Equipe ZAMA</option><option value="viewer">Ideias em leitura</option><option value="editor">Equipe ZAMA (legado)</option></select></label>
         <p class="settings-note">O convite vale por 7 dias e só pode ser aceito pela conta com este e-mail confirmado.</p>
         <button class="button primary" type="submit">Gerar link de convite</button></form>
         ${inviteUrl ? `<label class="workspace-field">Link para compartilhar<input value="${esc(inviteUrl)}" readonly aria-label="Link do convite"></label><button class="button" type="button" data-copy>Copiar link</button>` : ''}
-        <div class="workspace-roster"><strong>Pessoas com acesso</strong>${roster.members.length ? roster.members.map(member => `<div class="workspace-person"><span>${esc(member.email)}</span><select aria-label="Permissão de ${esc(member.email)}" data-role="${esc(member.user_id)}"><option value="projects" ${member.role === 'projects' ? 'selected' : ''}>Equipe ZAMA</option><option value="viewer" ${member.role === 'viewer' ? 'selected' : ''}>Somente leitura</option><option value="editor" ${member.role === 'editor' ? 'selected' : ''}>Pode editar</option></select><button type="button" class="button" data-revoke="${esc(member.user_id)}">Remover</button></div>`).join('') : '<p class="settings-note">Somente você tem acesso no momento.</p>'}
+        <div class="workspace-roster"><strong>Pessoas com acesso</strong>${roster.members.length ? roster.members.map(member => `<div class="workspace-person"><span>${esc(member.email)}</span><select aria-label="Permissão de ${esc(member.email)}" data-role="${esc(member.user_id)}"><option value="projects" ${member.role === 'projects' ? 'selected' : ''}>Equipe ZAMA</option><option value="viewer" ${member.role === 'viewer' ? 'selected' : ''}>Ideias em leitura</option><option value="editor" ${member.role === 'editor' ? 'selected' : ''}>Equipe ZAMA (legado)</option></select><button type="button" class="button" data-revoke="${esc(member.user_id)}">Remover</button></div>`).join('') : '<p class="settings-note">Somente você tem acesso no momento.</p>'}
         ${roster.invites.length ? '<strong>Convites pendentes</strong>' + roster.invites.map(invite => `<div class="workspace-person"><span>${esc(invite.email)} · ${labels[invite.role]}</span><button type="button" class="button" data-cancel="${esc(invite.id)}">Revogar convite</button></div>`).join('') : ''}</div>` : '<p class="settings-note">Os acessos são gerenciados pelo proprietário desta empresa.</p>'}
       ${available && notice ? `<p role="status" class="settings-note">${esc(notice)}</p>` : ''}`;
     section.querySelector('[data-company]').onchange = event => { void switchTo(event.target.value); };
