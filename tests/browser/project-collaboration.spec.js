@@ -145,11 +145,11 @@ for(const role of ['projects','editor'])test(`old database saves direct checks t
   expect(calls[0].params.p_project).toEqual({id,revision:1,production_lists:[{...project.production_lists[0],steps:[{...project.production_lists[0].steps[0],done:true},project.production_lists[0].steps[1]]}]});
   await page.reload();await expect(check(page,'brief')).toBeChecked();await expect(check(page,'film')).not.toBeChecked();
 });
-for(const width of [320,390,1440])test(`black collaborative board and editor fit ${width}px`,async({page},info)=>{
+for(const width of [320,390,1440])test(`monochrome collaborative board and editor fit ${width}px`,async({page},info)=>{
   await page.setViewportSize({width,height:950});await setup(page);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  expect(await card(page).evaluate(node=>getComputedStyle(node).backgroundColor)).toBe('rgb(32, 32, 32)');
-  expect(await page.locator('body').evaluate(node=>getComputedStyle(node).backgroundColor)).toBe('rgb(11, 11, 11)');
+  expect(await card(page).evaluate(node=>getComputedStyle(node).backgroundColor)).toBe('rgb(255, 255, 255)');
+  expect(await page.locator('body').evaluate(node=>getComputedStyle(node).backgroundColor)).toBe('rgb(246, 247, 249)');
   await page.screenshot({path:info.outputPath(`board-${width}.png`),fullPage:true});
   await page.getByRole('button',{name:'+ Novo projeto',exact:true}).click();
   const box=await dialog(page).boundingBox();expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(width);

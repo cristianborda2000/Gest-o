@@ -4,7 +4,7 @@ A equipe tem três abas: **Agenda**, **Projetos** e **Ideias**. Projetos e ideia
 
 ## Projetos
 
-O quadro usa preto e cinza, com colunas de Planejamento, Em andamento, Aguardando cliente e Concluído. Cada cartão permite marcar/desmarcar etapas diretamente, com salvamento automático e confirmação. O controle **Mover para** altera a coluna sem concluir etapas automaticamente. **Adicionar projeto** em uma coluna já inicia o cadastro naquela situação.
+O quadro segue o visual branco e preto do sistema: cartões e formulários brancos, colunas em cinza claro e ações principais em preto. As colunas são Planejamento, Em andamento, Aguardando cliente e Concluído. Cada cartão permite marcar/desmarcar etapas diretamente, com salvamento automático e confirmação. O controle **Mover para** altera a coluna sem concluir etapas automaticamente. **Adicionar projeto** em uma coluna já inicia o cadastro naquela situação.
 
 O painel destaca todos os projetos, atrasos de projetos ou etapas, entregas dos próximos sete dias e projetos aguardando o cliente. As métricas funcionam como filtros e combinam com a busca e a situação. A ordenação permite priorizar os prazos, os nomes ou as alterações recentes. Projetos concluídos não entram nas pendências de prazo.
 
