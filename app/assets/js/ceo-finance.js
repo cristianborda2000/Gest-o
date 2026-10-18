@@ -3,7 +3,20 @@
 (function (global) {
   "use strict";
   const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-  const settings = { finance: null, investments: null, fixedMonth: "" };
+  const settings = { finance: null, investments: null, fixedMonth: "", chartMode: "realized", chartStyle: "bars" };
+  const categoryTools = () => global.ZamaFinanceCategories || require("./finance-categories.js");
+  const categoryAdapter = () => ({ direction, amountCents, isSettled, isCancelled });
+  const categoryKey = value => word(value).trim().replace(/\s+/g, " ");
+  function rememberCategory(target, nome, tipo) {
+    const name = text(nome).trim().replace(/\s+/g, " ") || "Outro";
+    // Imported labels can exceed the catalog limit. Keep them usable without
+    // creating an invalid catalog entry or truncating the financial history.
+    if (name.length > 80) {
+      const legacy = categoryTools().list(target, tipo, categoryAdapter()).find(value => categoryKey(value) === categoryKey(name));
+      if (legacy) return legacy;
+    }
+    return categoryTools().saveCategory(target, { nome: name, tipo }, categoryAdapter());
+  }
   const text = value => String(value == null ? "" : value);
   const safe = value => text(value).replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[character]));
   const word = value => text(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -39,7 +52,7 @@
   const isRealized = row => /^(realizado|realizada)$/.test(word(row.status));
   const effectiveDate = row => text(isSettled(row) ? row.pagoEm || row.data || row.prazo : row.prazo || row.data).slice(0, 10);
   const inPeriod = (date, range = {}) => (!range.from || date >= range.from) && (!range.to || date <= range.to) && (date || (!range.from && !range.to));
-  const category = row => row.categoria || row.responsavel || "Outro";
+  const category = row => categoryTools().category(row);
 
   function normalize(target) {
     if (!Array.isArray(target.financeiro)) target.financeiro = [];
@@ -118,7 +131,8 @@
     if (!["Ativo", "Pausado", "Cancelado"].includes(input.status)) throw new Error("Selecione uma situação válida.");
     if (!validMonth(input.recurrenceStart)) throw new Error("Informe a competência inicial da recorrência.");
     if (existing?.recurrenceStart && input.recurrenceStart !== existing.recurrenceStart) throw new Error("A competência inicial de uma recorrência já ativada deve ser preservada.");
-    const record = { ...existing, ...input, id: existing?.id || uid(), nome: input.nome.trim(), dia: Number(input.dia), categoria: text(input.categoria).trim() || "Outro", responsavel: text(input.categoria).trim() || "Outro", tipo: "Saída", valor: -input.valorCentavos / 100, updatedAt: new Date().toISOString() };
+    const categoryName = rememberCategory(target, input.categoria, "Saída");
+    const record = { ...existing, ...input, id: existing?.id || uid(), nome: input.nome.trim(), dia: Number(input.dia), categoria: categoryName, responsavel: categoryName, tipo: "Saída", valor: -input.valorCentavos / 100, updatedAt: new Date().toISOString() };
     delete record.generateCurrent;
     if (!existing) record.createdAt = record.updatedAt;
     const index = target.gastosFixos.findIndex(row => row.id === record.id);
@@ -172,7 +186,8 @@
     if (existing?.investmentId) throw new Error("Edite esta saída no investimento vinculado.");
     if (existing?.monthlyId) throw new Error("Este recebimento pertence ao histórico de mensalidades, módulo desativado. O vínculo foi preservado.");
     if (existing?.fixedExpenseId && input.tipo !== "Saída") throw new Error("Uma parcela de gasto fixo deve permanecer como saída financeira.");
-    const record = { ...existing, ...input, id: existing?.id || uid(), nome: input.nome.trim(), categoria: text(input.categoria).trim() || "Outro", responsavel: text(input.categoria).trim() || "Outro", valor: input.valorCentavos / 100 * (input.tipo === "Saída" ? -1 : 1), status: isSettled(input) ? "Pago" : input.status, pagoEm: isSettled(input) ? input.pagoEm : "", updatedAt: new Date().toISOString() };
+    const categoryName = rememberCategory(target, input.categoria, input.tipo);
+    const record = { ...existing, ...input, id: existing?.id || uid(), nome: input.nome.trim(), categoria: categoryName, responsavel: categoryName, valor: input.valorCentavos / 100 * (input.tipo === "Saída" ? -1 : 1), status: isSettled(input) ? "Pago" : input.status, pagoEm: isSettled(input) ? input.pagoEm : "", updatedAt: new Date().toISOString() };
     if (!existing) record.createdAt = record.updatedAt;
     const index = target.financeiro.findIndex(row => row.id === record.id);
     if (index < 0) target.financeiro.push(record); else target.financeiro[index] = record;
@@ -234,7 +249,8 @@
     if (id && !existing) throw new Error("Este investimento não está mais disponível. Atualize a página.");
     const selected = input.movementId && target.financeiro.find(row => row.id === input.movementId);
     if (input.geraSaida !== false && input.movementId && (!selected || direction(selected) !== "Saída" || selected.monthlyId || selected.fixedExpenseId || selected.investmentId && selected.investmentId !== id)) throw new Error("A saída escolhida não está disponível para este investimento.");
-    const record = { ...existing, ...input, id: existing?.id || uid(), nome: input.nome.trim(), categoria: text(input.categoria).trim() || "Outro", valor: input.valorCentavos / 100, updatedAt: new Date().toISOString() };
+    const categoryName = rememberCategory(target, input.categoria, "Saída");
+    const record = { ...existing, ...input, id: existing?.id || uid(), nome: input.nome.trim(), categoria: categoryName, valor: input.valorCentavos / 100, updatedAt: new Date().toISOString() };
     if (!existing) record.createdAt = record.updatedAt;
     if (existing && (existing.movementId !== record.movementId || record.geraSaida === false)) detachInvestment(target, existing);
     const index = target.investimentos.findIndex(row => row.id === record.id);
@@ -276,7 +292,13 @@
     return `<span class="ceo-badge ${isSettled(row) ? "green" : isCancelled(row) ? "muted" : overdue ? "red" : "amber"}">${safe(isSettled(row) ? direction(row) === "Entrada" ? "Recebido" : "Pago" : overdue ? "Atrasado" : row.status || "Pendente")}</span>`;
   }
   function filterMarkup(filters, rows, investment) {
-    const categories = [...new Set(rows.map(category))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    const names = new Map();
+    rows.forEach(row => { if (!names.has(categoryKey(category(row)))) names.set(categoryKey(category(row)), category(row)); });
+    const categories = [...names.values()].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    if (filters.category) {
+      if (names.has(categoryKey(filters.category))) filters.category = names.get(categoryKey(filters.category));
+      else categories.push(filters.category);
+    }
     return `<div class="ceo-toolbar ceo-finance-filters">
       ${field("De", `<input type="date" data-filter="from" value="${safe(filters.from)}">`)}
       ${field("Até", `<input type="date" data-filter="to" value="${safe(filters.to)}">`)}
@@ -305,7 +327,7 @@
   function financeRows(target, filters) {
     return (target.financeiro || []).filter(row => {
       if (!inPeriod(effectiveDate(row), filters)) return false;
-      if (filters.category && category(row) !== filters.category) return false;
+      if (filters.category && categoryKey(category(row)) !== categoryKey(filters.category)) return false;
       if (filters.type && direction(row) !== filters.type) return false;
       if (filters.query && !word(`${row.nome} ${row.observacoes || ""}`).includes(word(filters.query))) return false;
       if (filters.status === "Liquidado" && !isSettled(row)) return false;
@@ -322,29 +344,139 @@
   function wireFilters(container, filters, renderFn) {
     container.querySelectorAll("[data-filter]").forEach(control => control.addEventListener("change", () => {
       filters[control.dataset.filter] = control.value;
+      if (renderFn === renderFinance && control.dataset.filter === "status") {
+        if (["Pendente", "Agendado", "Atrasado"].includes(control.value)) settings.chartMode = "pending";
+        if (control.value === "Liquidado") settings.chartMode = "realized";
+      }
       if (filters.from && filters.to && filters.from > filters.to) { control.setCustomValidity("O início do período deve ser anterior ao fim."); control.reportValidity(); return; }
       container.querySelectorAll("[data-filter]").forEach(element => element.setCustomValidity(""));
       renderFn(container);
     }));
     container.querySelector("[data-clear]").onclick = () => { Object.assign(filters, { from: "", to: "", query: "", category: "", type: "", status: "" }); renderFn(container); };
   }
+  function categoryField(value, type, listId) {
+    const names = categoryTools().list(current(), type, categoryAdapter());
+    const selected = names.find(name => categoryKey(name) === categoryKey(value)) || value;
+    if (selected && !names.includes(selected)) names.push(selected);
+    return `<div class="ceo-field ceo-category-picker" data-category-picker data-category-type="${safe(type)}">
+      <div class="ceo-category-picker-head"><label for="${listId}">Categoria</label><button class="ceo-button" type="button" data-new-category aria-controls="${listId}-new" aria-expanded="false">＋ Nova categoria</button></div>
+      <select id="${listId}" name="categoria" data-category-select required aria-describedby="${listId}-hint">${options(names, selected)}</select>
+      <small id="${listId}-hint" data-category-hint></small>
+      <div id="${listId}-new" class="ceo-category-new" hidden>
+        <label for="${listId}-name">Nome da nova categoria</label>
+        ${input("categoria", "", `id="${listId}-name" data-category-name required disabled maxlength="80" pattern=".*\\S.*" title="Digite um nome para a categoria." autocomplete="off" aria-describedby="${listId}-new-hint"`)}
+        <small id="${listId}-new-hint" data-new-category-hint></small>
+      </div>
+    </div>`;
+  }
+  function wireCategoryFields(element) {
+    element.querySelectorAll("[data-category-picker]").forEach(picker => {
+      const select = picker.querySelector("[data-category-select]"), name = picker.querySelector("[data-category-name]");
+      const button = picker.querySelector("[data-new-category]"), panel = picker.querySelector(".ceo-category-new");
+      const type = element.querySelector('[name="tipo"]');
+      let previousType = picker.dataset.categoryType;
+      const selectedByType = new Map([[previousType, select.value]]);
+      function updateType() {
+        const direction = type?.value || picker.dataset.categoryType, outgoing = direction === "Saída";
+        if (direction !== previousType) {
+          selectedByType.set(previousType, select.value);
+          const names = categoryTools().list(current(), direction, categoryAdapter());
+          const preferred = selectedByType.get(direction) || select.value;
+          const fallback = outgoing ? "Outro" : "Receita";
+          const selected = names.find(name => categoryKey(name) === categoryKey(preferred)) || names.find(name => categoryKey(name) === categoryKey(fallback));
+          select.innerHTML = options(names, selected);
+          previousType = direction;
+        }
+        picker.querySelector("[data-category-hint]").textContent = `Escolha uma categoria para suas ${outgoing ? "saídas" : "entradas"} ou cadastre uma nova.`;
+        picker.querySelector("[data-new-category-hint]").textContent = `Será cadastrada para ${outgoing ? "saídas" : "entradas"} ao salvar e ficará disponível nos próximos lançamentos.`;
+        name.placeholder = outgoing ? "Ex.: Alimentação da equipe" : "Ex.: Consultoria";
+      }
+      button.onclick = () => {
+        const creating = panel.hidden;
+        panel.hidden = !creating; select.disabled = creating; name.disabled = !creating;
+        select.hidden = creating; picker.querySelector("[data-category-hint]").hidden = creating;
+        button.setAttribute("aria-expanded", String(creating));
+        button.textContent = creating ? "Cancelar nova categoria" : "＋ Nova categoria";
+        (creating ? name : select).focus();
+      };
+      type?.addEventListener("change", updateType);
+      updateType();
+    });
+  }
+  function openCategories() {
+    const element = dialog("Categorias financeiras", `<p>Organize suas entradas e saídas com categorias que fazem sentido para a ZAMA.</p><div class="ceo-form-grid">
+      ${field("Usar em", `<select name="tipo">${options(["Saída", "Entrada"], "Saída")}</select>`)}
+      ${field("Nome da categoria", input("nome", "", 'required maxlength="80" autocomplete="off" placeholder="Ex.: Alimentação, Aluguel, Consultoria"'))}
+      <section class="ceo-field-wide ceo-category-catalog"><h3>Categorias disponíveis</h3><p>Você já pode usá-las nos seus lançamentos.</p><div data-category-list class="ceo-category-chips"></div></section></div>`, "Cadastrar categoria", values => {
+      // Validate before committing so a helpful field error stays in the dialog.
+      categoryTools().saveCategory(structuredClone(current()), values, categoryAdapter());
+      return ceoCommit(draft => categoryTools().saveCategory(draft, values, categoryAdapter()), "Categoria cadastrada.");
+    });
+    const type = element.querySelector('[name="tipo"]');
+    function updateList() {
+      element.querySelector("[data-category-list]").innerHTML = categoryTools().list(current(), type.value, categoryAdapter()).map(name => `<span>${safe(name)}</span>`).join("");
+    }
+    type.addEventListener("change", updateList); updateList();
+    return element;
+  }
+  function categoryChart(group, type, mode) {
+    const outgoing = type === "Saída", pending = mode === "pending", circular = settings.chartStyle === "circle";
+    const title = outgoing ? "Para onde vai o dinheiro" : "De onde vem o dinheiro";
+    const label = outgoing ? pending ? "Total a pagar" : "Total pago" : pending ? "Total a receber" : "Total recebido";
+    const percent = value => `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(value)}%`;
+    const colors = ["#171717", "#777777", "#b6b6b6", "#424242", "#959595", "#d2d2d2", "#606060", "#a6a6a6"];
+    let offset = 0;
+    const donut = circular ? `<div class="ceo-category-donut-wrap"><svg class="ceo-category-donut" viewBox="0 0 200 200" role="img" aria-label="${group.categories.length ? `Distribuição de ${outgoing ? "saídas" : "entradas"} em ${group.categories.length} ${group.categories.length === 1 ? "categoria" : "categorias"}. Valores na legenda.` : "Nenhum valor para distribuir"}"><circle class="ceo-category-donut-base" cx="100" cy="100" r="78" fill="none" stroke-width="28"></circle>${group.categories.map((item, index) => {
+      const share = Math.max(0, Math.min(100, item.percentage)), start = offset;
+      offset += share;
+      return `<circle data-chart-segment="${safe(item.name)}" cx="100" cy="100" r="78" fill="none" stroke="${colors[index % colors.length]}" stroke-width="28" pathLength="100" stroke-dasharray="${share} ${100 - share}" stroke-dashoffset="${-start}" transform="rotate(-90 100 100)"><title>${safe(item.name)}: ${formatMoney(item.totalCents)} · ${percent(item.percentage)}</title></circle>`;
+    }).join("")}</svg><div class="ceo-category-donut-center" aria-hidden="true"><strong>${group.categories.length}</strong><span>${group.categories.length === 1 ? "categoria" : "categorias"}</span></div></div>` : "";
+    return `<article class="ceo-card ceo-category-chart" data-category-chart="${outgoing ? "expense" : "income"}" data-chart-view="${circular ? "circle" : "bars"}" aria-label="${title}">
+      <div class="ceo-category-chart-head"><span class="ceo-category-icon ${outgoing ? "" : "income"}" aria-hidden="true">${outgoing ? "↗" : "↙"}</span><div><span class="ceo-category-eyebrow">${outgoing ? "Saídas" : "Entradas"} por categoria</span><h3>${title}</h3></div></div>
+      <div class="ceo-category-total"><strong>${formatMoney(group.totalCents)}</strong><span>${label} no período filtrado</span></div>
+      ${donut}
+      ${group.categories.length ? `<ol class="ceo-category-bars${circular ? " ceo-category-legend" : ""}">${group.categories.map((item, index) => `<li><button type="button" class="ceo-category-bar-button" data-chart-category="${safe(item.name)}" data-chart-type="${type}" aria-label="Ver lançamentos de ${safe(item.name)} (${type})" aria-describedby="chart-${outgoing ? "expense" : "income"}-${index}"><span class="ceo-category-bar-label"><span${circular ? ' class="ceo-category-legend-name"' : ""}>${circular ? `<i class="ceo-category-swatch" style="background:${colors[index % colors.length]}" aria-hidden="true"></i><span>${safe(item.name)}</span>` : safe(item.name)}</span><span id="chart-${outgoing ? "expense" : "income"}-${index}" class="ceo-category-bar-numbers"><strong>${formatMoney(item.totalCents)}</strong><small>${percent(item.percentage)}</small></span></span>${circular ? "" : `<span class="ceo-category-track" aria-hidden="true"><span style="width:${Math.max(0, Math.min(100, item.percentage))}%"></span></span>`}</button></li>`).join("")}</ol><p class="ceo-category-footnote">Clique em uma categoria para ver seus lançamentos.</p>` : `<div class="ceo-category-empty">${circular ? "" : `<span aria-hidden="true">${outgoing ? "↗" : "↙"}</span>`}<strong>Nenhuma ${outgoing ? "saída" : "entrada"} ${pending ? "pendente" : outgoing ? "paga" : "recebida"}</strong><p>Cadastre uma movimentação ou ajuste os filtros para visualizar a distribuição.</p></div>`}
+    </article>`;
+  }
+  function categoryCharts(rows) {
+    const mode = settings.chartMode, groups = categoryTools().summarize(rows, categoryAdapter(), mode);
+    return `<section class="ceo-category-analysis" aria-label="Gráficos por categoria"><div class="ceo-category-analysis-head"><div><h2>Seu dinheiro, por categoria</h2><p>Valores e percentuais conforme os filtros selecionados. Cancelados ficam fora dos gráficos.</p></div><div class="ceo-chart-controls"><div class="ceo-chart-modes" role="group" aria-label="Valores dos gráficos"><button type="button" data-chart-mode="realized" aria-pressed="${mode === "realized"}">Pagos e recebidos</button><button type="button" data-chart-mode="pending" aria-pressed="${mode === "pending"}">A pagar e receber</button></div><div class="ceo-chart-modes ceo-chart-styles" role="group" aria-label="Formato dos gráficos"><button type="button" data-chart-style="bars" aria-pressed="${settings.chartStyle === "bars"}">Barras</button><button type="button" data-chart-style="circle" aria-pressed="${settings.chartStyle === "circle"}">Círculo</button></div></div></div><div class="ceo-category-chart-grid">${categoryChart(groups.expense, "Saída", mode)}${categoryChart(groups.income, "Entrada", mode)}</div></section>`;
+  }
   function renderFinance(container) {
     const target = current(); normalize(target);
     const filters = settings.finance ||= defaultFilters();
     const sum = totals(target, filters), rows = financeRows(target, filters);
     const older = filters.from ? overdueBefore(target, filters.from) : [];
-    container.innerHTML = `<div class="ceo-toolbar"><div><h2>Movimentações financeiras</h2><p>Entradas, saídas e compromissos da ZAMA.</p></div><div class="ceo-row-actions"><button class="ceo-button" data-fixed>Gastos fixos</button><button class="ceo-button primary" data-new>＋ Nova movimentação</button></div></div>
+    container.innerHTML = `<div class="ceo-toolbar"><div><h2>Movimentações financeiras</h2><p>Entradas, saídas e compromissos da ZAMA.</p></div><div class="ceo-row-actions"><button class="ceo-button" data-categories>Categorias</button><button class="ceo-button" data-fixed>Gastos fixos</button><button class="ceo-button primary" data-new>＋ Nova movimentação</button></div></div>
       <div class="ceo-grid ceo-finance-summary">${metric("Entradas recebidas", sum.incomeCents, "money-positive")}${metric("Saídas pagas", sum.expenseCents, "money-negative")}${metric("Saldo do período", sum.balanceCents)}${metric("A receber", sum.receivableCents)}${metric("A pagar", sum.payableCents)}</div>
       ${older.length ? `<section class="ceo-card ceo-toolbar"><div><strong>${older.length} ${older.length === 1 ? "pendência vencida anterior" : "pendências vencidas anteriores"} ao período</strong><p>${formatMoney(older.filter(row => direction(row) === "Saída").reduce((sum, row) => sum + amountCents(row), 0))} a pagar · ${formatMoney(older.filter(row => direction(row) === "Entrada").reduce((sum, row) => sum + amountCents(row), 0))} a receber</p></div><button class="ceo-button" data-overdue>Ver todas as vencidas</button></section>` : ""}
       <section class="ceo-card"><div class="ceo-toolbar"><button class="ceo-button" data-account="all" aria-pressed="${!filters.type && !filters.status}">Todas as movimentações</button><button class="ceo-button" data-account="payable" aria-pressed="${filters.type === "Saída" && filters.status === "Pendente"}">Contas a pagar</button><button class="ceo-button" data-account="receivable" aria-pressed="${filters.type === "Entrada" && filters.status === "Pendente"}">Contas a receber</button></div>
-      ${filterMarkup(filters, target.financeiro, false)}<p class="ceo-muted">Os indicadores acompanham todos os filtros abaixo. Valores liquidados usam a data do pagamento ou recebimento; pendências usam o vencimento. ${rows.length} ${rows.length === 1 ? "movimentação encontrada" : "movimentações encontradas"}.</p>
+      ${filterMarkup(filters, target.financeiro, false)}<p class="ceo-muted">Os indicadores e gráficos acompanham estes filtros. Valores pagos ou recebidos usam a data da baixa; pendências usam o vencimento.</p></section>
+      ${categoryCharts(rows)}
+      <section class="ceo-card" data-finance-ledger><div class="ceo-toolbar"><div><h2>Lançamentos</h2><p>${rows.length} ${rows.length === 1 ? "movimentação encontrada" : "movimentações encontradas"}.</p></div></div>
       ${rows.length ? `<div class="ceo-table-wrap ceo-table-scroll"><table class="ceo-table"><thead><tr><th>Descrição / categoria</th><th>Tipo</th><th>Data / vencimento</th><th>Situação</th><th>Valor</th><th>Ações</th></tr></thead><tbody>${rows.map(row => `<tr><td><strong>${safe(row.nome || "Sem descrição")}</strong><br><small>${safe(category(row))}${row.investmentId ? " · Investimento vinculado" : row.monthlyId ? " \u00b7 Mensalidade vinculada" : row.fixedExpenseId ? ` \u00b7 Gasto fixo \u00b7 ${monthLabel(row.competencia)}` : ""}</small></td><td>${safe(direction(row))}</td><td>${dateLabel(row.data || row.prazo)}<br><small>Vence ${dateLabel(row.prazo)}${isSettled(row) ? `<br>Liquidado ${dateLabel(effectiveDate(row))}` : ""}</small></td><td>${badge(row)}</td><td class="${direction(row) === "Entrada" ? "money-positive" : "money-negative"}">${direction(row) === "Entrada" ? "+" : "−"} ${formatMoney(amountCents(row))}</td><td><div class="ceo-row-actions">${!isSettled(row) && !isCancelled(row) && !row.investmentId && !row.monthlyId ? `<button class="ceo-button" data-settle="${safe(row.id)}" aria-label="Registrar baixa de ${safe(row.nome)}">Registrar baixa</button>` : ""}<button class="ceo-button" data-edit="${safe(row.id)}" aria-label="Editar ${safe(row.nome)}">Editar</button><button class="ceo-button" data-delete="${safe(row.id)}" aria-label="${row.fixedExpenseId ? "Cancelar parcela de" : "Excluir"} ${safe(row.nome)}">${row.fixedExpenseId ? "Cancelar parcela" : "Excluir"}</button></div></td></tr>`).join("")}</tbody></table></div>` : '<div class="ceo-empty"><strong>Nenhuma movimentação neste período</strong><p>Cadastre uma entrada ou saída, ou ajuste os filtros.</p></div>'}</section>`;
     prepareMobileTable(container);
     wireFilters(container, filters, renderFinance);
     container.querySelector("[data-new]").onclick = () => openMovement();
+    container.querySelector("[data-categories]").onclick = () => openCategories();
+    container.querySelectorAll("[data-chart-mode]").forEach(button => button.onclick = () => {
+      settings.chartMode = button.dataset.chartMode;
+      if (settings.chartMode === "pending" && filters.status === "Liquidado" || settings.chartMode === "realized" && ["Pendente", "Agendado", "Atrasado"].includes(filters.status)) filters.status = "";
+      renderFinance(container);
+    });
+    container.querySelectorAll("[data-chart-style]").forEach(button => button.onclick = () => {
+      settings.chartStyle = button.dataset.chartStyle;
+      renderFinance(container);
+    });
+    container.querySelectorAll("[data-chart-category]").forEach(button => button.onclick = () => {
+      const status = settings.chartMode === "pending" ? ["Pendente", "Agendado", "Atrasado"].includes(filters.status) ? filters.status : "Pendente" : "Liquidado";
+      Object.assign(filters, { category: button.dataset.chartCategory, type: button.dataset.chartType, status });
+      renderFinance(container);
+      container.querySelector("[data-finance-ledger]").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
     container.querySelector("[data-fixed]").onclick = () => goToModule("financeiro", { financeView: "fixos" });
-    container.querySelector("[data-overdue]")?.addEventListener("click", () => { Object.assign(filters, { from: "", to: "", type: "", category: "", query: "", status: "Atrasado" }); renderFinance(container); });
-    container.querySelectorAll("[data-account]").forEach(button => button.onclick = () => { filters.type = button.dataset.account === "payable" ? "Saída" : button.dataset.account === "receivable" ? "Entrada" : ""; filters.status = button.dataset.account === "all" ? "" : "Pendente"; renderFinance(container); });
+    container.querySelector("[data-overdue]")?.addEventListener("click", () => { Object.assign(filters, { from: "", to: "", type: "", category: "", query: "", status: "Atrasado" }); settings.chartMode = "pending"; renderFinance(container); });
+    container.querySelectorAll("[data-account]").forEach(button => button.onclick = () => { filters.type = button.dataset.account === "payable" ? "Saída" : button.dataset.account === "receivable" ? "Entrada" : ""; filters.status = button.dataset.account === "all" ? "" : "Pendente"; settings.chartMode = button.dataset.account === "all" ? "realized" : "pending"; renderFinance(container); });
     container.querySelectorAll("[data-edit]").forEach(button => button.onclick = () => openMovement(button.dataset.edit));
     container.querySelectorAll("[data-delete]").forEach(button => button.onclick = () => deleteMovementUI(button.dataset.delete));
     container.querySelectorAll("[data-settle]").forEach(button => button.onclick = () => openSettlement(button.dataset.settle));
@@ -375,7 +507,7 @@
     const data = { nome: "", categoria: "Outro", dia: 5, status: "Ativo", recurrenceStart: today().slice(0, 7), ...row };
     return dialog(row ? "Editar gasto fixo" : "Novo gasto fixo", `<p>Gere as parcelas mensais na competência desejada. Pausar ou cancelar o cadastro suspende novas parcelas e preserva o histórico.</p><div class="ceo-form-grid">
       ${field("Descrição", input("nome", data.nome, 'required maxlength="180"'))}${field("Valor mensal (R$)", amountInput(row ? amountCents(row) : 0))}
-      ${field("Categoria", input("categoria", row ? category(row) : data.categoria, 'required maxlength="80"'))}${field("Dia do vencimento", input("dia", data.dia, 'type="number" min="1" max="31" step="1" required') + '<small>Dias 29, 30 e 31 são ajustados ao último dia do mês.</small>')}
+      ${categoryField(row ? category(row) : data.categoria, "Saída", "ceo-fixed-categories")}${field("Dia do vencimento", input("dia", data.dia, 'type="number" min="1" max="31" step="1" required') + '<small>Dias 29, 30 e 31 são ajustados ao último dia do mês.</small>')}
       ${field("Situação", `<select name="status">${options(["Ativo", "Pausado", "Cancelado"], data.status)}</select>`)}${field("Competência inicial", `<input type="month" name="recurrenceStart" value="${safe(data.recurrenceStart)}" ${row?.recurrenceStart ? "readonly" : ""} required>`)}
       ${field("Observações", `<textarea name="observacoes" rows="3" maxlength="5000">${safe(data.observacoes || "")}</textarea>`, "ceo-field-wide")}
       ${!row ? `<label class="ceo-field ceo-field-wide ceo-checkbox"><input type="checkbox" name="generateCurrent" checked><span>Gerar a conta do mês atual ao salvar, se a competência inicial já tiver começado.</span></label>` : '<p class="ceo-field-wide ceo-muted">As parcelas já geradas mantêm o valor, o vencimento e a situação originais. Para ajustar uma parcela, use “Ver parcela”.</p>'}</div>`, "Salvar gasto fixo", values => {
@@ -403,7 +535,7 @@
   function renderInvestments(container) {
     const target = current(); normalize(target);
     const filters = settings.investments ||= defaultFilters();
-    const rows = target.investimentos.filter(row => inPeriod(row.data || "", filters) && (!filters.category || category(row) === filters.category) && (!filters.status || row.status === filters.status) && (!filters.query || word(`${row.nome} ${row.objetivo || ""} ${row.observacoes || ""}`).includes(word(filters.query)))).sort((a, b) => text(b.data).localeCompare(text(a.data)));
+    const rows = target.investimentos.filter(row => inPeriod(row.data || "", filters) && (!filters.category || categoryKey(category(row)) === categoryKey(filters.category)) && (!filters.status || row.status === filters.status) && (!filters.query || word(`${row.nome} ${row.objetivo || ""} ${row.observacoes || ""}`).includes(word(filters.query)))).sort((a, b) => text(b.data).localeCompare(text(a.data)));
     const realized = rows.filter(isRealized).reduce((sum, row) => sum + amountCents(row), 0), planned = rows.filter(row => row.status === "Planejado").reduce((sum, row) => sum + amountCents(row), 0);
     container.innerHTML = `<div class="ceo-toolbar"><div><h2>Crescimento da ZAMA</h2><p>Invista com clareza de propósito e acompanhe a execução.</p></div><button class="ceo-button primary" data-new>＋ Novo investimento</button></div>
       <div class="ceo-grid ceo-finance-summary">${metric("Investimentos realizados", realized)}${metric("Investimentos planejados", planned)}<article class="ceo-card ceo-finance-metric"><span>Contabilização</span><p>Saídas vinculadas entram uma única vez no saldo financeiro.</p></article></div>
@@ -433,6 +565,7 @@
         element.close();
       } catch (failure) { error.textContent = failure.message || "Não foi possível concluir a ação."; error.hidden = false; buttons.forEach(button => button.disabled = false); }
     };
+    wireCategoryFields(element);
     element.showModal(); return element;
   }
   function confirmAction(title, message, mutate, success) { return dialog(title, `<p>${safe(message)}</p>`, "Confirmar exclusão", () => ceoCommit(mutate, success)); }
@@ -461,7 +594,7 @@
       ${field("Descrição", input("nome", data.nome || "", 'required maxlength="180"'))}
       ${field("Valor (R$)", amountInput(row ? amountCents(row) : 0))}
       ${field("Tipo", `<select name="tipo">${options(["Entrada", "Saída"], data.tipo)}</select>`)}
-      ${field("Categoria", input("categoria", data.categoria, 'list="ceo-finance-categories" required maxlength="80"') + '<datalist id="ceo-finance-categories"><option>Receita</option><option>Despesa</option><option>Marketing</option><option>Produto</option><option>Equipamentos</option><option>Imposto</option><option>Folha</option><option>Fornecedor</option><option>Sistema</option><option>Outro</option></datalist>')}
+      ${categoryField(data.categoria, data.tipo, "ceo-finance-categories")}
       ${field("Data do lançamento", dateInput("data", data.data || data.prazo || today()))}
       ${field("Vencimento", dateInput("prazo", data.prazo || data.data || today()))}
       ${field("Situação", `<select name="status">${options(["Pendente", "Pago", "Recebido", "Agendado", "Atrasado", "Cancelado"], data.status)}</select>`)}
@@ -485,7 +618,7 @@
     const element = dialog(row ? "Editar investimento" : "Novo investimento", `<div class="ceo-form-grid">
       ${field("Nome", input("nome", data.nome || "", 'required maxlength="180"'))}
       ${field("Valor (R$)", amountInput(row ? amountCents(row) : 0))}
-      ${field("Categoria", input("categoria", data.categoria, 'list="ceo-investment-categories" required maxlength="80"') + '<datalist id="ceo-investment-categories"><option>Marketing</option><option>Produto</option><option>Equipamentos</option><option>Capacitação</option><option>Outro</option></datalist>')}
+      ${categoryField(data.categoria, "Saída", "ceo-investment-categories")}
       ${field("Data prevista / realizada", dateInput("data", data.data))}
       ${field("Situação", `<select name="status">${options(["Planejado", "Realizado", "Cancelado"], data.status)}</select>`)}
       ${field("Objetivo", input("objetivo", data.objetivo || "", 'maxlength="500"'))}
@@ -509,7 +642,7 @@
     return element;
   }
 
-  function reset() { settings.finance = null; settings.investments = null; settings.fixedMonth = ""; }
+  function reset() { settings.finance = null; settings.investments = null; settings.fixedMonth = ""; settings.chartMode = "realized"; settings.chartStyle = "bars"; }
   function reportMonth() { return (settings.finance?.from || settings.finance?.to || today()).slice(0, 7); }
   global.ZamaFinance = { normalize, totals, cents, amountCents, direction, isSettled, isCancelled, isRealized, effectiveDate, formatMoney, validDate, saveMovement, removeMovement, saveInvestment, removeInvestment, syncInvestment, financeRows, renderFinance, renderInvestments, openMovement, openInvestment, saveFixedExpense, generateFixedExpenses, fixedDueDate, fixedMovement, settleMovement, overdueBefore, renderFixedExpenses, openFixedExpense, reset, reportMonth };
   if (typeof module !== "undefined" && module.exports) module.exports = global.ZamaFinance;

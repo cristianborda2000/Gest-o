@@ -5,7 +5,8 @@
   const legacyCollections = ["projetos", "marketing", "clientes", "mensalidades", "agenda", "rh", "financeiro", "gastosFixos"];
   const modernCollections = ["investimentos", "ideias", "contractHistory"];
   const collections = [...legacyCollections, ...modernCollections];
-  const labels = { projetos: "Projetos", marketing: "Marketing", clientes: "Clientes", mensalidades: "Mensalidades", agenda: "Agenda", rh: "Equipe / RH", financeiro: "Movimentações", gastosFixos: "Gastos fixos", investimentos: "Investimentos", ideias: "Ideias", contractHistory: "Contratos" };
+  const optionalCollections = ["financeCategories"];
+  const labels = { projetos: "Projetos", marketing: "Marketing", clientes: "Clientes", mensalidades: "Mensalidades", agenda: "Agenda", rh: "Equipe / RH", financeiro: "Movimentações", gastosFixos: "Gastos fixos", investimentos: "Investimentos", ideias: "Ideias", contractHistory: "Contratos", financeCategories: "Categorias financeiras" };
   const text = value => String(value == null ? "" : value);
   const esc = value => text(value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
   const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
@@ -62,6 +63,17 @@
       if (!own(data, key)) throw new Error(`Backup incompleto: falta ${labels[key]}. Use “Baixar backup completo”.`);
     }
     for (const key of [...collections, "dashboard"]) if (own(data, key)) validateCollection(data[key], key);
+    if (own(data, "financeCategories")) {
+      validateCollection(data.financeCategories, "financeCategories");
+      const names = new Set();
+      for (const row of data.financeCategories) {
+        const name = text(row.nome).trim().replace(/\s+/g, " ");
+        if (!text(row.id).trim() || !name || name.length > 80 || !["Entrada", "Saída"].includes(row.tipo)) throw new Error("Categoria financeira inválida: informe identificador, nome de até 80 caracteres e tipo Entrada ou Saída.");
+        const key = `${row.tipo}:${name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()}`;
+        if (names.has(key)) throw new Error("Há categorias financeiras repetidas para o mesmo tipo.");
+        names.add(key);
+      }
+    }
     for (const key of ["companyProfile", "agendaSettings", "backups", "reminderReceipts"]) {
       if (own(data, key) && !plain(data[key])) throw new Error(`Configuração ${key} inválida.`);
     }
@@ -97,10 +109,10 @@
       if (document.type !== "zama-backup" || document.version !== VERSION) throw new Error("Formato ou versão de backup não suportado.");
       if (typeof document.generatedAt !== "string" || !Number.isFinite(Date.parse(document.generatedAt))) throw new Error("Data de geração do backup inválida.");
       validateState(document.data);
-      return { data: clone(document.data), legacy: false, generatedAt: document.generatedAt, preserved: [] };
+      return { data: clone(document.data), legacy: false, generatedAt: document.generatedAt, preserved: optionalCollections.filter(key => !own(document.data, key)) };
     }
     validateState(document, true);
-    return { data: clone(document), legacy: true, generatedAt: "", preserved: modernCollections.filter(key => !own(document, key)) };
+    return { data: clone(document), legacy: true, generatedAt: "", preserved: [...modernCollections, ...optionalCollections].filter(key => !own(document, key)) };
   }
 
   function restoredState(backup, current) {
@@ -109,6 +121,8 @@
       // Historical exports predate some modules. Do not erase modules or settings absent in that format.
       for (const [key, value] of Object.entries(current)) if (!own(result, key)) result[key] = clone(value);
     }
+    // Version-1 backups exported before the category catalog must not erase it.
+    for (const key of optionalCollections) if (!own(result, key) && own(current, key)) result[key] = clone(current[key]);
     validateState(result);
     return result;
   }
@@ -206,7 +220,7 @@
 
   function openRestore(backup, filename, getState, onRestore) {
     const existing = getState();
-    const rows = collections.map(key => `<tr><td>${esc(labels[key])}</td><td>${existing[key]?.length || 0}</td><td>${backup.preserved.includes(key) ? "Preservado" : backup.data[key]?.length || 0}</td></tr>`).join("");
+    const rows = [...collections, ...optionalCollections].map(key => `<tr><td>${esc(labels[key])}</td><td>${existing[key]?.length || 0}</td><td>${backup.preserved.includes(key) ? "Preservado" : backup.data[key]?.length || 0}</td></tr>`).join("");
     const element = dialog("Revisar restauração", `<form><p>Arquivo: <strong>${esc(filename)}</strong></p><p class="ceo-muted">${backup.legacy ? "Backup completo do formato anterior. Coleções e configurações ausentes serão preservadas." : `Backup completo · versão ${VERSION}`}</p><p>A restauração substitui os registros desta conta pelos registros do arquivo. Uma cópia completa dos dados atuais será baixada automaticamente antes de salvar.</p><div class="ceo-table-scroll" style="max-height:260px;overflow:auto"><table class="ceo-table"><thead><tr><th>Dados</th><th>Atuais</th><th>Após restaurar</th></tr></thead><tbody>${rows}</tbody></table></div><label class="ceo-field">Digite RESTAURAR para confirmar<input name="confirmation" autocomplete="off" required pattern="RESTAURAR" placeholder="RESTAURAR"></label><p class="ceo-form-error" role="alert" hidden></p><div class="ceo-toolbar ceo-dialog-actions"><button class="ceo-button" type="button" data-close>Cancelar</button><button class="ceo-button primary" type="submit" disabled>Restaurar dados</button></div></form>`);
     const form = element.querySelector("form"), submit = form.querySelector('[type="submit"]'), error = form.querySelector("[role=alert]");
     let busy = false;

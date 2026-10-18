@@ -31,9 +31,53 @@ test('legacy complete backups preserve modern collections and settings absent in
   const current = blank(); current.investimentos = [{ id: 'inv', nome: 'Mantido', valor: 20 }];
   current.ideias = [{ id: 'idea', titulo: 'Não apagar' }]; current.agendaSettings = { enabled: false, leadMinutes: 15 };
   const parsed = A.parseBackup(JSON.stringify(legacy)), restored = A.restoredState(parsed, current);
-  assert.equal(parsed.legacy, true); assert.deepEqual(parsed.preserved, ['investimentos', 'ideias', 'contractHistory']);
+  assert.equal(parsed.legacy, true); assert.deepEqual(parsed.preserved, ['investimentos', 'ideias', 'contractHistory', 'financeCategories']);
   assert.deepEqual(restored.ideias, current.ideias); assert.deepEqual(restored.investimentos, current.investimentos);
   assert.deepEqual(restored.agendaSettings, current.agendaSettings); assert.equal(restored.setupDone, true);
+});
+
+test('finance category catalogs roundtrip without mutation and an explicit empty catalog replaces the current one', () => {
+  const state = blank();
+  state.financeCategories = [
+    { id: 'food', nome: 'Alimentação', tipo: 'Saída' },
+    { id: 'sales', nome: 'Vendas', tipo: 'Entrada' },
+    { id: 'refund', nome: 'Alimentação', tipo: 'Entrada' }
+  ];
+  const before = structuredClone(state), parsed = A.parseBackup(JSON.stringify(A.makeBackup(state)));
+  const restored = A.restoredState(parsed, blank());
+  assert.deepEqual(restored.financeCategories, state.financeCategories);
+  assert.deepEqual(state, before); assert.deepEqual(parsed.preserved, []);
+  restored.financeCategories[0].nome = 'Changed';
+  assert.equal(state.financeCategories[0].nome, 'Alimentação');
+  const emptyCatalog = blank(); emptyCatalog.financeCategories = [];
+  assert.deepEqual(A.restoredState(A.parseBackup(A.makeBackup(emptyCatalog)), state).financeCategories, []);
+});
+
+test('backups predating finance categories remain compatible and preserve the current catalog', () => {
+  const current = blank(); current.financeCategories = [{ id: 'rent', nome: 'Aluguel', tipo: 'Saída' }];
+  for (const source of [A.makeBackup(blank()), blank()]) {
+    const parsed = A.parseBackup(JSON.stringify(source));
+    assert.ok(parsed.preserved.includes('financeCategories'));
+    const restored = A.restoredState(parsed, current);
+    assert.deepEqual(restored.financeCategories, current.financeCategories);
+    restored.financeCategories[0].nome = 'Changed';
+    assert.equal(current.financeCategories[0].nome, 'Aluguel');
+  }
+});
+
+test('invalid finance category catalogs are rejected before restoring account data', () => {
+  const valid = { id: 'rent', nome: 'Aluguel', tipo: 'Saída' };
+  const invalidCatalogs = [
+    {}, [null], [{}], [{ ...valid, id: '' }], [{ ...valid, id: 1 }],
+    [{ ...valid, nome: '   ' }], [{ ...valid, nome: 'a'.repeat(81) }],
+    [{ ...valid, nome: {} }], [{ ...valid, tipo: 'Despesa' }],
+    [valid, { ...valid, nome: 'Transporte' }],
+    [{ id: 'food', nome: 'Alimentação e café', tipo: 'Saída' }, { id: 'duplicate', nome: ' ALIMENTACAO   e CAFE ', tipo: 'Saída' }]
+  ];
+  for (const financeCategories of invalidCatalogs) {
+    const source = A.makeBackup(blank()); source.data.financeCategories = financeCategories;
+    assert.throws(() => A.parseBackup(source), /inválid|lista|repetid/);
+  }
 });
 
 test('malformed collections, row types, numeric values, settings and duplicate IDs fail validation', () => {

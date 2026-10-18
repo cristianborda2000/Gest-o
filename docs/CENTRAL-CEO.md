@@ -18,6 +18,27 @@ financeiros na conta de produção durante a implementação.
   e consulte contas a pagar/receber. A data de liquidação determina o mês do
   caixa; o vencimento determina o período das pendências. Gastos fixos continuam
   acessíveis. Recebimentos de mensalidades são editados na origem.
+- **Categorias financeiras:** use **Categorias** no Financeiro para cadastrar um
+  nome para entradas ou saídas. Ao adicionar uma movimentação, escolha o **Tipo**
+  (Entrada ou Saída) e selecione uma **Categoria** da lista. Para cadastrar outra,
+  clique em **Nova categoria**, digite o nome e salve o lançamento. A categoria
+  será cadastrada para o tipo escolhido e ficará disponível nas próximas listas.
+  Gastos fixos e investimentos também têm o botão **Nova categoria** para saídas.
+  Cancelar o cadastro ou uma falha ao salvar não grava uma categoria incompleta.
+  Nomes equivalentes em acentos, maiúsculas ou espaços não
+  criam duplicatas para o mesmo tipo. Categorias dos registros antigos continuam
+  disponíveis sem reescrever o histórico. Nomes antigos importados com mais de
+  80 caracteres continuam utilizáveis ao editar os registros; o limite de
+  80 caracteres vale para cadastrar categorias novas.
+- **Gráficos por categoria:** alterne entre **Pagos e recebidos** e **A pagar e
+  receber** para comparar valores e percentuais de entradas e saídas. Os gráficos
+  acompanham os filtros e excluem cancelados. Use **Barras** ou **Círculo** para
+  mudar a apresentação. O círculo mostra uma rosca com a participação de cada
+  categoria; a legenda apresenta os valores e percentuais. Clique em uma barra
+  ou categoria da legenda para abrir os lançamentos daquela categoria, tipo e
+  situação. Investimentos vinculados e
+  parcelas de gastos fixos são contabilizados somente pelos lançamentos no
+  financeiro, evitando somar o cadastro novamente.
 - **Investimentos:** diferencie Planejado, Realizado e Cancelado. Um investimento
   pode criar uma saída ou se vincular a uma saída existente. A mesma saída muda
   de pendente para paga quando o investimento é realizado. O investimento é
@@ -36,7 +57,7 @@ financeiros na conta de produção durante a implementação.
 ## Dados e compatibilidade
 
 Os novos campos são acrescentados ao JSON da linha já pertencente à conta:
-`investimentos`, `ideias`, `agendaSettings`, `reminderReceipts` e metadados das
+`investimentos`, `ideias`, `financeCategories`, `agendaSettings`, `reminderReceipts` e metadados das
 tarefas. IDs, observações, campos antigos e vínculos são preservados. As
 exceções de recorrência são registradas em `agenda[].exceptions`; não são
 criadas centenas de tarefas repetidas. Valores do financeiro mantêm `valor`
@@ -57,6 +78,9 @@ separado por usuário. Se existir o cache antigo, sem identificação de conta,
 Configurações oferece **Baixar backup local anterior**. Confira o arquivo antes
 de usar Importar dados; a importação substitui os registros e pede confirmação.
 Exportar dados continua gerando um backup completo, incluindo os novos módulos.
+O catálogo de categorias é incluído no backup. Restaurar um backup anterior ao
+catálogo, inclusive de versão 1, preserva as categorias atuais quando esse campo
+não estiver no arquivo.
 
 ## Lembretes e dependências
 

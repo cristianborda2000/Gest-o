@@ -16,7 +16,7 @@ async function fillMovement(page, values = {}) {
   await form.getByLabel('Descrição', { exact: true }).fill(values.nome || 'Compra de equipamento');
   await form.getByLabel('Valor (R$)', { exact: true }).fill(values.valor || '1250,51');
   await form.getByLabel('Tipo', { exact: true }).selectOption(values.tipo || 'Saída');
-  await form.getByLabel('Categoria', { exact: true }).fill(values.categoria || 'Equipamentos');
+  await form.getByLabel('Categoria', { exact: true }).selectOption(values.categoria || 'Equipamentos');
   await form.getByLabel('Data do lançamento', { exact: true }).fill('2026-09-29');
   await form.getByLabel('Vencimento', { exact: true }).fill('2026-09-30');
   await form.getByLabel('Situação', { exact: true }).selectOption(values.status || 'Pendente');
@@ -75,7 +75,7 @@ test('a planned investment becomes one paid outgoing movement and stays unique a
   let form = page.getByRole('dialog');
   await form.getByLabel('Nome', { exact: true }).fill('Campanha de crescimento');
   await form.getByLabel('Valor (R$)', { exact: true }).fill('8000,21');
-  await form.getByLabel('Categoria', { exact: true }).fill('Marketing');
+  await form.getByLabel('Categoria', { exact: true }).selectOption('Marketing');
   await form.getByLabel('Data prevista / realizada', { exact: true }).fill('2026-09-29');
   await form.getByLabel('Objetivo', { exact: true }).fill('Aumentar a aquisição de clientes.');
   await form.getByLabel('Situação', { exact: true }).selectOption('Planejado');
@@ -167,7 +167,7 @@ test('fixed expenses create a unique monthly payable, preserve its payment, and 
   await form.getByLabel('Descrição', { exact: true }).fill('Internet recorrente');
   await form.getByLabel('Valor mensal (R$)', { exact: true }).fill('199,99');
   await form.getByLabel('Dia do vencimento', { exact: true }).fill('31');
-  await form.getByLabel('Categoria', { exact: true }).fill('Sistema');
+  await form.getByLabel('Categoria', { exact: true }).selectOption('Sistema');
   await form.getByRole('button', { name: 'Salvar gasto fixo' }).click();
   await expect(form).not.toBeVisible();
   await expect(financeRow(page, 'Internet recorrente')).toContainText('30/09/2026');

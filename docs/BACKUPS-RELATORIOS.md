@@ -10,6 +10,7 @@ Em **Configurações**, use **Baixar backup completo** para proteger todos os m�
 - Backups parciais, coleções ou campos com tipos inválidos, IDs repetidos, versões desconhecidas, propriedades de protótipo e arquivos acima de 10 MB são recusados.
 - Valores financeiros armazenados somente em centavos são preservados na restauração e ao reabrir a conta. O valor legado em reais, quando presente, continua tendo prioridade.
 - Backups completos antigos continuam aceitos quando contêm todos os módulos originais. Coleções e configurações que não existiam no arquivo antigo são preservadas a partir da conta atual. Isso evita apagar ideias e investimentos ao restaurar um arquivo anterior à criação desses módulos.
+- Categorias financeiras são incluídas em `financeCategories`. Backups antigos sem esse campo, inclusive de versão 1, preservam o catálogo atual; um catálogo explicitamente vazio substitui o atual. A revisão informa quando as categorias serão preservadas.
 - Falhas de conexão preservam os dados atuais e a tela de revisão para nova tentativa. A gravação usa o mesmo controle de versão da conta para evitar sobrescrever uma mudança feita por outro dispositivo.
 - Trocar de conta ou espaço de trabalho invalida a restauração que estava aberta.
 
