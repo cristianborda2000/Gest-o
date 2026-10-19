@@ -18,6 +18,9 @@ financeiros na conta de produção durante a implementação.
   e consulte contas a pagar/receber. A data de liquidação determina o mês do
   caixa; o vencimento determina o período das pendências. Gastos fixos continuam
   acessíveis. Recebimentos de mensalidades são editados na origem.
+  Ao editar registros antigos, situações equivalentes como **Paga**, **Recebida**
+  e **Cancelada** preservam a baixa ou o cancelamento. Registros liquidados
+  mantêm a data de pagamento; cancelados permanecem sem baixa.
 - **Categorias financeiras:** use **Categorias** no Financeiro para cadastrar um
   nome para entradas ou saídas. Ao adicionar uma movimentação, escolha o **Tipo**
   (Entrada ou Saída) e selecione uma **Categoria** da lista. Para cadastrar outra,
@@ -40,7 +43,9 @@ financeiros na conta de produção durante a implementação.
   parcelas de gastos fixos são contabilizados somente pelos lançamentos no
   financeiro, evitando somar o cadastro novamente.
 - **Investimentos:** diferencie Planejado, Realizado e Cancelado. Um investimento
-  pode criar uma saída ou se vincular a uma saída existente. A mesma saída muda
+  pode criar uma saída ou se vincular a uma saída existente. Ao selecionar uma
+  saída existente no cadastro, o formulário preenche o valor, a data e a situação
+  a partir dela; confira esses dados antes de salvar. A mesma saída muda
   de pendente para paga quando o investimento é realizado. O investimento é
   mostrado separadamente como informação; o saldo subtrai apenas a saída.
   Desmarcar o vínculo permite registrar investimentos sem desembolso.

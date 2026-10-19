@@ -590,6 +590,10 @@
     if (row?.monthlyId) return monthlyDialog();
     const data = { tipo: "Entrada", categoria: "Receita", data: row?.data || row?.prazo || today(), prazo: today(), status: "Pendente", ...row };
     data.tipo = direction(data); data.categoria = row ? category(row) : data.categoria;
+    // Older records use equivalent labels that are not options in this form.
+    // Keep their settlement state when editing unrelated fields.
+    if (isSettled(data)) data.status = "Pago";
+    else if (isCancelled(data)) data.status = "Cancelado";
     const element = dialog(row ? "Editar movimentação" : "Nova movimentação", `<div class="ceo-form-grid">
       ${field("Descrição", input("nome", data.nome || "", 'required maxlength="180"'))}
       ${field("Valor (R$)", amountInput(row ? amountCents(row) : 0))}
@@ -634,7 +638,7 @@
     enabled.addEventListener("change", updateLinked); updateLinked();
     linked.addEventListener("change", () => {
       const movement = available.find(item => item.id === linked.value);
-      if (!movement || movement.investmentId === id) return;
+      if (!movement || (id && movement.investmentId === id)) return;
       element.querySelector('[name="amount"]').value = (amountCents(movement) / 100).toFixed(2).replace(".", ",");
       element.querySelector('[name="data"]').value = effectiveDate(movement) || today();
       element.querySelector('[name="status"]').value = isCancelled(movement) ? "Cancelado" : isSettled(movement) ? "Realizado" : "Planejado";
