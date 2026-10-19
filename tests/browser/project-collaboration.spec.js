@@ -5,9 +5,16 @@ const project={id,title:'Campanha ZAMA',client_name:'Cliente Aurora',company_nam
 const dialog=page=>page.locator('#ceoProjectDialog');
 const card=page=>page.locator(`[data-project-id="${id}"]`);
 const check=(page,step)=>card(page).locator(`[data-quick-step="${step}"]`);
+async function expand(page) {
+  const toggle=card(page).locator('[data-project-toggle]');
+  await expect(toggle).toBeVisible();
+  if(await toggle.getAttribute('aria-expanded')==='false') await toggle.click();
+  await expect(card(page).locator('[data-project-details]')).toBeVisible();
+}
 async function setup(page,options={}) {
   await mock(page,seed,{workspaces:{'test-account':[{owner_id:'test-account',role:'owner',name:'Minha empresa'},{owner_id:owner,role:'viewer',name:'ZAMA'}]},rows:{[owner]:seed},projects:{[owner]:[project]},...options});
   await expect(card(page)).toBeVisible();
+  await expand(page);
 }
 test('every team member can create in a column and edit project metadata',async({page})=>{
   await setup(page);
@@ -40,7 +47,7 @@ test('rapid checks serialize revisions and persist the final choice without chan
   await expect(card(page)).toHaveAttribute('aria-busy','false');
   const calls=await page.evaluate(()=>window.testRpcCalls.filter(call=>call.name==='zama_project_step_set'));
   expect(calls.map(call=>[call.params.p_step_id,call.params.p_done,call.params.p_revision])).toEqual([['brief',true,1],['film',true,2],['brief',false,3]]);
-  await page.reload();await expect(check(page,'film')).toBeChecked();await expect(check(page,'brief')).not.toBeChecked();
+  await page.reload();await expand(page);await expect(check(page,'film')).toBeChecked();await expect(check(page,'brief')).not.toBeChecked();
   await card(page).getByRole('button',{name:'Abrir projeto Campanha ZAMA',exact:true}).click();
   await expect(dialog(page)).toContainText('Notas preservadas');await expect(dialog(page)).toContainText('02/10/2026');
 });
@@ -55,6 +62,7 @@ for(const returnWhileSaving of [false,true])test(`queued checks survive module n
   await expect(card(page)).toHaveCount(0);
   if(returnWhileSaving) {
     await page.locator('.nav [data-module="projetos"]').click();
+    await expand(page);
     await expect(check(page,'brief')).toBeChecked();await expect(check(page,'film')).toBeChecked();
   }
   await page.evaluate(()=>window.testReleaseProjectRpcs());
@@ -63,9 +71,10 @@ for(const returnWhileSaving of [false,true])test(`queued checks survive module n
     await expect(card(page)).toHaveCount(0);
     await expect(page.locator('body')).toHaveAttribute('data-module','agenda');
     await page.locator('.nav [data-module="projetos"]').click();
+    await expand(page);
   }
   await expect(card(page)).toHaveAttribute('aria-busy','false');
-  await page.reload();await expect(check(page,'brief')).toBeChecked();await expect(check(page,'film')).toBeChecked();
+  await page.reload();await expand(page);await expect(check(page,'brief')).toBeChecked();await expect(check(page,'film')).toBeChecked();
 });
 test('a queued failure outside Projects warns the user and keeps only the saved checks',async({page})=>{
   await setup(page);
@@ -80,8 +89,9 @@ test('a queued failure outside Projects warns the user and keeps only the saved 
   await expect(card(page)).toHaveCount(0);
   await page.evaluate(()=>window.testFailRpc='');
   await page.locator('.nav [data-module="projetos"]').click();
+  await expand(page);
   await expect(check(page,'brief')).toBeChecked();await expect(check(page,'film')).not.toBeChecked();
-  await page.reload();await expect(check(page,'brief')).toBeChecked();await expect(check(page,'film')).not.toBeChecked();
+  await page.reload();await expand(page);await expect(check(page,'brief')).toBeChecked();await expect(check(page,'film')).not.toBeChecked();
 });
 test('checkbox keyboard access works in the detail without closing it or losing focus',async({page})=>{
   await setup(page);await card(page).getByRole('button',{name:'Abrir projeto Campanha ZAMA',exact:true}).click();
@@ -96,6 +106,7 @@ test('changing the column saves status and keeps unfinished checklist items',asy
   await setup(page);await card(page).getByLabel('Situação de Campanha ZAMA',{exact:true}).selectOption('completed');
   await expect(page.locator('[data-project-column="completed"] [data-project-id]')).toHaveAttribute('aria-busy','false');
   await page.reload();await expect(page.locator('[data-project-column="completed"]')).toContainText('Campanha ZAMA');
+  await expand(page);
   await expect(check(page,'brief')).not.toBeChecked();
 });
 test('failed and conflicting checks roll back visibly without overwriting newer changes',async({page})=>{
@@ -143,14 +154,21 @@ for(const role of ['projects','editor'])test(`old database saves direct checks t
   expect(calls).toHaveLength(1);expect(calls[0].name).toBe('zama_project_save');
   expect(calls[0].params.p_owner).toBe(owner);
   expect(calls[0].params.p_project).toEqual({id,revision:1,production_lists:[{...project.production_lists[0],steps:[{...project.production_lists[0].steps[0],done:true},project.production_lists[0].steps[1]]}]});
-  await page.reload();await expect(check(page,'brief')).toBeChecked();await expect(check(page,'film')).not.toBeChecked();
+  await page.reload();await expand(page);await expect(check(page,'brief')).toBeChecked();await expect(check(page,'film')).not.toBeChecked();
 });
-for(const width of [320,390,1440])test(`monochrome collaborative board and editor fit ${width}px`,async({page},info)=>{
+for(const width of [320,390,1440])test(`pastel collaborative board and editor fit ${width}px`,async({page},info)=>{
   await page.setViewportSize({width,height:950});await setup(page);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   expect(await card(page).evaluate(node=>getComputedStyle(node).backgroundColor)).toBe('rgb(255, 255, 255)');
   expect(await page.locator('body').evaluate(node=>getComputedStyle(node).backgroundColor)).toBe('rgb(246, 247, 249)');
-  await page.screenshot({path:info.outputPath(`board-${width}.png`),fullPage:true});
+  const toggle=card(page).locator('[data-project-toggle]');
+  const toggleBox=await toggle.boundingBox();
+  expect(toggleBox.width).toBeGreaterThanOrEqual(44);expect(toggleBox.height).toBeGreaterThanOrEqual(44);
+  await page.screenshot({path:info.outputPath(`board-expanded-${width}.png`),fullPage:true});
+  await toggle.click();
+  await expect(card(page).locator('[data-project-details]')).toBeHidden();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.screenshot({path:info.outputPath(`board-collapsed-${width}.png`),fullPage:true});
   await page.getByRole('button',{name:'+ Novo projeto',exact:true}).click();
   const box=await dialog(page).boundingBox();expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(width);
   await page.screenshot({path:info.outputPath(`editor-${width}.png`),fullPage:true});

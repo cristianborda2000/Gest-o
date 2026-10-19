@@ -18,6 +18,9 @@ async function edit(page) {
   await dialog(page).getByRole('button',{name:'Editar projeto',exact:true}).click();
 }
 async function expectWhatsApp(scope,phone,client='Cliente Aurora') {
+  await expect(scope).toBeVisible();
+  const toggle=scope.locator('[data-project-toggle]');
+  if(await toggle.count() && await toggle.getAttribute('aria-expanded')==='false') await toggle.click();
   const link=whatsapp(scope,client);
   await expect(link).toBeVisible();
   await expect(link).toContainText('Abrir WhatsApp');
@@ -97,11 +100,12 @@ test('empty and unsafe stored phone values never create a WhatsApp link',async({
 
 test('checking a project step preserves the registered client phone',async({page})=>{
   await setup(page);
+  await expectWhatsApp(card(page),'5511987654321');
   await card(page).getByRole('checkbox',{name:'Concluir etapa: Conferir briefing',exact:true}).check();
   await expect(card(page)).toHaveAttribute('aria-busy','false');
   await page.reload();
-  await expect(card(page).getByRole('checkbox',{name:'Concluir etapa: Conferir briefing',exact:true})).toBeChecked();
   await expectWhatsApp(card(page),'5511987654321');
+  await expect(card(page).getByRole('checkbox',{name:'Concluir etapa: Conferir briefing',exact:true})).toBeChecked();
 });
 
 test('the older database disables phone editing while other project fields still save',async({page})=>{

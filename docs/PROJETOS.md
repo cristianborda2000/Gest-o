@@ -4,7 +4,11 @@ A equipe tem três abas: **Agenda**, **Projetos** e **Ideias**. Projetos e ideia
 
 ## Projetos
 
-O quadro segue o visual branco e preto do sistema: cartões e formulários brancos, colunas em cinza claro e ações principais em preto. As colunas são Planejamento, Em andamento, Aguardando cliente e Concluído. Cada cartão permite marcar/desmarcar etapas diretamente, com salvamento automático e confirmação. O controle **Mover para** altera a coluna sem concluir etapas automaticamente. **Adicionar projeto** em uma coluna já inicia o cadastro naquela situação.
+O quadro usa cartões e formulários brancos, com cores pastéis para identificar a situação: lavanda em **Planejamento**, azul em **Em andamento**, pêssego em **Aguardando cliente** e verde em **Concluído**. Os nomes das situações permanecem visíveis junto das cores.
+
+Os cartões começam recolhidos, mostrando nome, cliente, situação e progresso. Clique na seta **Ver informações** para abrir as listas, etapas, responsável, prazo e demais controles; clique novamente para recolher. O título abre a janela completa do projeto. Cada cartão mantém sua abertura ao filtrar, atualizar ou salvar alterações enquanto o quadro está aberto. Ao sair da área de Projetos, os cartões voltam a iniciar recolhidos.
+
+No cartão expandido, marque/desmarque etapas diretamente, com salvamento automático e confirmação. O controle **Mover para** altera a coluna e a cor sem concluir etapas automaticamente. **Adicionar projeto** em uma coluna já inicia o cadastro naquela situação.
 
 Em **Cliente e projeto**, o campo opcional **WhatsApp do cliente** aceita DDD e número brasileiro, como `(11) 99999-9999`. Para outro país, informe `+` e o código do país. Depois de salvar, **Abrir WhatsApp** aparece no cartão e nos detalhes do projeto, apontando para o telefone cadastrado. Apagar o campo remove o botão. O atalho usa o [formato oficial de clique para conversa do WhatsApp](https://faq.whatsapp.com/5913398998672934/?locale=pt_BR) e abre em outra aba, sem enviar uma mensagem automaticamente.
 

@@ -25,7 +25,7 @@
   let generation = 0, requestSequence = 0, activeOwner = null, activeAccount = null, activeRole = null;
   let errorMessage = '', notice = '', secretSequence = 0, secretTimer = null, planningAvailable = false;
   let collaborationAvailable = false, phoneAvailable = false;
-  const pendingChanges = new Map(), expandedLists = new Map();
+  const pendingChanges = new Map(), expandedLists = new Map(), expandedProjects = new Map();
   const filters = { search: '', status: '', priority: 'all', order: 'priority' };
   const summary = row => root.ZamaProjectPlanning.summarize(row, today());
   const icon = name => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="${({ all: 'M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v6H4zM14 15h6v6h-6z', overdue: 'M12 3 2 21h20L12 3ZM12 9v5m0 3v.1', upcoming: 'M5 5h14v15H5zM8 3v4m8-4v4M5 10h14m-10 4h2m2 0h2', waiting: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 5v5l3 2' })[name]}"></path></svg>`;
@@ -98,7 +98,7 @@
   }
   function leave() {
     generation++; requestSequence++; loading = false; closeDialog();
-    container = null; expandedLists.clear();
+    container = null; expandedLists.clear(); expandedProjects.clear();
     // Module navigation must not discard checks that are waiting for an RPC.
     if (!pendingChanges.size) { rows = []; loaded = false; }
   }
@@ -131,10 +131,13 @@
   }
   function card(row) {
     const completion = summary(row), person = row.responsible_name || row.responsible_email;
-    return `<article class="ceo-project-card ${completion.overdue ? 'is-overdue' : ''}" data-project-id="${esc(row.id)}" aria-busy="${pendingChanges.has(row.id)}">
+    const expanded = expandedProjects.get(row.id) === true, panelId = `ceo-project-details-${row.id}`;
+    return `<article class="ceo-project-card ${completion.overdue ? 'is-overdue' : ''}" data-project-id="${esc(row.id)}" data-project-status="${row.status}" aria-busy="${pendingChanges.has(row.id)}">
       <div class="ceo-project-card-meta"><span class="ceo-project-status is-${row.status}"><i></i>${statuses[row.status]}</span><span class="ceo-project-total">${completion.done}/${completion.total} etapas</span></div>
-      <h3><button type="button" data-project-open="${esc(row.id)}" aria-label="Ver detalhes de ${esc(row.title)}">${esc(row.title)}</button></h3><p class="ceo-project-company">${esc(row.company_name || row.client_name)}</p>
+      <h3><button type="button" data-project-open="${esc(row.id)}" aria-label="Abrir projeto ${esc(row.title)}">${esc(row.title)}</button></h3><p class="ceo-project-company">${esc(row.company_name || row.client_name)}</p>
       ${meter('Progresso', row.production_lists.flatMap(list => list.steps))}
+      <button type="button" class="ceo-project-toggle" data-project-toggle="${esc(row.id)}" aria-expanded="${expanded}" aria-controls="${esc(panelId)}" aria-label="${expanded ? 'Recolher' : 'Mostrar'} informações de ${esc(row.title)}"><span>${expanded ? 'Recolher informações' : 'Ver informações'}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+      <div class="ceo-project-card-details" id="${esc(panelId)}" data-project-details="${esc(row.id)}" ${expanded ? '' : 'hidden'}>
       <div class="ceo-project-quick-lists">${row.production_lists.length ? row.production_lists.map((list,index) => {
         const key = `${row.id}:${list.id}`, open = expandedLists.has(key) ? expandedLists.get(key) : index === 0;
         return `<details class="ceo-project-quick-list" data-list-preview="${esc(key)}" ${open ? 'open' : ''}><summary><span>${esc(list.title)}</span><small>${list.steps.filter(step=>step.done).length}/${list.steps.length}</small></summary><div class="ceo-project-quick-steps">${list.steps.length ? list.steps.map(step=>stepControl(row,list,step)).join('') : '<p class="ceo-project-no-stages">Nenhuma etapa ainda.</p>'}</div></details>`;
@@ -142,7 +145,7 @@
       ${canEdit() ? `<button type="button" class="ceo-button ceo-project-add-steps" data-project-edit-inline="${esc(row.id)}">+ Editar listas e etapas</button>` : ''}
       <div class="ceo-project-card-footer"><span class="ceo-project-person"><span class="ceo-project-avatar" aria-hidden="true">${esc((person || '?').slice(0,1).toUpperCase())}</span><span>${esc(person || 'Sem responsável')}</span></span><span class="ceo-project-due ${completion.overdue ? 'is-late' : ''}">${completion.overdue ? 'Atrasado · ' : ''}${dateLabel(row.due_date)}</span></div>
       <label class="ceo-project-quick-status">Mover para<select data-quick-status="${esc(row.id)}" aria-label="Situação de ${esc(row.title)}" ${canEdit() ? '' : 'disabled'}>${options(row.status)}</select></label>
-      ${whatsappLink(row)}<button class="ceo-button ceo-project-open" type="button" data-project-open="${esc(row.id)}" aria-label="Abrir projeto ${esc(row.title)}">Abrir projeto <span aria-hidden="true">↗</span></button>
+      ${whatsappLink(row)}</div>
       <p class="ceo-project-save-state" role="status">${pendingChanges.has(row.id) ? 'Salvando alterações…' : ''}</p>
     </article>`;
   }
@@ -173,7 +176,7 @@
     if (!container?.isConnected) return;
     rememberBoard();
     const priorities = [['all','Todos os projetos'],['overdue','Em atraso'],['upcoming','Próximos 7 dias'],['waiting','Aguardando cliente']];
-    container.innerHTML = `<section class="ceo-projects"><div class="ceo-project-hero"><div class="ceo-project-heading"><div class="ceo-project-hero-copy"><span class="ceo-project-eyebrow">ZAMA / QUADRO DA EQUIPE</span><h2>Projetos de clientes</h2><p>Marque as etapas no cartão. Cada avanço fica salvo para a equipe.</p></div></div><div class="ceo-project-heading-actions"><span class="ceo-project-shared-label">${icon('all')} Quadro compartilhado</span><button type="button" class="ceo-button" data-project-refresh ${loading || pendingChanges.size ? 'disabled' : ''}>${loading ? 'Atualizando…' : 'Atualizar'}</button>${isOwner() ? `<button type="button" class="ceo-button" data-project-team ${!loaded || loading || errorMessage ? 'disabled' : ''}>Criar acesso</button>` : ''}${canEditDetails() ? `<button type="button" class="ceo-button primary" data-project-new ${!loaded || loading || errorMessage ? 'disabled' : ''}>+ Novo projeto</button>` : ''}</div></div>
+    container.innerHTML = `<section class="ceo-projects"><div class="ceo-project-hero"><div class="ceo-project-heading"><div class="ceo-project-hero-copy"><span class="ceo-project-eyebrow">ZAMA / QUADRO DA EQUIPE</span><h2>Projetos de clientes</h2><p>Use a seta para abrir as informações e marcar as etapas. Cada avanço fica salvo para a equipe.</p></div></div><div class="ceo-project-heading-actions"><span class="ceo-project-shared-label">${icon('all')} Quadro compartilhado</span><button type="button" class="ceo-button" data-project-refresh ${loading || pendingChanges.size ? 'disabled' : ''}>${loading ? 'Atualizando…' : 'Atualizar'}</button>${isOwner() ? `<button type="button" class="ceo-button" data-project-team ${!loaded || loading || errorMessage ? 'disabled' : ''}>Criar acesso</button>` : ''}${canEditDetails() ? `<button type="button" class="ceo-button primary" data-project-new ${!loaded || loading || errorMessage ? 'disabled' : ''}>+ Novo projeto</button>` : ''}</div></div>
       <div class="ceo-project-priorities" aria-label="Prioridades dos projetos">${priorities.map(([key,label])=>`<button type="button" class="ceo-project-priority is-${key}" data-priority="${key}" aria-pressed="${filters.priority===key}" ${!loaded || loading ? 'disabled' : ''}><span class="ceo-project-priority-icon">${icon(key)}</span><strong>0</strong><span>${label}</span></button>`).join('')}</div>
       <p class="ceo-project-notice" data-project-feedback role="status" ${notice ? '' : 'hidden'}>${esc(notice)}</p>
       ${errorMessage ? `<div class="ceo-project-error" role="alert"><strong>Não foi possível carregar os projetos</strong><p>${esc(errorMessage)}</p><button class="ceo-button" type="button" data-project-retry>Tentar novamente</button></div>` : ''}
@@ -189,6 +192,19 @@
     container.querySelectorAll('[data-priority]').forEach(button=>button.addEventListener('click',()=>{filters.priority=button.dataset.priority;renderBoard();}));
     const board = container.querySelector('[data-project-board]');
     board?.addEventListener('click',event=>{
+      const toggle = event.target.closest('[data-project-toggle]');
+      if (toggle) {
+        const row = rows.find(item => item.id === toggle.dataset.projectToggle);
+        const panel = document.getElementById(toggle.getAttribute('aria-controls'));
+        if (!row || !panel) return;
+        const expanded = toggle.getAttribute('aria-expanded') !== 'true';
+        expandedProjects.set(row.id, expanded);
+        panel.hidden = !expanded;
+        toggle.setAttribute('aria-expanded', String(expanded));
+        toggle.setAttribute('aria-label', `${expanded ? 'Recolher' : 'Mostrar'} informações de ${row.title}`);
+        toggle.querySelector('span').textContent = expanded ? 'Recolher informações' : 'Ver informações';
+        return;
+      }
       const open=event.target.closest('[data-project-open]'), edit=event.target.closest('[data-project-edit-inline]'), add=event.target.closest('[data-column-add]');
       if(open) openDetail(open.dataset.projectOpen);
       if(edit) openEditor(edit.dataset.projectEditInline);
@@ -208,7 +224,7 @@
     else { const step=row.production_lists.find(list=>list.id===change.list)?.steps.find(step=>step.id===change.step); if(step) step.done=change.done; }
   }
   function refreshQuickUI() {
-    const focused=document.activeElement, focusData=focused?.matches('[data-quick-step],[data-quick-status]') ? {...focused.dataset} : null;
+    const focused=document.activeElement, focusData=focused?.matches('[data-quick-step],[data-quick-status],[data-project-toggle]') ? {...focused.dataset} : null;
     const inDialog=Boolean(activeDialog?.contains(focused));
     const details=activeDialog?.querySelector('[data-detail-tracks]'), detailId=details?.dataset.detailTracks;
     const detailScroll=activeDialog?.scrollTop;
@@ -222,7 +238,7 @@
     }
     if(focusData) {
       const scope=inDialog?activeDialog:container;
-      const control=[...(scope?.querySelectorAll('[data-quick-step],[data-quick-status]')||[])].find(node=>focusData.quickStatus ? node.dataset.quickStatus===focusData.quickStatus : node.dataset.project===focusData.project&&node.dataset.list===focusData.list&&node.dataset.quickStep===focusData.quickStep);
+      const control=[...(scope?.querySelectorAll('[data-quick-step],[data-quick-status],[data-project-toggle]')||[])].find(node=>focusData.projectToggle ? node.dataset.projectToggle===focusData.projectToggle : focusData.quickStatus ? node.dataset.quickStatus===focusData.quickStatus : node.dataset.project===focusData.project&&node.dataset.list===focusData.list&&node.dataset.quickStep===focusData.quickStep);
       control?.focus({preventScroll:true});
     }
   }
