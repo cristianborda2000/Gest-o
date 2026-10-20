@@ -722,7 +722,7 @@ test('owner creates credentials and manual project stages, invites with projects
   await expect(dialog(page)).toContainText('Identidade visual');
   await expect(dialog(page)).toContainText('Definir paleta de cores');
   const createdLists = await page.evaluate(() => window.testRpcCalls.find(call => call.name === 'zama_project_save').params.p_project.production_lists);
-  expect(createdLists).toEqual([{ id: expect.any(String), title: 'Identidade visual', steps: [{ id: expect.any(String), label: 'Definir paleta de cores', done: true, due_date:null }] }]);
+  expect(createdLists).toEqual([{ id: expect.any(String), title: 'Identidade visual', description: '', responsible_name: '', due_date: null, status: 'planning', links: [], steps: [{ id: expect.any(String), label: 'Definir paleta de cores', done: true, due_date:null }] }]);
   await expect(dialog(page).getByLabel('Senha do cliente', { exact: true })).toHaveValue('');
   await dialog(page).getByRole('button', { name: 'Gerenciar acesso do responsável', exact: true }).click();
   await expect(dialog(page).getByLabel('E-mail da pessoa', { exact: true })).toHaveValue('pedro@example.invalid');

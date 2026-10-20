@@ -115,7 +115,7 @@ function sdk(seed, options = {}) {
     channel:()=>({on(){return this;},subscribe(fn){fn('SUBSCRIBED');return this;}}),removeChannel:async()=>{}
   })};
 }
-async function mock(page, data = seed, { jarvisVisible = false, projects, templates = [], planningUnavailable = false, collaborationUnavailable = false, phoneUnavailable = false, ...sdkOptions } = {}) {
+async function mock(page, data = seed, { jarvisVisible = false, projects, templates = [], planningUnavailable = false, collaborationUnavailable = false, phoneUnavailable = false, processesUnavailable = false, ...sdkOptions } = {}) {
   await page.route('**/api/project-access', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ code: 'NOT_CONFIGURED', error: 'Cadastro com senha indisponível neste teste.' }) }));
   if(projects) {
     // This fixture lives in the test process, like the real remote store. It must
@@ -135,6 +135,7 @@ async function mock(page, data = seed, { jarvisVisible = false, projects, templa
       else if(name==='zama_projects_list_v2'||name==='zama_projects_list_v3') result={data:rows.map(publicProject)};
       else if(name==='zama_project_collaboration_capabilities') result=collaborationUnavailable?{error:{code:'PGRST202',message:'Missing migration'}}:{data:{can_edit:true,shared_creation:true}};
       else if(name==='zama_project_phone_capabilities') result=phoneUnavailable?{error:{code:'PGRST202',message:'Missing migration'}}:{data:{client_phone:true}};
+      else if(name==='zama_project_process_capabilities') result=processesUnavailable?{error:{code:'PGRST202',message:'Missing migration'}}:{data:{process_details:true}};
       else if(name==='zama_project_step_set') {
         const row=rows.find(item=>item.id===params.p_id);
         const list=row?.production_lists?.find(item=>item.id===params.p_list_id),step=list?.steps.find(item=>item.id===params.p_step_id);

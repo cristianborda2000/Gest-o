@@ -134,7 +134,7 @@ test('production templates preserve drafts and copy only clean structure with ne
   await owner(page);
   await page.getByRole('button',{name:'Abrir projeto Campanha Aurora',exact:true}).click();
   await page.getByRole('button',{name:'Editar projeto',exact:true}).click();
-  await dialog(page).locator('summary').click();
+  await dialog(page).locator('.ceo-project-templates > summary').click();
   await dialog(page).getByLabel('Nome do modelo',{exact:true}).fill('Modelo de vídeo');
   await dialog(page).getByRole('button',{name:'Salvar como modelo',exact:true}).click();
   await expect(dialog(page).locator('[data-template-message]')).toContainText('Modelo salvo');
@@ -144,7 +144,7 @@ test('production templates preserve drafts and copy only clean structure with ne
   await dialog(page).getByRole('button',{name:'Cancelar',exact:true}).first().click();
   await page.getByRole('button',{name:'+ Novo projeto',exact:true}).click();
   await dialog(page).getByLabel('Nome do projeto',{exact:true}).fill('Rascunho preservado');
-  await dialog(page).locator('summary').click();
+  await dialog(page).locator('.ceo-project-templates > summary').click();
   await expect(dialog(page).getByLabel('Modelo de produção',{exact:true})).toContainText('Modelo de vídeo');
   await dialog(page).getByLabel('Modelo de produção',{exact:true}).selectOption({label:'Modelo de vídeo'});
   await dialog(page).getByRole('button',{name:'Adicionar modelo',exact:true}).click();
@@ -160,7 +160,7 @@ for(const width of [1440,390,320]) test(`team project design fits ${width}px`,as
   await page.screenshot({path:info.outputPath(`projects-${width}.png`),fullPage:true});
   await page.getByRole('button',{name:'Abrir projeto Campanha Aurora',exact:true}).click();
   await page.getByRole('button',{name:'Editar projeto',exact:true}).click();
-  await dialog(page).locator('summary').click();
+  await dialog(page).locator('.ceo-project-templates > summary').click();
   expect(await dialog(page).evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
   await page.screenshot({path:info.outputPath(`editor-${width}.png`),fullPage:true});
 });

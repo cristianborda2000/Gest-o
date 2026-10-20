@@ -8,7 +8,13 @@ O quadro usa cartões e formulários brancos, com cores pastéis para identifica
 
 Os cartões começam recolhidos, mostrando nome, cliente, situação e progresso. Clique na seta **Ver informações** para abrir as listas, etapas, responsável, prazo e demais controles; clique novamente para recolher. O título abre a janela completa do projeto. Cada cartão mantém sua abertura ao filtrar, atualizar ou salvar alterações enquanto o quadro está aberto. Ao sair da área de Projetos, os cartões voltam a iniciar recolhidos.
 
+No início do cartão expandido, **Acessos do cliente** mostra o e-mail e informa se há senha cadastrada. **Ver dados de acesso** abre a janela do projeto diretamente nessa seção. Para consultar a senha, o administrador ou responsável autorizado usa **Mostrar senha**; expandir o cartão ou abrir a janela não consulta nem revela a senha automaticamente. O cadastro e a alteração do e-mail continuam em **Editar projeto → Acessos do cliente**.
+
 No cartão expandido, marque/desmarque etapas diretamente, com salvamento automático e confirmação. O controle **Mover para** altera a coluna e a cor sem concluir etapas automaticamente. **Adicionar projeto** em uma coluna já inicia o cadastro naquela situação.
+
+Cada lista é uma ficha de **processo interno** do projeto. Em **Editar projeto → Processos e etapas → Informações do processo**, registre descrição/instruções, responsável, prazo, andamento e links de arquivos. Use **Salvar alterações** para gravar todas as fichas junto com o projeto. Depois, as informações ficam disponíveis tanto na lista expandida do cartão quanto na janela do projeto.
+
+O andamento de cada processo usa cores pastéis e os rótulos **Não iniciado**, **Em andamento**, **Aguardando** e **Concluído**. É independente da coluna do projeto e da porcentagem das etapas: marcar um checklist não conclui a ficha automaticamente. Prazos de processos ainda não concluídos entram nos filtros de atraso e próximos sete dias, mesmo em listas sem etapas. Cada ficha aceita até 20 links HTTP/HTTPS, com nome opcional; os arquivos continuam no serviço de origem. O nome do responsável pelo processo organiza o trabalho e não concede acesso ao sistema ou às senhas.
 
 Em **Cliente e projeto**, o campo opcional **WhatsApp do cliente** aceita DDD e número brasileiro, como `(11) 99999-9999`. Para outro país, informe `+` e o código do país. Depois de salvar, **Abrir WhatsApp** aparece no cartão e nos detalhes do projeto, apontando para o telefone cadastrado. Apagar o campo remove o botão. O atalho usa o [formato oficial de clique para conversa do WhatsApp](https://faq.whatsapp.com/5913398998672934/?locale=pt_BR) e abre em outra aba, sem enviar uma mensagem automaticamente.
 
@@ -16,7 +22,7 @@ O painel destaca todos os projetos, atrasos de projetos ou etapas, entregas dos 
 
 1. Qualquer membro confirmado da equipe abre **Projetos → Novo projeto** e preenche o título e o cliente. Empresa, acesso, responsável e prazo são opcionais.
 2. Cria as listas e etapas necessárias. É possível renomear, reordenar, remover e marcar etapas, além de definir um prazo individual para cada uma.
-3. O administrador pode usar **Modelos de produção** para salvar a estrutura atual com um nome e reutilizá-la em outro projeto. Aplicar um modelo acrescenta listas ao rascunho; substitui apenas a lista inicial vazia. O modelo não copia dados do cliente, senha, notas, progresso ou datas. As listas copiadas recebem identificadores novos.
+3. O administrador pode usar **Modelos de produção** para salvar a estrutura atual com um nome e reutilizá-la em outro projeto. Aplicar um modelo acrescenta listas ao rascunho; substitui apenas a lista inicial sem etapas nem informações de processo. O modelo copia somente nomes das listas e etapas, sem instruções, responsáveis, links, dados do cliente, senha, notas, progresso ou datas. As listas copiadas recebem identificadores novos.
 4. Toda a equipe, inclusive o perfil com ideias em leitura, usa **Editar projeto** para alterar título, cliente, empresa, dados de acesso, responsável, prazos, listas, situação e notas. Senhas e exclusão continuam com o administrador. Quando o projeto tem uma senha cadastrada, somente o administrador altera o e-mail responsável, pois esse campo também controla acesso à senha.
 
 Projetos antigos preservam as listas **Catálogo** e **Estruturação**. Um projeto aceita até 20 listas, com até 100 etapas por lista; listas vazias e projetos sem listas são válidos. Cada administrador pode guardar até 50 modelos. Use **Atualizar** para consultar alterações de outras pessoas. Revisões concorrentes são recusadas para evitar sobrescrever trabalho recente.
@@ -59,10 +65,11 @@ Execute o conteúdo completo de [`database/instalar-projetos.sql`](../database/i
 5. `20261015_team_space.sql` — projetos/ideias compartilhados e agendas privadas.
 6. `20261015_project_collaboration.sql` — criação/edição de projetos por todos os membros e marcação direta de etapas.
 7. `20261016_project_phone.sql` — telefone do cliente e capacidade de cadastro para o atalho do WhatsApp.
+8. `20261019_project_processes.sql` — fichas dos processos internos por lista, com validação e preservação de informações nas edições por clientes antigos.
 
 O instalador pode ser reaplicado: preserva dados, membros, progresso, modelos e a chave de criptografia. As listas legadas só são convertidas quando `production_lists` está ausente ou nulo. A migration `20261015_team_space.sql` retira dos perfis antigos `editor` e `viewer` o acesso amplo ao `app_state` de outra conta e aplica o modelo da equipe às associações existentes.
 
-**Aplique o instalador completo para ativar todas as permissões e o WhatsApp desta versão.** Se as seis primeiras migrations já estão instaladas, basta executar `database/migrations/20261016_project_phone.sql`. Publicar o site não executa SQL no Supabase. Sem a migration de colaboração, o quadro mantém as permissões anteriores: membros de leitura não criam ou editam projetos e os demais membros editam apenas o andamento. Sem a migration de telefone, o campo de WhatsApp fica desabilitado para evitar um salvamento sem persistência. Não reaplique apenas uma migration antiga depois desta atualização, pois ela pode restaurar permissões anteriores. Não execute `database/supabase-setup.sql` sobre uma base existente.
+**Aplique o instalador completo para ativar as fichas de processos e todas as permissões desta versão.** Se as sete primeiras migrations já estão instaladas, basta executar [`database/migrations/20261019_project_processes.sql`](../database/migrations/20261019_project_processes.sql). Publicar o site não executa SQL no Supabase. Sem a migration de processos, os novos campos ficam indisponíveis e as listas/etapas continuam funcionando. Sem a migration de colaboração, o quadro mantém as permissões anteriores: membros de leitura não criam ou editam projetos e os demais membros editam apenas o andamento. Sem a migration de telefone, o campo de WhatsApp fica desabilitado para evitar um salvamento sem persistência. Não reaplique apenas uma migration antiga depois desta atualização, pois ela pode restaurar permissões anteriores. Não execute `database/supabase-setup.sql` sobre uma base existente.
 
 Após mudar migrations, gere novamente o instalador com `npm run build:projects-sql`. A interface usa `zama_projects_list_v3`; em instalações antigas com v2, os campos de prazo por etapa e modelos ficam indisponíveis. Ideias compartilhadas exigem a migration de equipe e apresentam uma mensagem de configuração pendente quando ela falta.
 
@@ -89,6 +96,7 @@ O backup JSON administrativo baseado em `app_state` não inclui projetos, modelo
 | `zama_project_step_set(p_owner, p_id, p_list_id, p_step_id, p_done, p_revision)` | Alterar somente uma etapa sob revisão |
 | `zama_project_collaboration_capabilities(p_owner)` | Verificar a instalação da edição colaborativa |
 | `zama_project_phone_capabilities(p_owner)` | Verificar se o banco aceita o telefone do cliente |
+| `zama_project_process_capabilities(p_owner)` | Verificar se o banco aceita as fichas dos processos internos |
 | `zama_project_secret(p_owner, p_id)` | Consultar senha sob autorização separada |
 | `zama_project_delete(p_owner, p_id)` | Excluir como administrador |
 | `zama_project_templates_list()` | Modelos da própria conta |
@@ -98,6 +106,8 @@ O backup JSON administrativo baseado em `app_state` não inclui projetos, modelo
 | `zama_team_ideas_save(p_owner, p_revision, p_ideas)` | Alterar somente as ideias, preservando o restante do estado |
 
 Etapas aceitam `{id, label, done, due_date?}`. `due_date` deve ser uma data real `YYYY-MM-DD` ou `null`. Clientes antigos que omitem a propriedade preservam a data existente da mesma lista/etapa; `null` remove explicitamente o prazo. O limite do JSON do projeto é 4 MiB. As listas mantêm a compatibilidade com os campos legados `catalog_steps` e `onboarding_steps`.
+
+Listas aceitam `{id, title, steps, description?, responsible_name?, due_date?, status?, links?}`. Descrição aceita até 10.000 caracteres e responsável até 254. Prazo é data real `YYYY-MM-DD` ou `null`; andamento aceita `planning`, `in_progress`, `waiting` ou `completed`. Links são até 20 objetos `{label, url}`, com nome até 254 caracteres e URL HTTP/HTTPS até 2.048. Campos omitidos por clientes antigos preservam os valores da mesma lista; `''` limpa descrição/responsável, `null` limpa prazo e `[]` remove links. Excluir uma lista remove sua ficha, sem copiar informações para outra lista. As fichas seguem as mesmas permissões e revisão atômica do projeto e não entram no backup administrativo de `app_state`.
 
 `client_phone` contém de 8 a 15 dígitos internacionais, sem `+`, iniciando por 1–9; `''` remove o telefone. A interface normaliza o número antes de salvar. Atualizações que omitem esse campo, inclusive marcações de etapas, preservam o telefone existente. Ele é compartilhado somente com os membros autorizados da empresa, como os demais dados do cliente.
 

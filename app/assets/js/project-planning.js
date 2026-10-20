@@ -12,6 +12,7 @@
     const pending = steps.filter(step => !step.done).sort((a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999'));
     const deadlines = row.status === 'completed' ? [] : [
       ...(validDate(row.due_date) ? [{ date: row.due_date, label: 'Entrega do projeto' }] : []),
+      ...(row.production_lists || []).filter(list => list.status !== 'completed' && validDate(list.due_date)).map(list => ({ date: list.due_date, label: list.title })),
       ...pending.filter(step => validDate(step.due_date)).map(step => ({ date: step.due_date, label: step.label }))
     ].sort((a, b) => a.date.localeCompare(b.date));
     const attention = deadlines[0] || null;

@@ -2,6 +2,7 @@
 (function (root) {
   'use strict';
   const statuses = Object.freeze({ planning: 'Planejamento', in_progress: 'Em andamento', waiting: 'Aguardando cliente', completed: 'Concluído' });
+  const processStatuses = Object.freeze({ planning: 'Não iniciado', in_progress: 'Em andamento', waiting: 'Aguardando', completed: 'Concluído' });
   const text = value => String(value ?? '');
   const esc = value => text(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   const fold = value => text(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -24,7 +25,7 @@
   let container = null, activeDialog = null, rows = [], loaded = false, loading = false;
   let generation = 0, requestSequence = 0, activeOwner = null, activeAccount = null, activeRole = null;
   let errorMessage = '', notice = '', secretSequence = 0, secretTimer = null, planningAvailable = false;
-  let collaborationAvailable = false, phoneAvailable = false;
+  let collaborationAvailable = false, phoneAvailable = false, processesAvailable = false;
   const pendingChanges = new Map(), expandedLists = new Map(), expandedProjects = new Map();
   const filters = { search: '', status: '', priority: 'all', order: 'priority' };
   const summary = row => root.ZamaProjectPlanning.summarize(row, today());
@@ -35,7 +36,10 @@
       { id: 'catalog', title: 'Catálogo', steps: source.catalog_steps },
       { id: 'onboarding', title: 'Estruturação', steps: source.onboarding_steps }
     ].filter(list => Array.isArray(list.steps) && list.steps.length);
-    return lists.map(list => ({ id: text(list.id), title: text(list.title), steps: Array.isArray(list.steps) ? list.steps.map(step => ({ id: text(step.id), label: text(step.label), done: step.done === true, ...(step.due_date ? { due_date: text(step.due_date) } : {}) })) : [] }));
+    return lists.map(list => ({ id: text(list.id), title: text(list.title),
+      ...Object.fromEntries(['description', 'responsible_name', 'due_date', 'status'].filter(key => Object.hasOwn(list, key)).map(key => [key, key === 'due_date' && list[key] === null ? null : text(list[key])])),
+      ...(Array.isArray(list.links) ? { links: list.links.map(link => ({ label: text(link.label), url: text(link.url) })) } : {}),
+      steps: Array.isArray(list.steps) ? list.steps.map(step => ({ id: text(step.id), label: text(step.label), done: step.done === true, ...(step.due_date ? { due_date: text(step.due_date) } : {}) })) : [] }));
   }
 
   // The allowlist makes it impossible for an accidental RPC password property to
@@ -64,6 +68,8 @@
     if (/42501|PROJECT_ACCESS_DENIED|permission denied/i.test(value)) return 'Seu acesso a este projeto mudou. Atualize a lista para verificar os projetos disponíveis.';
     if (/PGRST202|42883|does not exist|schema cache|PROJECT_UNAVAILABLE/i.test(value)) return 'A área de projetos ainda não está disponível nesta instalação. A configuração do banco de dados precisa ser concluída. Depois, tente novamente.';
     if (/PROJECT_INVALID_PHONE|PROJECT_INVALID_FIELD: client_phone/.test(value)) return 'Confira o WhatsApp do cliente. Informe o DDD e o número; para outro país, use + e o código do país.';
+    if (/PROJECT_INVALID_PROCESS_LINKS/.test(value)) return 'Confira os links de arquivos dos processos. Use até 20 links por processo, começando com https:// ou http://.';
+    if (/PROJECT_INVALID_PROCESS/.test(value)) return 'Confira a descrição, o responsável e o andamento de cada processo antes de salvar.';
     if (/22023|PROJECT_INVALID/.test(value)) return 'Confira os campos e as etapas do projeto antes de salvar. Use um e-mail válido e preencha o nome do cliente e o título.';
     return 'Não foi possível concluir a operação. Verifique sua conexão e tente novamente.';
   }
@@ -105,7 +111,7 @@
   function reset() {
     const previous = container;
     leave(); pendingChanges.clear(); rows = []; loaded = false; activeOwner = activeAccount = activeRole = null;
-    filters.search = filters.status = ''; filters.priority = 'all'; filters.order = 'priority'; planningAvailable = collaborationAvailable = phoneAvailable = false; errorMessage = notice = '';
+    filters.search = filters.status = ''; filters.priority = 'all'; filters.order = 'priority'; planningAvailable = collaborationAvailable = phoneAvailable = processesAvailable = false; errorMessage = notice = '';
     previous?.replaceChildren();
   }
   function newDialog(title, markup) {
@@ -129,6 +135,12 @@
   function stepControl(row, list, step, detail = false) {
     return `<label class="${detail ? 'ceo-project-step' : 'ceo-project-quick-step'} ${step.done ? 'is-done' : ''}"><input type="checkbox" data-quick-step="${esc(step.id)}" data-project="${esc(row.id)}" data-list="${esc(list.id)}" ${step.done ? 'checked' : ''} ${!canEdit() ? 'disabled' : ''} aria-label="Concluir etapa: ${esc(step.label)}"><span class="ceo-project-step-copy">${esc(step.label)}${step.due_date ? `<small class="${!step.done && step.due_date < today() ? 'is-late' : ''}">${dateLabel(step.due_date)}</small>` : ''}</span></label>`;
   }
+  function processInfo(list) {
+    if (!processesAvailable && !['description', 'responsible_name', 'due_date', 'status', 'links'].some(key => Object.hasOwn(list, key))) return '';
+    const status = processStatuses[list.status] ? list.status : 'planning';
+    const links = (list.links || []).filter(link => safeUrl(link.url));
+    return `<div class="ceo-project-process-summary"><span class="ceo-project-process-status is-${status}">${processStatuses[status]}</span><dl class="ceo-project-process-meta"><div><dt>Responsável</dt><dd>${esc(list.responsible_name || 'Não definido')}</dd></div><div><dt>Prazo do processo</dt><dd class="${status !== 'completed' && list.due_date && list.due_date < today() ? 'is-late' : ''}">${dateLabel(list.due_date)}</dd></div></dl>${list.description ? `<div class="ceo-project-process-description"><h4>Descrição e instruções</h4><p>${esc(list.description)}</p></div>` : ''}${links.length ? `<ul class="ceo-project-process-links" aria-label="Links de arquivos">${links.map(link => `<li><a href="${esc(safeUrl(link.url))}" target="_blank" rel="noopener noreferrer">${esc(link.label || link.url)} ↗</a></li>`).join('')}</ul>` : ''}</div>`;
+  }
   function card(row) {
     const completion = summary(row), person = row.responsible_name || row.responsible_email;
     const expanded = expandedProjects.get(row.id) === true, panelId = `ceo-project-details-${row.id}`;
@@ -138,9 +150,10 @@
       ${meter('Progresso', row.production_lists.flatMap(list => list.steps))}
       <button type="button" class="ceo-project-toggle" data-project-toggle="${esc(row.id)}" aria-expanded="${expanded}" aria-controls="${esc(panelId)}" aria-label="${expanded ? 'Recolher' : 'Mostrar'} informações de ${esc(row.title)}"><span>${expanded ? 'Recolher informações' : 'Ver informações'}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
       <div class="ceo-project-card-details" id="${esc(panelId)}" data-project-details="${esc(row.id)}" ${expanded ? '' : 'hidden'}>
+      <section class="ceo-project-access-preview"><h4>Acessos do cliente</h4><dl><div><dt>E-mail de acesso</dt><dd>${esc(row.client_email || 'Não informado')}</dd></div><div><dt>Senha</dt><dd>${row.has_password ? 'Cadastrada' : 'Não cadastrada'}</dd></div></dl><button type="button" class="ceo-button" data-project-open="${esc(row.id)}" data-project-access>Ver dados de acesso</button></section>
       <div class="ceo-project-quick-lists">${row.production_lists.length ? row.production_lists.map((list,index) => {
         const key = `${row.id}:${list.id}`, open = expandedLists.has(key) ? expandedLists.get(key) : index === 0;
-        return `<details class="ceo-project-quick-list" data-list-preview="${esc(key)}" ${open ? 'open' : ''}><summary><span>${esc(list.title)}</span><small>${list.steps.filter(step=>step.done).length}/${list.steps.length}</small></summary><div class="ceo-project-quick-steps">${list.steps.length ? list.steps.map(step=>stepControl(row,list,step)).join('') : '<p class="ceo-project-no-stages">Nenhuma etapa ainda.</p>'}</div></details>`;
+        return `<details class="ceo-project-quick-list" data-list-preview="${esc(key)}" ${open ? 'open' : ''}><summary><span>${esc(list.title)}</span><small>${list.steps.filter(step=>step.done).length}/${list.steps.length}</small></summary><div class="ceo-project-quick-steps">${processInfo(list)}${list.steps.length ? list.steps.map(step=>stepControl(row,list,step)).join('') : '<p class="ceo-project-no-stages">Nenhuma etapa ainda.</p>'}</div></details>`;
       }).join('') : '<p class="ceo-project-no-stages">Adicione uma lista para organizar as etapas.</p>'}</div>
       ${canEdit() ? `<button type="button" class="ceo-button ceo-project-add-steps" data-project-edit-inline="${esc(row.id)}">+ Editar listas e etapas</button>` : ''}
       <div class="ceo-project-card-footer"><span class="ceo-project-person"><span class="ceo-project-avatar" aria-hidden="true">${esc((person || '?').slice(0,1).toUpperCase())}</span><span>${esc(person || 'Sem responsável')}</span></span><span class="ceo-project-due ${completion.overdue ? 'is-late' : ''}">${completion.overdue ? 'Atrasado · ' : ''}${dateLabel(row.due_date)}</span></div>
@@ -176,7 +189,7 @@
     if (!container?.isConnected) return;
     rememberBoard();
     const priorities = [['all','Todos os projetos'],['overdue','Em atraso'],['upcoming','Próximos 7 dias'],['waiting','Aguardando cliente']];
-    container.innerHTML = `<section class="ceo-projects"><div class="ceo-project-hero"><div class="ceo-project-heading"><div class="ceo-project-hero-copy"><span class="ceo-project-eyebrow">ZAMA / QUADRO DA EQUIPE</span><h2>Projetos de clientes</h2><p>Use a seta para abrir as informações e marcar as etapas. Cada avanço fica salvo para a equipe.</p></div></div><div class="ceo-project-heading-actions"><span class="ceo-project-shared-label">${icon('all')} Quadro compartilhado</span><button type="button" class="ceo-button" data-project-refresh ${loading || pendingChanges.size ? 'disabled' : ''}>${loading ? 'Atualizando…' : 'Atualizar'}</button>${isOwner() ? `<button type="button" class="ceo-button" data-project-team ${!loaded || loading || errorMessage ? 'disabled' : ''}>Criar acesso</button>` : ''}${canEditDetails() ? `<button type="button" class="ceo-button primary" data-project-new ${!loaded || loading || errorMessage ? 'disabled' : ''}>+ Novo projeto</button>` : ''}</div></div>
+    container.innerHTML = `<section class="ceo-projects"><div class="ceo-project-hero"><div class="ceo-project-heading"><div class="ceo-project-hero-copy"><span class="ceo-project-eyebrow">ZAMA / QUADRO DA EQUIPE</span><h2>Projetos de clientes</h2><p>Registre os processos internos de cada projeto. Use a seta para consultar as informações e acompanhar as etapas da equipe.</p></div></div><div class="ceo-project-heading-actions"><span class="ceo-project-shared-label">${icon('all')} Quadro compartilhado</span><button type="button" class="ceo-button" data-project-refresh ${loading || pendingChanges.size ? 'disabled' : ''}>${loading ? 'Atualizando…' : 'Atualizar'}</button>${isOwner() ? `<button type="button" class="ceo-button" data-project-team ${!loaded || loading || errorMessage ? 'disabled' : ''}>Criar acesso</button>` : ''}${canEditDetails() ? `<button type="button" class="ceo-button primary" data-project-new ${!loaded || loading || errorMessage ? 'disabled' : ''}>+ Novo projeto</button>` : ''}</div></div>
       <div class="ceo-project-priorities" aria-label="Prioridades dos projetos">${priorities.map(([key,label])=>`<button type="button" class="ceo-project-priority is-${key}" data-priority="${key}" aria-pressed="${filters.priority===key}" ${!loaded || loading ? 'disabled' : ''}><span class="ceo-project-priority-icon">${icon(key)}</span><strong>0</strong><span>${label}</span></button>`).join('')}</div>
       <p class="ceo-project-notice" data-project-feedback role="status" ${notice ? '' : 'hidden'}>${esc(notice)}</p>
       ${errorMessage ? `<div class="ceo-project-error" role="alert"><strong>Não foi possível carregar os projetos</strong><p>${esc(errorMessage)}</p><button class="ceo-button" type="button" data-project-retry>Tentar novamente</button></div>` : ''}
@@ -206,7 +219,7 @@
         return;
       }
       const open=event.target.closest('[data-project-open]'), edit=event.target.closest('[data-project-edit-inline]'), add=event.target.closest('[data-column-add]');
-      if(open) openDetail(open.dataset.projectOpen);
+      if(open) openDetail(open.dataset.projectOpen, open.hasAttribute('data-project-access'));
       if(edit) openEditor(edit.dataset.projectEditInline);
       if(add) openEditor(null,add.dataset.columnAdd);
       if(event.target.closest('[data-clear-project-filters]')) {filters.search=filters.status='';filters.priority='all';paint();}
@@ -312,6 +325,11 @@
       catch (error) { if (!['PGRST202','42883'].includes(error?.code)) throw error; }
       if (!current(ticket) || sequence !== requestSequence) return;
       phoneAvailable = phoneCapability?.client_phone === true;
+      let processCapability;
+      try { processCapability = await rpc('zama_project_process_capabilities', { p_owner: ticket.owner }); }
+      catch (error) { if (!['PGRST202','42883'].includes(error?.code)) throw error; }
+      if (!current(ticket) || sequence !== requestSequence) return;
+      processesAvailable = processCapability?.process_details === true;
       rows = result.map(metadata).sort((a, b) => b.updated_at.localeCompare(a.updated_at)); loaded = true;
     } catch (error) {
       if (!current(ticket) || sequence !== requestSequence) return;
@@ -571,9 +589,9 @@
     syncForm(); emailInput.focus(); void reloadRoster(); void loadCapability();
   }
   function checklist(row, list) {
-    return `<section class="ceo-project-detail-track"><h3>${esc(list.title)}</h3>${meter('Etapas concluídas',list.steps)}<ul class="ceo-project-checklist">${list.steps.length ? list.steps.map(step=>`<li class="${step.done ? 'is-done' : ''}">${stepControl(row,list,step,true)}</li>`).join('') : '<li>Nenhuma etapa cadastrada.</li>'}</ul></section>`;
+    return `<section class="ceo-project-detail-track"><h3>${esc(list.title)}</h3>${processInfo(list)}${meter('Etapas concluídas',list.steps)}<ul class="ceo-project-checklist">${list.steps.length ? list.steps.map(step=>`<li class="${step.done ? 'is-done' : ''}">${stepControl(row,list,step,true)}</li>`).join('') : '<li>Nenhuma etapa cadastrada.</li>'}</ul></section>`;
   }
-  function openDetail(id) {
+  function openDetail(id, focusAccess = false) {
     const row = rows.find(item => item.id === id); if (!row) return;
     const ticket = capture(), url = safeUrl(row.access_url);
     const dialog = newDialog(row.title, `<div class="ceo-project-detail-meta"><span class="ceo-project-status is-${row.status}"><i></i>${statuses[row.status]}</span><span>Prazo: ${dateLabel(row.due_date)}</span></div>
@@ -610,12 +628,26 @@
     dialog.querySelector('[data-project-invite]')?.addEventListener('click', () => {
       if (dialogCurrent(ticket, dialog) && isOwner()) openTeamAccess(row.responsible_email);
     });
+    if (focusAccess) {
+      const access = dialog.querySelector('.ceo-project-credentials');
+      access.tabIndex = -1;
+      access.focus({ preventScroll: true });
+      access.scrollIntoView({ block: 'center' });
+    }
   }
   function stepEditor(step) {
     return `<div class="ceo-project-step-editor" data-step-id="${esc(step.id)}"><input type="checkbox" data-step-done ${step.done ? 'checked' : ''} aria-label="Concluir etapa: ${esc(step.label || 'Nova etapa')}"><input type="text" data-step-label value="${esc(step.label)}" required maxlength="254" aria-label="Nome da etapa" placeholder="O que precisa ser feito?">${planningAvailable ? `<label class="ceo-project-step-date">Prazo<input type="date" data-step-due value="${esc(step.due_date || '')}" aria-label="Prazo da etapa: ${esc(step.label || 'Nova etapa')}"></label>` : ''}<div class="ceo-project-step-actions"><button type="button" class="ceo-button" data-step-up aria-label="Mover etapa para cima: ${esc(step.label || 'Nova etapa')}">↑</button><button type="button" class="ceo-button" data-step-down aria-label="Mover etapa para baixo: ${esc(step.label || 'Nova etapa')}">↓</button><button type="button" class="ceo-button" data-step-remove aria-label="Remover etapa: ${esc(step.label || 'Nova etapa')}">×</button></div></div>`;
   }
+  function processLinkEditor(link = {}) {
+    return `<div class="ceo-project-process-link" data-process-link><label class="ceo-field">Nome do arquivo<input type="text" data-process-link-label maxlength="254" value="${esc(link.label || '')}" aria-label="Nome do arquivo" placeholder="Ex.: Briefing aprovado"></label><label class="ceo-field">Link do arquivo<input type="url" data-process-link-url required maxlength="2048" value="${esc(link.url || '')}" aria-label="Link do arquivo" placeholder="https://"></label><button type="button" class="ceo-button" data-process-link-remove>Remover link</button></div>`;
+  }
+  function processEditor(list) {
+    if (!processesAvailable) return '';
+    const status = processStatuses[list.status] ? list.status : 'planning';
+    return `<details class="ceo-project-process-editor" open><summary>Informações do processo</summary><div class="ceo-project-process-fields"><label class="ceo-field ceo-project-wide">Descrição e instruções do processo<textarea data-process-description rows="3" maxlength="10000" aria-label="Descrição e instruções do processo" placeholder="Registre como executar este processo e as informações que a equipe precisa consultar.">${esc(list.description || '')}</textarea></label><label class="ceo-field">Responsável pelo processo<input type="text" data-process-responsible maxlength="254" value="${esc(list.responsible_name || '')}" aria-label="Responsável pelo processo" placeholder="Nome da pessoa ou equipe"></label><label class="ceo-field">Prazo do processo<input type="date" data-process-due min="0001-01-01" max="9999-12-31" value="${esc(list.due_date || '')}" aria-label="Prazo do processo"></label><label class="ceo-field">Andamento do processo<select data-process-status aria-label="Andamento do processo">${Object.entries(processStatuses).map(([value, label]) => `<option value="${value}" ${value === status ? 'selected' : ''}>${label}</option>`).join('')}</select></label><div class="ceo-project-wide"><h4>Links de arquivos</h4><div data-process-links>${(list.links || []).map(processLinkEditor).join('')}</div><button type="button" class="ceo-button" data-process-link-add>+ Adicionar link</button></div></div></details>`;
+  }
   function listEditor(list) {
-    return `<fieldset class="ceo-project-track-editor" data-production-list data-list-id="${esc(list.id)}"><legend>Lista de produção</legend><div class="ceo-project-list-heading"><label class="ceo-field">Nome da lista<input type="text" data-list-title value="${esc(list.title)}" required maxlength="254" aria-label="Nome da lista" placeholder="Ex.: Design, Gravação, Entrega"></label><button type="button" class="ceo-button" data-list-remove aria-label="Excluir lista: ${esc(list.title || 'Nova lista')}">Excluir lista</button></div><p data-steps-empty ${list.steps.length ? 'hidden' : ''}>Comece adicionando uma etapa. Você define o que precisa ser feito.</p><div data-list-steps>${list.steps.map(stepEditor).join('')}</div><button type="button" class="ceo-button" data-step-add>+ Adicionar etapa</button></fieldset>`;
+    return `<fieldset class="ceo-project-track-editor" data-production-list data-list-id="${esc(list.id)}"><legend>Lista de produção</legend><div class="ceo-project-list-heading"><label class="ceo-field">Nome da lista<input type="text" data-list-title value="${esc(list.title)}" required maxlength="254" aria-label="Nome da lista" placeholder="Ex.: Design, Gravação, Entrega"></label><button type="button" class="ceo-button" data-list-remove aria-label="Excluir lista: ${esc(list.title || 'Nova lista')}">Excluir lista</button></div>${processEditor(list)}<p data-steps-empty ${list.steps.length ? 'hidden' : ''}>Comece adicionando uma etapa. Você define o que precisa ser feito.</p><div data-list-steps>${list.steps.map(stepEditor).join('')}</div><button type="button" class="ceo-button" data-step-add>+ Adicionar etapa</button></fieldset>`;
   }
   function syncListControls(form) {
     const lists = [...form.querySelectorAll('[data-production-list]')];
@@ -624,6 +656,8 @@
     lists.forEach(list => {
       const title = list.querySelector('[data-list-title]').value.trim() || 'Nova lista';
       list.querySelector('[data-list-remove]').setAttribute('aria-label', `Excluir lista: ${title}`);
+      const linkAdd = list.querySelector('[data-process-link-add]');
+      if (linkAdd) linkAdd.disabled = list.querySelectorAll('[data-process-link]').length >= 20;
       const steps = [...list.querySelector('[data-list-steps]').children];
       list.querySelector('[data-steps-empty]').hidden = steps.length > 0;
       list.querySelector('[data-step-add]').disabled = steps.length >= 100;
@@ -650,8 +684,8 @@
       <section><h3>Acessos do cliente</h3><div class="ceo-project-form-grid"><label class="ceo-field">E-mail de acesso<input name="client_email" type="email" maxlength="254" value="${esc(row.client_email)}" placeholder="cliente@empresa.com" autocomplete="off"></label><label class="ceo-field">Página de acesso<input name="access_url" type="url" maxlength="2000" value="${esc(row.access_url)}" placeholder="https://" autocomplete="off"></label>${isOwner() ? `<label class="ceo-field ceo-project-wide">${row.has_password ? 'Nova senha (opcional)' : 'Senha do cliente'}<input name="password" type="password" data-private-value maxlength="2000" autocomplete="new-password" placeholder="${row.has_password ? 'Deixe vazio para manter a senha atual' : 'Informe a senha de acesso do cliente'}"></label>${row.has_password ? '<label class="ceo-project-remove-secret ceo-project-wide"><input type="checkbox" name="remove_password"> Remover a senha cadastrada</label>' : ''}` : '<p class="ceo-project-wide">As senhas do cliente são gerenciadas pelo administrador.</p>'}</div><p>A senha não aparece nas listagens ou nos backups da central.</p></section>
       <section><h3>Responsável pela entrega</h3><div class="ceo-project-form-grid"><label class="ceo-field">Nome do responsável<input name="responsible_name" maxlength="180" value="${esc(row.responsible_name)}" placeholder="Quem cuidará do projeto?"></label><label class="ceo-field">E-mail do responsável<input name="responsible_email" ${!isOwner() && row.has_password ? 'disabled title="O administrador altera o responsável quando o projeto possui uma senha cadastrada."' : ''} type="email" maxlength="254" value="${esc(row.responsible_email)}" placeholder="responsavel@empresa.com"></label><label class="ceo-field">Prazo da entrega<input name="due_date" type="date" value="${esc(row.due_date)}"></label></div><p>Todos da equipe podem criar e editar projetos. A agenda permanece privada. ${!isOwner() && row.has_password ? 'Neste projeto, o administrador altera o e-mail responsável porque há uma senha de cliente vinculada.' : ''}</p></section>` : `<p class="ceo-project-edit-summary">${esc(row.title)} · ${esc(row.client_name)}</p>`}
       <label class="ceo-field">Situação do projeto<select name="status">${options(row.status)}</select></label>
-      <section class="ceo-project-production"><h3>Listas de produção</h3><p>Crie suas listas e escreva as etapas na ordem que você precisa. Os nomes e as etapas ficam por sua conta.</p><div data-production-lists>${row.production_lists.map(listEditor).join('')}</div><p data-lists-empty ${row.production_lists.length ? 'hidden' : ''}>Nenhuma lista criada. Você pode adicionar uma agora ou depois.</p><button type="button" class="ceo-button" data-list-add>+ Adicionar lista</button></section>
-      <label class="ceo-field">Notas e próximos passos<textarea name="notes" rows="4" maxlength="10000" placeholder="O que já foi feito, o que falta e o que depende do cliente.">${esc(row.notes)}</textarea></label>
+      <section class="ceo-project-production"><h3>Processos e etapas</h3><p>Cada lista organiza um processo interno. Registre suas instruções, responsável, prazo e arquivos; use as etapas para acompanhar a execução. O andamento do processo é definido separadamente das etapas.</p>${processesAvailable ? '' : '<p class="ceo-project-notice" data-process-unavailable>As fichas de processos ainda não estão disponíveis nesta instalação. As listas e etapas continuam disponíveis.</p>'}<div data-production-lists>${row.production_lists.map(listEditor).join('')}</div><p data-lists-empty ${row.production_lists.length ? 'hidden' : ''}>Nenhuma lista criada. Você pode adicionar uma agora ou depois.</p><button type="button" class="ceo-button" data-list-add>+ Adicionar lista</button></section>
+      <label class="ceo-field">Notas e próximos passos<textarea name="notes" rows="4" maxlength="10000" placeholder="Registre decisões, contexto e próximos passos da equipe.">${esc(row.notes)}</textarea></label>
       <p class="ceo-form-error" data-dialog-error role="alert" hidden></p><footer class="ceo-project-dialog-footer ceo-dialog-actions"><span>As alterações são salvas neste projeto.</span><div><button type="button" class="ceo-button" data-close>Cancelar</button><button type="submit" class="ceo-button primary">${id ? 'Salvar alterações' : 'Criar projeto'}</button></div></footer></form>`);
     const form = dialog.querySelector('form');
     if (isOwner() && planningAvailable) setupTemplates(form, ticket, dialog);
@@ -666,6 +700,17 @@
       const listAdd = event.target.closest('[data-list-add]'), listRemove = event.target.closest('[data-list-remove]');
       const add = event.target.closest('[data-step-add]'), remove = event.target.closest('[data-step-remove]');
       const move = event.target.closest('[data-step-up], [data-step-down]');
+      const linkAdd = event.target.closest('[data-process-link-add]'), linkRemove = event.target.closest('[data-process-link-remove]');
+      if (linkAdd) {
+        const links = linkAdd.closest('[data-production-list]').querySelector('[data-process-links]');
+        if (links.children.length >= 20) return;
+        links.insertAdjacentHTML('beforeend', processLinkEditor());
+        links.lastElementChild.querySelector('[data-process-link-label]').focus();
+      }
+      if (linkRemove) {
+        const list = linkRemove.closest('[data-production-list]');
+        linkRemove.closest('[data-process-link]').remove(); list.querySelector('[data-process-link-add]').focus();
+      }
       if (listAdd && form.querySelectorAll('[data-production-list]').length < 20) {
         const lists = form.querySelector('[data-production-lists]');
         lists.insertAdjacentHTML('beforeend', listEditor({ id: makeId(), title: '', steps: [] }));
@@ -688,7 +733,7 @@
         else if (move.hasAttribute('data-step-down') && step.nextElementSibling) track.insertBefore(step.nextElementSibling, step);
         step.querySelector('[data-step-label]').focus();
       }
-      if (listAdd || listRemove || add || remove || move) syncListControls(form);
+      if (listAdd || listRemove || add || remove || move || linkAdd || linkRemove) syncListControls(form);
     });
     form.addEventListener('submit', async event => {
       event.preventDefault();
@@ -699,8 +744,29 @@
       if (id) { project.id = id; project.revision = row.revision; }
       project.production_lists = [...form.querySelectorAll('[data-production-list]')].map(list => ({
         id: list.dataset.listId, title: list.querySelector('[data-list-title]').value.trim(),
+        ...(processesAvailable ? {
+          description: list.querySelector('[data-process-description]').value.trim(),
+          responsible_name: list.querySelector('[data-process-responsible]').value.trim(),
+          due_date: list.querySelector('[data-process-due]').value || null,
+          status: list.querySelector('[data-process-status]').value,
+          links: [...list.querySelectorAll('[data-process-link]')].map(link => ({ label: link.querySelector('[data-process-link-label]').value.trim(), url: link.querySelector('[data-process-link-url]').value.trim() }))
+        } : {}),
         steps: [...list.querySelector('[data-list-steps]').children].map(item => ({ id: item.dataset.stepId, label: item.querySelector('[data-step-label]').value.trim(), done: item.querySelector('[data-step-done]').checked, ...(planningAvailable ? { due_date: item.querySelector('[data-step-due]').value || null } : {}) }))
       }));
+      if (processesAvailable) {
+        for (const list of form.querySelectorAll('[data-production-list]')) {
+          const due = list.querySelector('[data-process-due]');
+          if (due.value && !root.ZamaProjectPlanning.validDate(due.value)) {
+            output.textContent = 'Informe uma data válida para o processo.'; output.hidden = false; due.focus(); return;
+          }
+          for (const input of list.querySelectorAll('[data-process-link-url]')) {
+            if (!/^https?:\/\/[^\s]+$/i.test(input.value.trim()) || !safeUrl(input.value.trim())) {
+              output.textContent = 'Use um link de arquivo válido, começando com https:// ou http://.';
+              output.hidden = false; input.focus(); return;
+            }
+          }
+        }
+      }
       if (project.production_lists.some(list => !list.title || list.steps.some(step => !step.label))) {
         output.textContent = 'Preencha o nome de cada lista e de cada etapa antes de salvar.'; output.hidden = false; return;
       }
@@ -731,7 +797,7 @@
   }
   function setupTemplates(form, ticket, dialog) {
     const section = form.querySelector('.ceo-project-production');
-    section.insertAdjacentHTML('afterbegin', `<details class="ceo-project-templates"><summary>Modelos de produção <span>Reaproveite suas listas</span></summary><p>Use um modelo para começar mais rápido. Clientes, senhas, datas e etapas concluídas não são copiados.</p><div class="ceo-project-template-row"><label class="ceo-field">Modelo de produção<select data-template-select disabled><option value="">Carregando modelos…</option></select></label><button type="button" class="ceo-button" data-template-apply disabled>Adicionar modelo</button><button type="button" class="ceo-button" data-template-delete disabled>Excluir modelo</button></div><div class="ceo-project-template-confirm" hidden data-template-confirm><span>Excluir este modelo? Os projetos já criados serão mantidos.</span><button type="button" class="ceo-button danger" data-template-confirm-delete>Confirmar exclusão</button><button type="button" class="ceo-button" data-template-cancel>Cancelar</button></div><div class="ceo-project-template-row"><label class="ceo-field">Nome do modelo<input data-template-name maxlength="180" placeholder="Ex.: Produção de vídeo"></label><button type="button" class="ceo-button" data-template-save disabled>Salvar como modelo</button></div><p data-template-message role="status"></p></details>`);
+    section.insertAdjacentHTML('afterbegin', `<details class="ceo-project-templates"><summary>Modelos de produção <span>Reaproveite suas listas</span></summary><p>Use um modelo para começar mais rápido. Somente nomes de listas e etapas são copiados. Instruções, responsáveis, links, datas e andamento ficam no projeto original.</p><div class="ceo-project-template-row"><label class="ceo-field">Modelo de produção<select data-template-select disabled><option value="">Carregando modelos…</option></select></label><button type="button" class="ceo-button" data-template-apply disabled>Adicionar modelo</button><button type="button" class="ceo-button" data-template-delete disabled>Excluir modelo</button></div><div class="ceo-project-template-confirm" hidden data-template-confirm><span>Excluir este modelo? Os projetos já criados serão mantidos.</span><button type="button" class="ceo-button danger" data-template-confirm-delete>Confirmar exclusão</button><button type="button" class="ceo-button" data-template-cancel>Cancelar</button></div><div class="ceo-project-template-row"><label class="ceo-field">Nome do modelo<input data-template-name maxlength="180" placeholder="Ex.: Produção de vídeo"></label><button type="button" class="ceo-button" data-template-save disabled>Salvar como modelo</button></div><p data-template-message role="status"></p></details>`);
     const box = section.querySelector('[data-template-message]'), select = section.querySelector('[data-template-select]');
     select.setAttribute('aria-label', 'Modelo de produção');
     let models = [], busy = false, ready = false;
@@ -759,7 +825,8 @@
       if (!valid() || busy) return;
       const model = models.find(item => item.id === select.value); if (!model) return;
       const lists = form.querySelector('[data-production-lists]');
-      const blank = lists.children.length === 1 && !lists.querySelector('[data-step-id]') && lists.querySelector('[data-list-title]').value === 'Lista de produção';
+      const hasProcessDraft = [...lists.querySelectorAll('[data-process-description],[data-process-responsible],[data-process-due]')].some(input => input.value.trim()) || [...lists.querySelectorAll('[data-process-status]')].some(input => input.value !== 'planning') || lists.querySelector('[data-process-link]');
+      const blank = lists.children.length === 1 && !lists.querySelector('[data-step-id]') && lists.querySelector('[data-list-title]').value === 'Lista de produção' && !hasProcessDraft;
       if (lists.children.length - Number(blank) + model.production_lists.length > 20) { box.textContent = 'Cada projeto pode ter até 20 listas.'; return; }
       if (blank) lists.replaceChildren();
       model.production_lists.forEach(list => lists.insertAdjacentHTML('beforeend', listEditor({ id: makeId(), title: list.title, steps: list.steps.map(step => ({ id: makeId(), label: step.label, done: false })) })));
