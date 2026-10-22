@@ -1,55 +1,65 @@
-# ZAMA Admin
+# ZAMA
 
-Projetos de clientes: [listas de produção manuais, credenciais e acesso restrito](docs/PROJETOS.md).
+Sistema interno com financeiro, investimentos, agenda privada, ideias e projetos
+compartilhados. Cada projeto organiza processos, etapas e dados de acesso do
+cliente. Supabase mantém autenticação e persistência; APIs Node atendem JARVIS,
+notificações e cadastro de acessos.
 
-Melhorias administrativas: [financeiro, backups, equipe, sessão e notificações](docs/ADMINISTRATIVO.md).
+## Rodar localmente
 
-JARVIS: veja [configuracao, migration, testes e limites da entrega](docs/JARVIS.md).
+Use Node.js 22 ou superior. Na raiz do repositório:
 
-A central de gestão e rotina reúne financeiro, investimentos, agenda e ideias,
-preservando os módulos e os dados existentes. Veja [o guia da Central CEO](docs/CENTRAL-CEO.md)
-para os fluxos, compatibilidade, lembretes e validações.
-
-Este projeto foi separado por pastas para ficar mais facil de entender e manter.
-
-## Estrutura
-
-```text
-app/          Sistema que abre no navegador: HTML, CSS, JS, imagens e videos.
-database/     Arquivos SQL do Supabase.
-docs/         Explicacoes de arquitetura e manutencao.
-scripts/      Atalhos e comandos auxiliares.
-releases/     Arquivos compactados para entrega/publicacao.
-shortcuts/    Atalhos para abrir o sistema local.
-logs/         Logs locais do servidor.
-```
-
-Os arquivos `package.json`, `package-lock.json`, `tailwind.config.js` e
-`vercel.json` ficam na raiz porque o npm, Tailwind e Vercel esperam encontrar
-essas configuracoes aqui.
-
-## Como rodar
-
-```cmd
+```powershell
+npm.cmd ci
 npm.cmd run serve
 ```
 
-Ou execute:
+Abra `http://localhost:5174/`. O comando serve frontend e APIs. O atalho
+`scripts/iniciar-zama.bat` inicia o mesmo servidor. Em macOS/Linux, use `npm`.
 
-```text
-scripts/iniciar-zama.bat
+`app/assets/js/env.js` contém a configuração pública do navegador. Para os serviços,
+use as variáveis de `.env.example` no ambiente local ou na hospedagem.
+
+## Estrutura
+
+| Pasta | Conteúdo |
+| --- | --- |
+| `app/` | Interface e arquivos públicos |
+| `api/` | Entradas das funções hospedadas |
+| `services/` | Regras e integrações do servidor |
+| `database/` | Migrations e instaladores SQL |
+| `scripts/` | Servidor local, build e verificações |
+| `tests/` | Testes de regras/APIs/banco e navegador |
+| `docs/` | Arquitetura e guias de manutenção |
+| `releases/`, `shortcuts/` | Entregas históricas e atalhos locais |
+
+Veja o [mapa da arquitetura](docs/ARQUITETURA.md) para localizar cada módulo,
+entender a ordem dos scripts e seguir o fluxo correto de salvamento.
+
+## Validar
+
+```powershell
+npm.cmd run check
+npm.cmd test
+npm.cmd run test:browser
+npm.cmd run build
 ```
 
-O sistema abre em:
+`check` verifica JavaScript, assets e o instalador SQL. `test` inclui automaticamente
+os testes `tests/*.test.js`. `test:browser` verifica fluxos em Chromium.
+`build` reúne verificações estáticas e geração do CSS; a Vercel usa esse comando.
 
-```text
-http://localhost:5174/
-```
+O CSS atual está separado por módulo em `app/assets/`. A base Tailwind vem de
+`styles.input.css`; `styles.css` é gerado e não deve ser editado manualmente.
 
-## Onde mexer
+## Guias
 
-- Tela principal: `app/index.html`
-- Visual: `app/assets/styles.input.css`
-- JavaScript: `app/assets/js/`
-- Banco/Supabase: `database/`
-- Explicacao completa: `docs/ARQUITETURA.md`
+- [Projetos, processos, senhas e acesso da equipe](docs/PROJETOS.md)
+- [Financeiro, investimentos, agenda e ideias](docs/CENTRAL-CEO.md)
+- [Backups, relatórios e sessão](docs/ADMINISTRATIVO.md)
+- [JARVIS: configuração e limites](docs/JARVIS.md)
+- [Notificações em segundo plano](docs/lembretes-em-segundo-plano.md)
+
+A publicação do site não executa migrations no Supabase. Para atualizar Projetos,
+siga o instalador descrito em seu guia. Não use `database/supabase-setup.sql` sobre
+uma base existente: esse é um procedimento legado com exclusão de tabelas.

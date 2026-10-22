@@ -168,7 +168,7 @@ define('complete_task', 'write', 'Conclua a tarefa real identificada por consult
   const saved = s.agenda.find(t => t.id === a.id);
   return taskView(base.recorrencia && base.recorrencia !== 'none' ? Agenda.helpers.occurrence(saved, original) : saved, c, s);
 });
-define('save_idea', 'write', 'Salve uma ideia no banco existente. Não existe módulo de projetos ativo; não crie vínculo fictício.', z.object({ title: str(180), description: opt(5000), category: opt(80), priority }).strict(), (s, a, c) => {
+define('save_idea', 'write', 'Salve uma ideia no banco existente. Projetos não estão integrados a esta ferramenta; não crie vínculo fictício.', z.object({ title: str(180), description: opt(5000), category: opt(80), priority }).strict(), (s, a, c) => {
   const row = Ideas.upsert(s, { titulo: a.title, descricao: a.description, categoria: a.category || 'Geral', prioridade: priorities[a.priority || 'medium'], etapa: 'capturada', data: today(c) });
   row.jarvisActionId = c.operationId; return { id: row.id, title: row.titulo, stage: row.etapa };
 });

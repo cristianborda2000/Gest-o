@@ -34,6 +34,7 @@ async function expand(page) {
 }
 async function openAccess(page) {
   await card(page).getByRole('button',{name:'Ver dados de acesso',exact:true}).click();
+  await expect(dialog(page).getByRole('tab',{name:'Acessos',exact:true})).toHaveAttribute('aria-selected','true');
   await expect(credentials(page)).toBeVisible();
   await expect(credentials(page)).toHaveAttribute('tabindex','-1');
   await expect(credentials(page)).toBeFocused();

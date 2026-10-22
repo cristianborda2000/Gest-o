@@ -1,356 +1,160 @@
-# Arquitetura do ZAMA Admin
+# Arquitetura e manutenção do ZAMA
 
-> Atualização da Central CEO: o fluxo de dados, os novos módulos, as regras de
-> finanças e lembretes e a organização atual do CSS estão no
-> [guia da Central CEO](CENTRAL-CEO.md). As seções abaixo descrevem a base legada
-> preservada. O carregamento atual não envia automaticamente o localStorage ao
-> Supabase; as gravações usam controle de versão com `updated_at`.
+O ZAMA tem um frontend estático, APIs Node e banco Supabase. O Vite serve o
+ambiente local; a Vercel publica `app/` e executa as funções de `api/`.
+O JavaScript do navegador é carregado por scripts em ordem, sem empacotamento.
 
-Este documento explica como o sistema esta organizado, onde cada parte vive e
-qual caminho seguir para fazer manutencao sem quebrar as funcoes existentes.
+## Mapa do repositório
 
-## Visao geral
+| Diretório | Responsabilidade |
+| --- | --- |
+| `app/` | HTML, estilos, módulos do navegador, imagens e worker de notificações |
+| `api/` | Entradas das funções da Vercel; delegam para os serviços |
+| `services/` | Autenticação, validação e operações executadas no servidor |
+| `database/migrations/` | Evolução incremental do banco e das permissões |
+| `database/instalar-projetos.sql` | Instalador gerado a partir das migrations |
+| `scripts/` | Servidor local, verificações e geração de arquivos |
+| `tests/` | Testes de regras, persistência, APIs e banco PGlite |
+| `tests/browser/` | Fluxos e layout em Chromium com contas/APIs simuladas |
+| `docs/` | Guias de instalação, operação e manutenção |
+| `releases/`, `shortcuts/` | Entregas históricas e atalhos locais |
 
-O ZAMA Admin e uma aplicacao frontend estatica servida pelo Vite. Ela usa:
+`node_modules/`, `.playwright/`, `.npm-cache/`, `logs/` e `test-results*/` são
+dependências ou resultados locais. Não são a fonte da aplicação.
 
-- `index.html` para a estrutura base da tela.
-- `assets/styles.input.css` como CSS fonte.
-- `assets/styles.css` como CSS compilado pelo Tailwind.
-- Arquivos JavaScript globais em `assets/js/`.
-- `localStorage` como fallback local de dados.
-- Supabase Auth + tabela `app_state` para salvar dados na nuvem quando o login esta ativo.
+## Frontend por responsabilidade
 
-Nao existe bundler para os arquivos JS da aplicacao. O `index.html` carrega cada
-script em ordem, e todos compartilham variaveis/funcoes globais.
+| Arquivo em `app/assets/js/` | Responsabilidade |
+| --- | --- |
+| `env.js`, `config.js` | Configuração pública, recursos habilitados, cliente Supabase e definições legadas |
+| `core.js` | Estado, carregamento, revisão da nuvem e transações `ceoCommit` |
+| `boot.js` | Inicialização, autenticação, eventos globais e configuração |
+| `ceo-shell.js` | Navegação atual, visão geral e composição dos módulos |
+| `ceo-time.js` | Datas da aplicação em `America/Sao_Paulo` |
+| `finance-categories.js` | Regras de categorias financeiras |
+| `ceo-finance.js` | Financeiro, investimentos, totais, filtros, gráficos e formulários |
+| `ceo-agenda.js` | Tarefas, recorrência, ocorrências, calendário e diálogos |
+| `ceo-ideas.js` | Ideias pessoais/compartilhadas e tarefas vinculadas |
+| `admin-data.js` | Backups, restauração, relatórios e exportações |
+| `workspaces.js` | Empresa selecionada, papel na equipe, convites e contexto |
+| `project-data.js` | Regras puras: metadados permitidos, listas, status, telefone, links e mensagens de erro |
+| `project-planning.js` | Progresso, prazos e ordenação de projetos/processos/etapas |
+| `ceo-projects.js` | Quadro, formulários, RPCs, permissões, revisões e consulta temporária de senhas |
+| `push-reminders.js` | Inscrição do dispositivo e integração com notificações |
+| `jarvis.js`, `jarvis-voice.js` | Interface do assistente e sessão de voz |
+| `mobile-forms.js`, `pwa-install.js` | Formulários em telas pequenas e instalação do aplicativo |
+| `forms.js`, `records.js`, `table.js`, `dashboard.js`, `contracts.js` | Compatibilidade, renderização e operações dos registros legados |
 
-## Ordem de carregamento
+Os arquivos legados ainda participam da inicialização e preservam clientes,
+mensalidades, Marketing, RH e contratos. Retirar um botão da navegação não torna
+automaticamente essas funções ou coleções descartáveis.
 
-O `index.html` carrega os scripts nesta ordem:
+### Dependências de carregamento
 
-```text
-config.js
-core.js
-forms.js
-dashboard.js
-contracts.js
-table.js
-records.js
-boot.js
+`app/index.html` é a fonte da ordem de scripts. Ao acrescentar um módulo:
+
+1. Carregue configuração antes dos consumidores.
+2. Carregue regras antes das interfaces: `finance-categories` antes de
+   `ceo-finance`; `project-data` e `project-planning` antes de `ceo-projects`.
+3. Mantenha `core` antes dos módulos que usam estado e `ceoCommit`.
+4. Mantenha `boot` depois dos módulos que ele inicializa.
+5. Atualize a versão `?v=` dos scripts/estilos alterados antes da publicação.
+
+As regras puras exportam APIs `Zama*` no navegador; algumas também usam
+`module.exports` para testes no Node. Elas não devem consultar DOM, sessão ou
+rede. Os controladores cuidam dessas integrações.
+
+### Fluxo de gravação
+
+Para dados administrativos, use `ceoCommit(mutator, mensagem)`: ele trabalha em
+uma cópia, grava com controle de revisão e só então publica o novo estado.
+Não altere `state` antes da confirmação do banco. Um segundo envio durante uma
+gravação deve manter o rascunho, sem modificar a cópia confirmada.
+
+Operações assíncronas pertencem à conta, empresa e sessão que as iniciaram.
+Respostas atrasadas não podem restaurar conteúdo após logout/troca de empresa,
+nem fechar um diálogo diferente daquele que iniciou a operação.
+
+Projetos usam RPCs próprias e revisão incremental. Ideias compartilhadas também
+usam RPCs próprias. Não inclua essas gravações no backup geral de `app_state`.
+
+## Onde os dados ficam
+
+| Dados | Persistência e acesso |
+| --- | --- |
+| Financeiro, investimentos, empresa e registros legados | `app_state`, com revisão `updated_at` e acesso do proprietário |
+| Agenda | Linha pessoal da conta, inclusive em uma empresa compartilhada |
+| Ideias da equipe | RPCs da empresa; preservam os dados privados dos demais módulos |
+| Projetos, processos e etapas | Tabelas/RPCs próprias; membros confirmados da empresa |
+| Senhas de clientes | Cifradas no banco; consulta separada para administrador ou responsável autorizado |
+| Modelos de produção | Estrutura de listas/etapas; sem dados específicos do projeto |
+| Cache do navegador | Separado por conta e empresa; não substitui o banco como fonte de verdade |
+
+O backup administrativo JSON não contém projetos, modelos nem senhas de clientes.
+Veja [Projetos](PROJETOS.md) para contratos, migrations e recuperação.
+
+## CSS e arquivos públicos
+
+`styles.input.css` é a fonte Tailwind da base legada. `styles.css` é gerado por
+`npm run build:css` e importado por `legacy.css` em uma camada de baixa prioridade.
+
+O visual atual usa `ceo.css` e folhas específicas: `finance.css`,
+`ceo-agenda.css`, `ceo-ideas.css`, `ceo-projects.css`, `admin.css`, `mobile.css`,
+`overview-week.css` e estilos de JARVIS/PWA. Edite a folha do módulo; não edite
+`styles.css` diretamente nem adicione regras do módulo ao HTML.
+
+Somente arquivos de `app/` são públicos. Configurações do navegador contêm valores
+públicos. Chaves administrativas e de provedores ficam no ambiente do servidor,
+conforme `.env.example` e os guias de cada serviço.
+
+## Serviços e APIs
+
+| Entrada | Serviço | Papel |
+| --- | --- | --- |
+| `api/jarvis.js` | `services/jarvis/` | Assistente, ferramentas autorizadas, confirmações, notícias e voz |
+| `api/reminders.js` | `services/reminders/http.js` | Configuração e inscrição de notificações |
+| `api/reminder-cron.js` | `services/reminders/dispatcher.js` | Entrega agendada e prevenção de duplicatas |
+| `api/project-access.js` | `services/project-access/` | Cadastro de acesso pelo administrador autorizado |
+
+`services/http/read-json-body.js` reúne a leitura de JSON com limite de bytes.
+Cada serviço fornece seus limites e erros. O helper junta os bytes antes de
+decodificar UTF-8 para preservar acentos divididos entre pacotes de rede.
+
+Autorização, validação de domínio e persistência continuam nos respectivos
+serviços. O usuário é derivado da sessão validada; um identificador no corpo da
+requisição não concede acesso a outra conta. As entradas `api/` permanecem
+pequenas e o servidor local reutiliza os mesmos handlers.
+
+## Verificar e publicar
+
+```powershell
+npm.cmd run check
+npm.cmd test
+npm.cmd run test:browser
+npm.cmd run build
 ```
 
-Essa ordem importa. Por exemplo:
-
-- `config.js` precisa vir primeiro porque define `modules`, Supabase e moeda.
-- `records.js` define utilitarios usados por renderizacoes e eventos.
-- `boot.js` vem por ultimo porque captura os elementos da tela e liga os eventos.
-
-Se criar um arquivo novo, coloque-o antes de `boot.js` e depois dos arquivos que
-ele depende.
-
-## Mapa de arquivos
-
-```text
-app/
-  index.html
-    Estrutura principal: login, menu lateral, topbar, paineis e modais.
-
-  README.md
-    Guia rapido para rodar, publicar e entender o projeto.
-
-  zama-logo.png
-    Logo usado na interface e no contrato/PDF.
-
-  assets/
-    styles.input.css
-      Arquivo editavel de CSS. Sempre altere este arquivo.
-
-    styles.css
-      Arquivo gerado. Nao edite manualmente.
-
-    gato-zama-green.mov
-      Video usado pelo mascote do dashboard. O fundo verde e removido via canvas.
-
-    js/
-      config.js
-      core.js
-      forms.js
-      dashboard.js
-      contracts.js
-      table.js
-      records.js
-      boot.js
-```
-
-## Responsabilidade de cada JS
-
-### `config.js`
-
-Define configuracoes e dados iniciais:
-
-- `storageKey`: chave usada no `localStorage`.
-- `cloudStateTable`: tabela do Supabase.
-- `supabaseUrl` e `supabaseAnonKey`.
-- `currency`: formatador de moeda em BRL.
-- `defaultCompanyProfile`.
-- `modules`: configuracao de cada modulo do sistema.
-
-Quando quiser adicionar campo em formulario, status, labels ou dados exemplo,
-comece por `modules`.
-
-### `core.js`
-
-Cuida do estado geral e da renderizacao principal:
-
-- cria estado inicial;
-- normaliza dados antigos;
-- carrega dados locais ou Supabase;
-- salva dados com `persist()`;
-- alterna modulo com `goToModule()`;
-- chama `render()`;
-- monta os indicadores superiores com `renderStats()`;
-- controla status de salvamento na nuvem.
-
-Regra pratica: se o assunto for estado global, troca de modulo ou salvamento,
-olhe primeiro este arquivo.
-
-### `forms.js`
-
-Monta formularios dinamicos a partir do `modules`.
-
-Responsabilidades:
-
-- descobrir qual lista esta ativa;
-- renderizar campos do modulo;
-- criar grupos visuais de campos;
-- renderizar abas de financeiro e agenda.
-
-Regra pratica: se quiser mudar como o formulario aparece, mexa aqui. Se quiser
-mudar quais campos existem, mexa no `config.js`.
-
-### `dashboard.js`
-
-Monta a primeira tela do sistema:
-
-- cards de metricas;
-- hero do dashboard;
-- grafico financeiro simples;
-- alertas;
-- tarefas de hoje;
-- resumo de projetos e mensalidades;
-- mascote com croma key em canvas.
-
-O mascote usa `gato-zama-green.mov`. O video original nao aparece na tela: ele e
-criado em memoria pelo JavaScript e seus frames sao desenhados no canvas com o
-verde removido.
-
-### `contracts.js`
-
-Gera o contrato/PDF do cliente.
-
-Fluxo:
-
-1. Usuario clica em `PDF` na lista de clientes.
-2. `printClientContract(client)` abre uma nova janela.
-3. `registerContractHistory(client)` registra o historico do contrato.
-4. `buildClientContractHtml(client, contractRecord)` gera o HTML do contrato.
-5. O navegador chama `print()`.
-
-As margens do PDF seguem ABNT:
-
-```text
-topo: 3cm
-esquerda: 3cm
-direita: 2cm
-baixo: 2cm
-```
-
-### `table.js`
-
-Renderiza listas, tabelas, cards, calendario e acoes de linha.
-
-Responsabilidades:
-
-- `renderTable()`: decide se mostra tabela, cards ou calendario.
-- `renderCalendar()`: monta a visualizacao mensal da agenda.
-- `renderRowActions()`: botoes editar, excluir, pagar, concluir e PDF.
-- `openDetailPanel()`: painel lateral de detalhes.
-- `renderFinanceSummary()`: resumo do modulo financeiro.
-
-Regra pratica: se o assunto for "como aparece na lista", "calendario" ou "botoes
-de acao", comece aqui.
-
-### `records.js`
-
-Contem as regras de negocio e utilitarios.
-
-Principais regras:
-
-- projeto gera entradas financeiras automaticas;
-- mensalidade paga gera entrada financeira;
-- cliente ativo cria/atualiza mensalidade;
-- gastos fixos aparecem na agenda;
-- vencimentos financeiros aparecem na agenda;
-- status viram classes de cor;
-- totais financeiros sao calculados aqui.
-
-Regra pratica: se mudar uma regra automatica, mexa aqui e teste financeiro,
-agenda e dashboard.
-
-### `boot.js`
-
-Inicializa tudo.
-
-Responsabilidades:
-
-- captura elementos do DOM;
-- controla login;
-- abre/fecha configuracoes;
-- liga eventos dos botoes globais;
-- importa/exporta backup;
-- salva perfil da empresa;
-- chama `initializeAuth()` no final.
-
-Este arquivo depende de quase todos os outros, por isso fica por ultimo.
-
-## Fluxo dos dados
-
-```text
-Usuario interage com formulario/botao
-  -> boot.js ou table.js recebe evento
-  -> records.js aplica regras de negocio
-  -> persist() em core.js salva estado
-  -> render() em core.js redesenha a tela
-  -> dashboard/table/forms exibem a versao atual
-```
-
-## Estado principal
-
-A variavel global `state` guarda quase tudo:
-
-```text
-state = {
-  projetos: [],
-  marketing: [],
-  clientes: [],
-  mensalidades: [],
-  agenda: [],
-  rh: [],
-  financeiro: [],
-  gastosFixos: [],
-  contractHistory: [],
-  companyProfile: {},
-  setupDone: true/false
-}
-```
-
-Ela e criada em `core.js` e manipulada pelos outros arquivos.
-
-## Salvamento
-
-O sistema salva em dois lugares:
-
-1. `localStorage`, sempre.
-2. Supabase, quando existe usuario logado.
-
-Funcoes principais:
-
-- `loadState()`
-- `persist()`
-- `loadCloudState()`
-- `saveCloudState()`
-- `subscribeToCloudChanges()`
-
-## Regras de cor por status
-
-A funcao `statusClass(status)` em `records.js` controla as classes:
-
-```text
-Concluido, Pago, Ativo -> green
-Cancelado, Atrasado, Pausado, Afastado, Desligado -> red
-Em andamento, Agendado -> blue
-Outros, como Pendente -> yellow
-```
-
-O CSS transforma essas classes em cores visuais.
-
-## Como mexer sem quebrar
-
-### Adicionar campo em um modulo
-
-1. Abra `assets/js/config.js`.
-2. Encontre o modulo em `modules`.
-3. Adicione o campo em `fields`.
-4. Se precisar, adicione valor exemplo em `rows`.
-5. Teste criar e editar registro.
-
-### Mudar visual
-
-1. Edite `assets/styles.input.css`.
-2. Rode:
-
-```bash
-npm.cmd run build:css
-```
-
-3. Nunca edite `assets/styles.css` diretamente.
-
-### Mudar dashboard
-
-1. Edite `assets/js/dashboard.js`.
-2. Se mudar classes CSS, edite `styles.input.css`.
-3. Rode `node --check assets/js/dashboard.js`.
-4. Rode `npm.cmd run build:css`.
-
-### Mudar contrato/PDF
-
-1. Edite `assets/js/contracts.js`.
-2. Gere um PDF de cliente.
-3. Confira margens, logo e assinatura.
-
-### Mudar regras automaticas
-
-1. Edite `assets/js/records.js`.
-2. Teste o modulo afetado e o financeiro.
-3. Verifique o dashboard, porque ele usa totais calculados em `records.js`.
-
-## Comandos uteis
-
-Rodar localmente:
-
-```cmd
-npm.cmd run serve
-```
-
-Compilar CSS:
-
-```cmd
-npm.cmd run build:css
-```
-
-Verificar sintaxe JS:
-
-```cmd
-node --check app\assets\js\dashboard.js
-node --check app\assets\js\records.js
-node --check app\assets\js\table.js
-```
-
-Subir para GitHub:
-
-```cmd
-git status
-git add .
-git commit -m "atualiza sistema ZAMA"
-git push origin main
-```
-
-## Observacoes importantes
-
-- O projeto usa JavaScript global. Evite renomear funcoes sem procurar onde sao
-  usadas.
-- O CSS compilado e grande porque inclui Tailwind e todo o tema.
-- O video do gato com fundo verde depende do processamento em canvas; se no
-  futuro instalar `ffmpeg`, o ideal e converter para WebM com alpha real.
-- O Supabase anon key pode ficar no frontend. Chaves secretas nunca devem entrar
-  no codigo.
-- Antes de publicar, rode `npm.cmd run build:css`.
+- `check`: sintaxe JS, referências locais do HTML/imports CSS e instalador SQL.
+- `test`: descobre todos os arquivos `tests/*.test.js`, incluindo testes novos.
+- `test:admin` e `test:jarvis`: grupos para validações focadas.
+- `test:browser`: navegação, persistência, sessão, permissões e layout. Inicia
+  o servidor na porta 5174 ou reutiliza o servidor existente.
+- `build`: verificações estáticas e geração do CSS; usado pela Vercel.
+
+Os testes usam dados fictícios, APIs simuladas e PostgreSQL WASM. Não gravam na
+conta de produção. Uma reorganização deve preservar contratos e ser validada
+pelos fluxos afetados. Mudanças no salvamento exigem verificar falha, concorrência
+e troca de sessão, além do caminho de sucesso.
+
+Publicar código não aplica SQL no Supabase. Depois de editar migrations, execute
+`npm run build:projects-sql` e siga o guia do módulo para ativá-las. O instalador
+legado `database/supabase-setup.sql` contém operações destrutivas e não deve ser
+usado para atualizar uma instalação existente.
+
+## Guias complementares
+
+- [Central CEO: financeiro, investimentos, agenda e ideias](CENTRAL-CEO.md)
+- [Projetos, processos e acesso da equipe](PROJETOS.md)
+- [Administração, backups, sessão e relatórios](ADMINISTRATIVO.md)
+- [JARVIS: configuração, ferramentas e limites](JARVIS.md)
+- [Lembretes em segundo plano](lembretes-em-segundo-plano.md)

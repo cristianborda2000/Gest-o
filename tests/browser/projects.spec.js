@@ -16,7 +16,11 @@ const fixture = role => ({
   rows: { 'shared-company': { ...structuredClone(seed), companyProfile: { nome: 'Empresa compartilhada' }, financeiro: [{ ...seed.financeiro[0], nome: 'Receita confidencial da empresa' }] } }
 });
 const dialog = page => page.locator('#ceoProjectDialog');
-const openProject = page => page.getByRole('button', { name: 'Abrir projeto Catálogo Aurora', exact: true }).click();
+const selectDetailTab = (page, name) => dialog(page).getByRole('tab', { name, exact: true }).click();
+async function openProject(page, tab = 'Resumo') {
+  await page.getByRole('button', { name: 'Abrir projeto Catálogo Aurora', exact: true }).click();
+  if (tab !== 'Resumo') await selectDetailTab(page, tab);
+}
 async function restricted(page, role = 'projects') {
   await page.addInitScript(() => sessionStorage.setItem('zama-workspace:test-account', 'shared-company'));
   await mock(page, seed, {jarvisVisible:true,...fixture(role)});
@@ -297,6 +301,7 @@ test('owner builds multiple production lists, reorders stages and keeps the orde
   await lists.last().locator('[data-list-remove]').click();
   await expect(lists).toHaveCount(2);
   await dialog(page).getByRole('button', { name: 'Criar projeto', exact: true }).click();
+  await selectDetailTab(page, 'Processos');
   await expect(dialog(page)).toContainText('Entrega <final>');
   await expect(dialog(page)).not.toContainText('Etapa descartada');
   const saved = await page.evaluate(() => window.testRpcCalls.findLast(call => call.name === 'zama_project_save').params.p_project.production_lists);
@@ -307,6 +312,7 @@ test('owner builds multiple production lists, reorders stages and keeps the orde
   await page.reload();
   await page.locator('.nav [data-module="projetos"]').click();
   await page.getByRole('button', { name: 'Abrir projeto Produção sob medida', exact: true }).click();
+  await selectDetailTab(page, 'Processos');
   await expect(dialog(page).locator('.ceo-project-detail-track')).toHaveCount(2);
   await expect(dialog(page).locator('.ceo-project-detail-track').first().locator('li')).toHaveText(['Editar vídeo', 'Revisar legendas', /Gravar depoimento/]);
   await dialog(page).getByRole('button', { name: 'Editar projeto', exact: true }).click();
@@ -322,11 +328,13 @@ test('owner can save an empty production list and remove every list without rest
   await dialog(page).getByLabel('Nome do cliente', { exact: true }).fill('Cliente de teste');
   await expect(dialog(page).locator('[data-step-id]')).toHaveCount(0);
   await dialog(page).getByRole('button', { name: 'Criar projeto', exact: true }).click();
+  await selectDetailTab(page, 'Processos');
   await expect(dialog(page).locator('.ceo-project-detail-track')).toHaveCount(1);
   await expect(dialog(page)).toContainText('Nenhuma etapa cadastrada.');
   await dialog(page).getByRole('button', { name: 'Editar projeto', exact: true }).click();
   await dialog(page).locator('[data-list-remove]').click();
   await dialog(page).getByRole('button', { name: 'Salvar alterações', exact: true }).click();
+  await selectDetailTab(page, 'Processos');
   await expect(dialog(page).locator('.ceo-project-detail-track')).toHaveCount(0);
   expect(await page.evaluate(() => window.testRpcCalls.findLast(call => call.name === 'zama_project_save').params.p_project.production_lists)).toEqual([]);
   await page.reload();
@@ -341,7 +349,7 @@ test('owner can save an empty production list and remove every list without rest
 
 test('explicitly empty manual lists do not bring back legacy catalog or onboarding stages', async ({ page }) => {
   await ownerProjects(page, [{ ...assigned, production_lists: [] }]);
-  await openProject(page);
+  await openProject(page, 'Processos');
   await expect(dialog(page)).not.toContainText('Receber fotos dos produtos');
   await expect(dialog(page)).not.toContainText('Estruturar o cliente');
   await expect(dialog(page).locator('.ceo-project-detail-track')).toHaveCount(0);
@@ -569,7 +577,7 @@ test('viewer can create and edit shared projects without revealing client passwo
   await expect(page.locator('#ceoWorkspace').getByRole('button', { name: 'Criar acesso', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '+ Novo projeto', exact: true })).toBeEnabled();
   await expect(page.locator('body')).toContainText('Projeto reservado a outra pessoa');
-  await openProject(page);
+  await openProject(page, 'Acessos');
   await expect(dialog(page).getByLabel('Senha do cliente', { exact: true })).toHaveValue('');
   for (const name of ['Mostrar senha', 'Excluir projeto', 'Gerenciar acesso do responsável']) {
     await expect(dialog(page).getByRole('button', { name, exact: true })).toHaveCount(0);
@@ -579,7 +587,7 @@ test('viewer can create and edit shared projects without revealing client passwo
 });
 
 test('responsible person can customize legacy production lists and stages with persistence', async ({ page }) => {
-  await restricted(page); await openProject(page);
+  await restricted(page); await openProject(page, 'Processos');
   await expect(dialog(page).locator('.ceo-project-detail-track')).toHaveCount(2);
   await expect(dialog(page).locator('.ceo-project-detail-track').first()).toContainText('Catálogo');
   await expect(dialog(page).locator('.ceo-project-detail-track').last()).toContainText('Estruturação');
@@ -594,6 +602,7 @@ test('responsible person can customize legacy production lists and stages with p
   await catalog.locator('[data-step-label]').last().fill('Aprovar capa com o cliente');
   await catalog.getByRole('checkbox', { name: 'Concluir etapa: Aprovar capa com o cliente', exact: true }).check();
   await dialog(page).getByRole('button', { name: 'Salvar alterações', exact: true }).click();
+  await selectDetailTab(page, 'Processos');
   await expect(dialog(page)).toContainText('Revisar fotos recebidas');
   await expect(dialog(page)).toContainText('Aprovar capa com o cliente');
   await expect(dialog(page)).not.toContainText('Publicar catálogo');
@@ -603,7 +612,7 @@ test('responsible person can customize legacy production lists and stages with p
     { label: 'Revisar fotos recebidas', done: true }, { label: 'Aprovar capa com o cliente', done: true }
   ]);
   expect(savedLists[1].steps).toEqual(assigned.onboarding_steps.map(step => ({...step,due_date:null})));
-  await page.reload(); await openProject(page);
+  await page.reload(); await openProject(page, 'Processos');
   const stages = dialog(page).locator('.ceo-project-detail-track').first();
   await expect(stages).toContainText('Produção personalizada');
   await expect(stages.locator('progress')).toHaveAttribute('value', '2');
@@ -617,12 +626,14 @@ test('owner can keep, replace and remove the client password without exposing it
   await expect(dialog(page).getByLabel('Nova senha (opcional)', { exact: true })).toHaveValue('');
   await dialog(page).getByLabel('Notas e próximos passos', { exact: true }).fill('Senha mantida ao atualizar o projeto.');
   await dialog(page).getByRole('button', { name: 'Salvar alterações', exact: true }).click();
+  await selectDetailTab(page, 'Acessos');
   await dialog(page).getByRole('button', { name: 'Mostrar senha', exact: true }).click();
   await expect(dialog(page).getByLabel('Senha do cliente', { exact: true })).toHaveValue(password);
   await dialog(page).getByRole('button', { name: 'Editar projeto', exact: true }).click();
   const replacement = 'replacement-client-password-43';
   await dialog(page).getByLabel('Nova senha (opcional)', { exact: true }).fill(replacement);
   await dialog(page).getByRole('button', { name: 'Salvar alterações', exact: true }).click();
+  await selectDetailTab(page, 'Acessos');
   await dialog(page).getByRole('button', { name: 'Mostrar senha', exact: true }).click();
   await expect(dialog(page).getByLabel('Senha do cliente', { exact: true })).toHaveValue(replacement);
   expect(await page.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage }, state, cloudSnapshot }))).not.toContain(replacement);
@@ -630,8 +641,9 @@ test('owner can keep, replace and remove the client password without exposing it
   await dialog(page).getByLabel('Remover a senha cadastrada', { exact: true }).check();
   await expect(dialog(page).getByLabel('Nova senha (opcional)', { exact: true })).toBeDisabled();
   await dialog(page).getByRole('button', { name: 'Salvar alterações', exact: true }).click();
+  await selectDetailTab(page, 'Acessos');
   await expect(dialog(page).getByRole('button', { name: 'Mostrar senha', exact: true })).toHaveCount(0);
-  await page.reload(); await page.locator('.nav [data-module="projetos"]').click(); await openProject(page);
+  await page.reload(); await page.locator('.nav [data-module="projetos"]').click(); await openProject(page, 'Acessos');
   await expect(dialog(page).getByLabel('Senha do cliente', { exact: true })).toHaveAttribute('placeholder', 'Não cadastrada');
   await expect(dialog(page).getByRole('button', { name: 'Mostrar senha', exact: true })).toHaveCount(0);
   await noPersistedPassword(page);
@@ -659,7 +671,7 @@ test('responsible person updates both tracks and notes, with persistence across 
 });
 
 test('credentials are revealed on demand and cleared on hide, close, timeout and sign-out', async ({ page }) => {
-  await restricted(page); await openProject(page);
+  await restricted(page); await openProject(page, 'Acessos');
   const secret=dialog(page).getByLabel('Senha do cliente', { exact: true });
   await expect(secret).toHaveValue('');
   expect(await page.evaluate(() => window.testRpcCalls.filter(call=>call.name==='zama_project_secret'))).toHaveLength(0);
@@ -673,7 +685,7 @@ test('credentials are revealed on demand and cleared on hide, close, timeout and
   await dialog(page).getByRole('button', { name: 'Mostrar senha', exact: true }).click();
   await expect(secret).toHaveValue(password);
   await dialog(page).getByRole('button', { name: 'Fechar', exact: true }).click();
-  await openProject(page); await expect(secret).toHaveValue('');
+  await openProject(page, 'Acessos'); await expect(secret).toHaveValue('');
   await dialog(page).getByRole('button', { name: 'Mostrar senha', exact: true }).click();
   await expect(secret).toHaveValue(password);
   await page.evaluate(() => window.testAuthEvent('SIGNED_OUT'));
@@ -682,12 +694,12 @@ test('credentials are revealed on demand and cleared on hide, close, timeout and
 });
 
 test('late credential responses cannot fill a closed or signed-out project dialog', async ({ page }) => {
-  await restricted(page); await openProject(page);
+  await restricted(page); await openProject(page, 'Acessos');
   await page.evaluate(() => {window.testDelayNextProjectRpc='zama_project_secret';});
   await dialog(page).getByRole('button', { name: 'Mostrar senha', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.testPendingProjectRpcs.length)).toBe(1);
   await dialog(page).getByRole('button', { name: 'Fechar', exact: true }).click();
-  await openProject(page); await page.evaluate(() => window.testReleaseProjectRpcs());
+  await openProject(page, 'Acessos'); await page.evaluate(() => window.testReleaseProjectRpcs());
   await expect(dialog(page).getByLabel('Senha do cliente', { exact: true })).toHaveValue('');
   await page.evaluate(() => {window.testDelayNextProjectRpc='zama_project_secret';});
   await dialog(page).getByRole('button', { name: 'Mostrar senha', exact: true }).click();
@@ -723,6 +735,7 @@ test('owner creates credentials and manual project stages, invites with projects
   await expect(dialog(page)).toContainText('Definir paleta de cores');
   const createdLists = await page.evaluate(() => window.testRpcCalls.find(call => call.name === 'zama_project_save').params.p_project.production_lists);
   expect(createdLists).toEqual([{ id: expect.any(String), title: 'Identidade visual', description: '', responsible_name: '', due_date: null, status: 'planning', links: [], steps: [{ id: expect.any(String), label: 'Definir paleta de cores', done: true, due_date:null }] }]);
+  await selectDetailTab(page, 'Acessos');
   await expect(dialog(page).getByLabel('Senha do cliente', { exact: true })).toHaveValue('');
   await dialog(page).getByRole('button', { name: 'Gerenciar acesso do responsável', exact: true }).click();
   await expect(dialog(page).getByLabel('E-mail da pessoa', { exact: true })).toHaveValue('pedro@example.invalid');
@@ -736,7 +749,7 @@ test('owner creates credentials and manual project stages, invites with projects
   const download=await pending, backup=await readFile(await download.path(),'utf8');
   expect(backup).not.toContain(password); expect(backup).not.toContain('Loja Aurora');
   await page.locator('#settingsCloseBtn').click();
-  await page.reload(); await page.locator('.nav [data-module="projetos"]').click(); await openProject(page);
+  await page.reload(); await page.locator('.nav [data-module="projetos"]').click(); await openProject(page, 'Acessos');
   await dialog(page).getByRole('button', { name: 'Mostrar senha', exact: true }).click();
   await expect(dialog(page).getByLabel('Senha do cliente', { exact: true })).toHaveValue(password);
 });
@@ -814,7 +827,7 @@ test('project board renders representative desktop and mobile cards', async ({ p
 });
 
 for(const width of [320,390]) test(`project progress and credential dialog fit a ${width}px phone`, async ({ page }, info) => {
-  await page.setViewportSize({width,height:844}); await restricted(page); await openProject(page);
+  await page.setViewportSize({width,height:844}); await restricted(page); await openProject(page, 'Acessos');
   await expect(dialog(page).getByRole('button', { name: 'Mostrar senha', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   expect(await dialog(page).evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);

@@ -6,16 +6,13 @@ const { createRepository } = require('./repository');
 const { createAgent } = require('./agent');
 const { createVoice } = require('./voice');
 const { JarvisError } = require('./errors');
+const { readJsonBody } = require('../http/read-json-body');
 const messageSchema = z.object({ message: z.string().trim().min(1).max(4000), conversation_id: z.uuid().optional(), request_id: z.uuid() }).strict();
 const credentials = /\b(sk-[\w-]{15,}|eyJ[\w-]{15,}\.[\w-]{15,}\.[\w-]+)|(?:api[_ -]?key|access_token|refresh_token|senha|password)\s*[:=]\s*\S+/i;
 async function readBody(req) {
-  if (req.body !== undefined) {
-    if (Buffer.byteLength(typeof req.body === 'string' ? req.body : JSON.stringify(req.body)) > 20000) throw new JarvisError('Mensagem muito grande.', 413);
-    try { return typeof req.body === 'string' ? JSON.parse(req.body) : req.body; } catch { throw new JarvisError('JSON inválido.'); }
-  }
-  let body = '';
-  for await (const chunk of req) { body += chunk; if (Buffer.byteLength(body) > 20000) throw new JarvisError('Mensagem muito grande.', 413); }
-  try { return body ? JSON.parse(body) : {}; } catch { throw new JarvisError('JSON inválido.'); }
+  return readJsonBody(req, { maxBytes: 20000,
+    tooLarge: () => new JarvisError('Mensagem muito grande.', 413),
+    invalidJson: () => new JarvisError('JSON inválido.') });
 }
 function createHandler(dependencies = {}) {
   return async function handler(req, res) {

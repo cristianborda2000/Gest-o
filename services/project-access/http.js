@@ -1,26 +1,15 @@
 'use strict';
 const { createClient } = require('@supabase/supabase-js');
 const { configuration, emailHash, allowedOrigins } = require('./config');
+const { readJsonBody } = require('../http/read-json-body');
 
 class AccessError extends Error {
   constructor(message, status = 400, code = 'INVALID_REQUEST') { super(message); this.status = status; this.code = code; }
 }
 async function readBody(req) {
-  let raw = '';
-  if (req.body !== undefined) raw = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
-  else {
-    const chunks = [];
-    let bytes = 0;
-    for await (const chunk of req) {
-      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-      bytes += buffer.length;
-      if (bytes > 2048) throw new AccessError('Solicitação muito grande.', 413);
-      chunks.push(buffer);
-    }
-    raw = Buffer.concat(chunks, bytes).toString('utf8');
-  }
-  if (Buffer.byteLength(raw || '') > 2048) throw new AccessError('Solicitação muito grande.', 413);
-  try { return JSON.parse(raw || '{}'); } catch { throw new AccessError('Solicitação inválida.'); }
+  return readJsonBody(req, { maxBytes: 2048,
+    tooLarge: () => new AccessError('Solicitação muito grande.', 413),
+    invalidJson: () => new AccessError('Solicitação inválida.') });
 }
 function validate(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).sort().join(',') !== 'email,password') throw new AccessError('Informe somente o e-mail e a senha do novo acesso.');

@@ -16,8 +16,9 @@ const config = configuration({ PUSH_REMINDERS_ENABLED: 'true', SUPABASE_URL: 'ht
 const sub = suffix => ({ endpoint: `https://fcm.googleapis.com/fcm/send/${suffix || 'test'}`, expirationTime: null, keys: { p256dh: key.getPublicKey().toString('base64url'), auth: randomBytes(16).toString('base64url') } });
 const now = Date.parse('2026-10-05T12:00:20-03:00');
 const state = () => ({ agenda: [{ id: 'meeting', nome: 'Reunião', prazo: '2026-10-05', hora: '12:15', status: 'Pendente' }], agendaSettings: { enabled: true, dailyEnabled: false, taskEnabled: true, leadMinutes: 15 }, financeiro: [{ id: 'keep', valor: 900 }], legacy: { keep: true } });
-async function request(handler, { method = 'GET', path = 'subscription', headers = {}, body } = {}) {
+async function request(handler, { method = 'GET', path = 'subscription', headers = {}, body, bodyChunks } = {}) {
   const req = { method, url: `/api/reminders?path=${path}`, headers, body };
+  if (bodyChunks) req[Symbol.asyncIterator] = async function* () { yield* bodyChunks; };
   let response;
   const responseHeaders = {};
   await handler(req, { setHeader(name, value) { responseHeaders[name] = value; }, set statusCode(value) { this.status = value; }, end(value) { response = { status: this.status, body: value ? JSON.parse(value) : null, headers: responseHeaders }; } });
@@ -58,6 +59,7 @@ test('push endpoints cannot reach arbitrary, internal, credential-bearing or dec
   for (const endpoint of ['http://fcm.googleapis.com/a', 'https://fcm.googleapis.com:8443/a', 'https://fcm.googleapis.com.evil.test/a', 'https://fcm.googleapis.com@127.0.0.1/a', 'https://127.0.0.1/a', 'https://[::1]/a', 'https://169.254.169.254/latest/meta-data', 'https://web.push.apple.com/a#secret', 'https://user:pass@fcm.googleapis.com/a', 'https://evil.notify.windows.com.evil.test/a']) assert.throws(() => validateEndpoint(endpoint));
   assert.equal(validateSubscription(sub()).endpoint, 'https://fcm.googleapis.com/fcm/send/test');
   assert.throws(() => validateSubscription({ ...sub(), keys: { p256dh: 'A'.repeat(87), auth: 'A'.repeat(22) } }));
+  for (const expirationTime of [0, 1, Date.now() - 1]) assert.throws(() => validateSubscription({ ...sub(), expirationTime }), /expirou/);
   for (const address of ['127.0.0.1', '10.0.0.2', '169.254.169.254', '192.168.0.1', '::1', '::ffff:127.0.0.1', 'fc00::1', 'fe80::1']) assert.equal(publicAddress(address), false, address);
   assert.equal(publicAddress('8.8.8.8'), true); assert.equal(publicAddress('2606:4700:4700::1111'), true);
 });
@@ -78,6 +80,23 @@ test('API validates Supabase auth, own-account scope, origin, key rotation and d
   const disabled = createHttp({ config: { ...config, enabled: false }, repository, authenticate: async () => ({ data: { user: { id: 'owner' } } }) });
   assert.equal((await request(disabled, { method: 'POST', headers: authHeaders, body: { subscription: sub(), keyId: config.keyId } })).status, 503);
   assert.equal((await request(disabled, { method: 'DELETE', headers: authHeaders, body: { hash: 'a'.repeat(64) } })).status, 200, 'revocation remains available while sending is disabled');
+});
+test('API decodes byte chunks once and enforces JSON byte limits before subscribing', async () => {
+  const writes = [];
+  const api = createHttp({ config, authenticate: async () => ({ data: { user: { id: 'owner' } } }), repository: { subscribe: async (...args) => writes.push(args) } });
+  const subscription = sub('ação-🚀');
+  const raw = Buffer.from(JSON.stringify({ subscription, keyId: config.keyId }));
+  const response = await request(api, { method: 'POST', headers: authHeaders, bodyChunks: Array.from(raw, byte => Buffer.from([byte])) });
+  assert.equal(response.status, 200);
+  assert.equal(writes[0][1].endpoint, new URL(subscription.endpoint).href);
+  const oversized = Buffer.from(JSON.stringify({ subscription: 'é'.repeat(4100), keyId: config.keyId }));
+  for (const input of [{ bodyChunks: [oversized] }, { body: oversized }]) {
+    assert.equal((await request(api, { method: 'POST', headers: authHeaders, ...input })).status, 413);
+  }
+  for (const input of [{ bodyChunks: [Buffer.from('{')] }, { body: '{' }]) {
+    assert.equal((await request(api, { method: 'POST', headers: authHeaders, ...input })).status, 400);
+  }
+  assert.equal(writes.length, 1);
 });
 function memoryRepository() {
   let data = state(), revision = 0;

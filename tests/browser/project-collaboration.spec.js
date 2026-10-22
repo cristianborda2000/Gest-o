@@ -95,6 +95,7 @@ test('a queued failure outside Projects warns the user and keeps only the saved 
 });
 test('checkbox keyboard access works in the detail without closing it or losing focus',async({page})=>{
   await setup(page);await card(page).getByRole('button',{name:'Abrir projeto Campanha ZAMA',exact:true}).click();
+  await dialog(page).getByRole('tab',{name:'Processos',exact:true}).click();
   const input=dialog(page).getByRole('checkbox',{name:'Concluir etapa: Conferir briefing',exact:true});
   await input.focus();await input.press('Space');
   await expect(dialog(page).locator('[data-quick-feedback]')).toContainText('salvas');
@@ -135,6 +136,7 @@ test('a late checkbox response after sign-out cannot restore private content',as
 test('a project with credentials does not allow a collaborator to self-assign or see its secret',async({page})=>{
   await setup(page,{projects:{[owner]:[{...project,password:'fixture-private-client-secret'}]}});
   await card(page).getByRole('button',{name:'Abrir projeto Campanha ZAMA',exact:true}).click();
+  await dialog(page).getByRole('tab',{name:'Acessos',exact:true}).click();
   await expect(dialog(page).getByRole('button',{name:'Mostrar senha',exact:true})).toHaveCount(0);
   await dialog(page).getByRole('button',{name:'Editar projeto',exact:true}).click();
   await expect(dialog(page).getByLabel('E-mail do responsável',{exact:true})).toBeDisabled();

@@ -1,8 +1,7 @@
 /* Projects live in their own permission-checked database, never in the app backup. */
 (function (root) {
   'use strict';
-  const statuses = Object.freeze({ planning: 'Planejamento', in_progress: 'Em andamento', waiting: 'Aguardando cliente', completed: 'Concluído' });
-  const processStatuses = Object.freeze({ planning: 'Não iniciado', in_progress: 'Em andamento', waiting: 'Aguardando', completed: 'Concluído' });
+  const { statuses, processStatuses, productionLists, metadata, progress, safeUrl, storedPhone, normalizePhone, phoneLabel, friendly } = root.ZamaProjectData;
   const text = value => String(value ?? '');
   const esc = value => text(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   const fold = value => text(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -31,57 +30,17 @@
   const summary = row => root.ZamaProjectPlanning.summarize(row, today());
   const icon = name => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="${({ all: 'M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v6H4zM14 15h6v6h-6z', overdue: 'M12 3 2 21h20L12 3ZM12 9v5m0 3v.1', upcoming: 'M5 5h14v15H5zM8 3v4m8-4v4M5 10h14m-10 4h2m2 0h2', waiting: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 5v5l3 2' })[name]}"></path></svg>`;
 
-  function productionLists(source) {
-    const lists = Array.isArray(source.production_lists) ? source.production_lists : [
-      { id: 'catalog', title: 'Catálogo', steps: source.catalog_steps },
-      { id: 'onboarding', title: 'Estruturação', steps: source.onboarding_steps }
-    ].filter(list => Array.isArray(list.steps) && list.steps.length);
-    return lists.map(list => ({ id: text(list.id), title: text(list.title),
-      ...Object.fromEntries(['description', 'responsible_name', 'due_date', 'status'].filter(key => Object.hasOwn(list, key)).map(key => [key, key === 'due_date' && list[key] === null ? null : text(list[key])])),
-      ...(Array.isArray(list.links) ? { links: list.links.map(link => ({ label: text(link.label), url: text(link.url) })) } : {}),
-      steps: Array.isArray(list.steps) ? list.steps.map(step => ({ id: text(step.id), label: text(step.label), done: step.done === true, ...(step.due_date ? { due_date: text(step.due_date) } : {}) })) : [] }));
-  }
-
-  // The allowlist makes it impossible for an accidental RPC password property to
-  // enter the metadata cache, exports, the general app state, or local storage.
-  function metadata(source) {
-    if (!source || typeof source !== 'object' || !source.id) throw new Error('PROJECT_INVALID_RESPONSE');
-    const record = {};
-    ['id', 'title', 'client_name', 'company_name', 'client_email', 'client_phone', 'access_url', 'responsible_email', 'responsible_name', 'status', 'due_date', 'notes', 'created_at', 'updated_at'].forEach(key => { record[key] = text(source[key]); });
-    record.revision = Number(source.revision || 0);
-    record.has_password = Boolean(source.has_password);
-    record.production_lists = productionLists(source);
-    if (!statuses[record.status]) record.status = 'planning';
-    return record;
-  }
   function capture() { return { generation, owner: activeOwner, account: activeAccount, role: activeRole }; }
   function current(ticket) {
     return ticket.generation === generation && ticket.owner === activeOwner && ticket.owner === ownerId()
       && ticket.account === activeAccount && ticket.account === accountId() && ticket.role === role() && Boolean(container?.isConnected);
   }
   function dialogCurrent(ticket, dialog) { return current(ticket) && activeDialog === dialog && dialog.isConnected && dialog.open; }
-  function friendly(error) {
-    const value = `${error?.code || ''} ${error?.message || ''}`;
-    const inviteMessages = ['Confirme seu e-mail antes de convidar pessoas.', 'Você já é o proprietário desta empresa.', 'Salve os dados da sua empresa antes de gerar um convite.', 'Limite de convites atingido. Tente novamente mais tarde.', 'Convite inválido.'];
-    if (inviteMessages.includes(error?.message)) return error.message;
-    if (/40001|PROJECT_CONFLICT/.test(value)) return 'Este projeto foi atualizado por outra pessoa. Feche esta janela, atualize a lista e tente novamente.';
-    if (/42501|PROJECT_ACCESS_DENIED|permission denied/i.test(value)) return 'Seu acesso a este projeto mudou. Atualize a lista para verificar os projetos disponíveis.';
-    if (/PGRST202|42883|does not exist|schema cache|PROJECT_UNAVAILABLE/i.test(value)) return 'A área de projetos ainda não está disponível nesta instalação. A configuração do banco de dados precisa ser concluída. Depois, tente novamente.';
-    if (/PROJECT_INVALID_PHONE|PROJECT_INVALID_FIELD: client_phone/.test(value)) return 'Confira o WhatsApp do cliente. Informe o DDD e o número; para outro país, use + e o código do país.';
-    if (/PROJECT_INVALID_PROCESS_LINKS/.test(value)) return 'Confira os links de arquivos dos processos. Use até 20 links por processo, começando com https:// ou http://.';
-    if (/PROJECT_INVALID_PROCESS/.test(value)) return 'Confira a descrição, o responsável e o andamento de cada processo antes de salvar.';
-    if (/22023|PROJECT_INVALID/.test(value)) return 'Confira os campos e as etapas do projeto antes de salvar. Use um e-mail válido e preencha o nome do cliente e o título.';
-    return 'Não foi possível concluir a operação. Verifique sua conexão e tente novamente.';
-  }
   async function rpc(name, params) {
     if (!client()?.rpc) throw new Error('PROJECT_UNAVAILABLE');
     const result = await client().rpc(name, params);
     if (result.error) throw result.error;
     return result.data;
-  }
-  function progress(steps) {
-    const total = steps.length, done = steps.filter(step => step.done).length;
-    return { total, done, percent: total ? Math.round(done / total * 100) : 0 };
   }
   function meter(label, steps, extra = '') {
     const value = progress(steps);
@@ -137,7 +96,7 @@
   }
   function processInfo(list) {
     if (!processesAvailable && !['description', 'responsible_name', 'due_date', 'status', 'links'].some(key => Object.hasOwn(list, key))) return '';
-    const status = processStatuses[list.status] ? list.status : 'planning';
+    const status = Object.hasOwn(processStatuses, list.status) ? list.status : 'planning';
     const links = (list.links || []).filter(link => safeUrl(link.url));
     return `<div class="ceo-project-process-summary"><span class="ceo-project-process-status is-${status}">${processStatuses[status]}</span><dl class="ceo-project-process-meta"><div><dt>Responsável</dt><dd>${esc(list.responsible_name || 'Não definido')}</dd></div><div><dt>Prazo do processo</dt><dd class="${status !== 'completed' && list.due_date && list.due_date < today() ? 'is-late' : ''}">${dateLabel(list.due_date)}</dd></div></dl>${list.description ? `<div class="ceo-project-process-description"><h4>Descrição e instruções</h4><p>${esc(list.description)}</p></div>` : ''}${links.length ? `<ul class="ceo-project-process-links" aria-label="Links de arquivos">${links.map(link => `<li><a href="${esc(safeUrl(link.url))}" target="_blank" rel="noopener noreferrer">${esc(link.label || link.url)} ↗</a></li>`).join('')}</ul>` : ''}</div>`;
   }
@@ -244,7 +203,11 @@
     renderBoard(); updateSummary();
     if(details) {
       const row=rows.find(item=>item.id===detailId);
-      if(row) details.innerHTML=row.production_lists.map(list=>checklist(row,list)).join('');
+      if(row) {
+        details.innerHTML=detailTracks(row);
+        const overview=activeDialog.querySelector('[data-detail-overview]');
+        if(overview) overview.innerHTML=projectOverview(row);
+      }
       const edit=activeDialog.querySelector('[data-project-edit]'); if(edit) edit.disabled=pendingChanges.has(detailId);
       const message=activeDialog.querySelector('[data-quick-feedback]'); if(message) message.textContent=pendingChanges.has(detailId)?'Salvando alterações…':notice;
       activeDialog.scrollTop=detailScroll;
@@ -337,33 +300,6 @@
     } finally {
       if (current(ticket) && sequence === requestSequence) { loading = false; paint(); }
     }
-  }
-  function safeUrl(value) {
-    try { const url = new URL(value); return ['https:', 'http:'].includes(url.protocol) ? url.href : ''; } catch { return ''; }
-  }
-  function storedPhone(value) {
-    const phone = text(value);
-    return /^[1-9]\d{7,14}$/.test(phone) ? phone : '';
-  }
-  function normalizePhone(value) {
-    const raw = text(value).trim();
-    if (!raw) return '';
-    const invalid = () => { throw new Error('Informe o WhatsApp com DDD, como (11) 99999-9999. Para outro país, use + e o código do país.'); };
-    if (raw.length > 40 || !/^\+?[\d\s().-]+$/.test(raw)) invalid();
-    let digits = raw.replace(/\D/g, '');
-    if (!raw.startsWith('+') && digits.startsWith('00')) digits = digits.slice(2);
-    else if (!raw.startsWith('+')) {
-      if (/^\d{10,11}$/.test(digits)) digits = `55${digits}`;
-      else if (!/^55\d{10,11}$/.test(digits)) invalid();
-    }
-    if (!storedPhone(digits) || digits.startsWith('55') && !/^55[1-9]{2}[2-9]\d{7,8}$/.test(digits)) invalid();
-    return digits;
-  }
-  function phoneLabel(value) {
-    const phone = storedPhone(value);
-    if (!phone) return '';
-    const brazil = phone.match(/^55(\d{2})(\d{4,5})(\d{4})$/);
-    return brazil ? `+55 (${brazil[1]}) ${brazil[2]}-${brazil[3]}` : `+${phone}`;
   }
   function whatsappLink(row) {
     const phone = storedPhone(row.client_phone);
@@ -591,19 +527,64 @@
   function checklist(row, list) {
     return `<section class="ceo-project-detail-track"><h3>${esc(list.title)}</h3>${processInfo(list)}${meter('Etapas concluídas',list.steps)}<ul class="ceo-project-checklist">${list.steps.length ? list.steps.map(step=>`<li class="${step.done ? 'is-done' : ''}">${stepControl(row,list,step,true)}</li>`).join('') : '<li>Nenhuma etapa cadastrada.</li>'}</ul></section>`;
   }
+  function detailTracks(row) {
+    return row.production_lists.length ? row.production_lists.map(list => checklist(row, list)).join('') : '<p class="ceo-project-no-stages">Nenhuma lista de produção cadastrada.</p>';
+  }
+  function projectOverview(row) {
+    const completion = summary(row);
+    const next = completion.next;
+    const caption = next ? `Próxima etapa: ${esc(next.label)}${next.due_date ? ` · ${dateLabel(next.due_date)}` : ''}`
+      : completion.total ? 'Todas as etapas foram concluídas.' : 'Adicione processos e etapas para acompanhar a execução.';
+    return `${meter('Progresso das etapas', row.production_lists.flatMap(list => list.steps))}<p class="ceo-project-overview-caption">${caption}</p>`;
+  }
+  function bindDetailTabs(dialog) {
+    const tabs = [...dialog.querySelectorAll('[data-detail-tab]')];
+    function selectTab(tab, focus = false) {
+      if (tab.dataset.detailTab !== 'access') clearSecrets();
+      dialog.querySelector('[data-dialog-error]').hidden = true;
+      tabs.forEach(item => {
+        const selected = item === tab;
+        item.setAttribute('aria-selected', String(selected));
+        item.tabIndex = selected ? 0 : -1;
+        dialog.querySelector(`#${item.getAttribute('aria-controls')}`).hidden = !selected;
+      });
+      if (focus) tab.focus({ preventScroll: true });
+    }
+    tabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => selectTab(tab));
+      tab.addEventListener('keydown', event => {
+        const next = { ArrowRight: (index + 1) % tabs.length, ArrowLeft: (index + tabs.length - 1) % tabs.length, Home: 0, End: tabs.length - 1 }[event.key];
+        if (next === undefined) return;
+        event.preventDefault();
+        selectTab(tabs[next], true);
+      });
+    });
+  }
   function openDetail(id, focusAccess = false) {
     const row = rows.find(item => item.id === id); if (!row) return;
     const ticket = capture(), url = safeUrl(row.access_url);
+    const initialTab = focusAccess ? 'access' : 'summary';
+    const tabs = [['summary', 'Resumo'], ['processes', 'Processos'], ['access', 'Acessos']];
+    const panel = name => `class="ceo-project-detail-panel" role="tabpanel" id="project-panel-${name}" aria-labelledby="project-tab-${name}" tabindex="0" ${name === initialTab ? '' : 'hidden'}`;
     const dialog = newDialog(row.title, `<div class="ceo-project-detail-meta"><span class="ceo-project-status is-${row.status}"><i></i>${statuses[row.status]}</span><span>Prazo: ${dateLabel(row.due_date)}</span></div>
+      <div class="ceo-project-detail-tabs" role="tablist" aria-label="Informações do projeto">${tabs.map(([name, label]) => `<button type="button" class="ceo-project-detail-tab" role="tab" id="project-tab-${name}" data-detail-tab="${name}" aria-controls="project-panel-${name}" aria-selected="${name === initialTab}" tabindex="${name === initialTab ? 0 : -1}">${label}</button>`).join('')}</div>
+      <section ${panel('summary')}>
+      <div class="ceo-project-overview" data-detail-overview>${projectOverview(row)}</div>
       <dl class="ceo-project-info"><div><dt>Cliente</dt><dd>${esc(row.client_name || 'Não informado')}</dd></div><div><dt>Empresa</dt><dd>${esc(row.company_name || 'Não informada')}</dd></div><div><dt>Responsável</dt><dd>${esc(row.responsible_name || 'Não definido')}${row.responsible_email ? `<small>${esc(row.responsible_email)}</small>` : ''}</dd></div></dl>
       ${storedPhone(row.client_phone) ? `<section class="ceo-project-contact"><div><h3>Contato do cliente</h3><p>${esc(phoneLabel(row.client_phone))}</p></div>${whatsappLink(row)}</section>` : ''}
-      <section class="ceo-project-credentials"><div><h3>Acessos do cliente</h3><p>Dados usados para trabalhar neste projeto.</p></div><dl class="ceo-project-info"><div><dt>E-mail de acesso</dt><dd>${esc(row.client_email || 'Não informado')}</dd></div><div><dt>Página de acesso</dt><dd>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Abrir página de acesso ↗</a>` : esc(row.access_url || 'Não informada')}</dd></div></dl>
-      <div class="ceo-project-secret"><label class="ceo-field">Senha<input type="password" readonly data-private-value aria-label="Senha do cliente" placeholder="${row.has_password ? '••••••••••••' : 'Não cadastrada'}" autocomplete="off"></label>${row.has_password && canReveal(row) ? '<button class="ceo-button" type="button" data-reveal aria-pressed="false">Mostrar senha</button>' : ''}</div><p class="ceo-project-secret-note">A senha é reservada ao administrador e ao responsável atribuído, e é ocultada ao sair desta janela.</p></section>
-      <div class="ceo-project-detail-tracks" data-detail-tracks="${esc(row.id)}">${row.production_lists.length ? row.production_lists.map(list => checklist(row, list)).join('') : '<p class="ceo-project-no-stages">Nenhuma lista de produção cadastrada.</p>'}</div>
       <section class="ceo-project-notes"><h3>Notas e próximos passos</h3><p>${esc(row.notes || 'Nenhuma observação por enquanto.')}</p></section>
+      </section>
+      <section ${panel('processes')}>
+      <div class="ceo-project-detail-tracks" data-detail-tracks="${esc(row.id)}">${detailTracks(row)}</div>
+      <p class="ceo-project-save-state" data-quick-feedback role="status"></p>
+      </section>
+      <section ${panel('access')}>
+      <section class="ceo-project-credentials"><div><h3>Acessos do cliente</h3><p>Dados usados para trabalhar neste projeto.</p></div><dl class="ceo-project-info"><div><dt>E-mail de acesso</dt><dd>${esc(row.client_email || 'Não informado')}</dd></div><div><dt>Página de acesso</dt><dd>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Abrir página de acesso ↗</a>` : esc(row.access_url || 'Não informada')}</dd></div></dl>
+      <div class="ceo-project-secret"><label class="ceo-field">Senha<input type="password" readonly data-private-value aria-label="Senha do cliente" placeholder="${row.has_password ? '••••••••••••' : 'Não cadastrada'}" autocomplete="off"></label>${row.has_password && canReveal(row) ? '<button class="ceo-button" type="button" data-reveal aria-pressed="false">Mostrar senha</button>' : ''}</div><p class="ceo-project-secret-note">A senha é reservada ao administrador e ao responsável atribuído, e é ocultada ao sair desta aba.</p></section>
       ${isOwner() && row.responsible_email ? `<section class="ceo-project-invite"><h3>Acesso do responsável</h3><p>Crie ou gerencie o acesso de <strong>${esc(row.responsible_email)}</strong> aos projetos desta empresa.</p><button type="button" class="ceo-button" data-project-invite>Gerenciar acesso do responsável</button></section>` : ''}
+      </section>
       <p class="ceo-form-error" data-dialog-error role="alert" hidden></p><footer class="ceo-project-dialog-footer">${isOwner() ? '<button type="button" class="ceo-button danger" data-project-delete>Excluir projeto</button>' : ''}<div><button type="button" class="ceo-button" data-close>Fechar</button>${canEdit() ? `<button type="button" class="ceo-button primary" data-project-edit ${pendingChanges.has(row.id) ? 'disabled' : ''}>${canEditDetails() ? 'Editar projeto' : 'Atualizar andamento'}</button>` : ''}</div></footer>`);
-    dialog.querySelector('[data-detail-tracks]').insertAdjacentHTML('afterend','<p class="ceo-project-save-state" data-quick-feedback role="status"></p>');
+    bindDetailTabs(dialog);
     dialog.querySelector('[data-detail-tracks]').addEventListener('change',quickChange);
     dialog.querySelector('[data-project-edit]')?.addEventListener('click', () => { if (dialogCurrent(ticket, dialog)) openEditor(id); });
     dialog.querySelector('[data-project-delete]')?.addEventListener('click', () => { if (dialogCurrent(ticket, dialog)) openDelete(row); });
@@ -643,7 +624,7 @@
   }
   function processEditor(list) {
     if (!processesAvailable) return '';
-    const status = processStatuses[list.status] ? list.status : 'planning';
+    const status = Object.hasOwn(processStatuses, list.status) ? list.status : 'planning';
     return `<details class="ceo-project-process-editor" open><summary>Informações do processo</summary><div class="ceo-project-process-fields"><label class="ceo-field ceo-project-wide">Descrição e instruções do processo<textarea data-process-description rows="3" maxlength="10000" aria-label="Descrição e instruções do processo" placeholder="Registre como executar este processo e as informações que a equipe precisa consultar.">${esc(list.description || '')}</textarea></label><label class="ceo-field">Responsável pelo processo<input type="text" data-process-responsible maxlength="254" value="${esc(list.responsible_name || '')}" aria-label="Responsável pelo processo" placeholder="Nome da pessoa ou equipe"></label><label class="ceo-field">Prazo do processo<input type="date" data-process-due min="0001-01-01" max="9999-12-31" value="${esc(list.due_date || '')}" aria-label="Prazo do processo"></label><label class="ceo-field">Andamento do processo<select data-process-status aria-label="Andamento do processo">${Object.entries(processStatuses).map(([value, label]) => `<option value="${value}" ${value === status ? 'selected' : ''}>${label}</option>`).join('')}</select></label><div class="ceo-project-wide"><h4>Links de arquivos</h4><div data-process-links>${(list.links || []).map(processLinkEditor).join('')}</div><button type="button" class="ceo-button" data-process-link-add>+ Adicionar link</button></div></div></details>`;
   }
   function listEditor(list) {

@@ -1,12 +1,11 @@
 # Central ZAMA — gestão e rotina
 
-Atualizacao JARVIS: clientes, mensalidades, projetos, Marketing e equipe foram retirados da interface. Dados historicos preservados. Consulte [JARVIS.md](JARVIS.md) para a arquitetura e configuracao atuais. As descricoes de navegacao legada abaixo pertencem a entrega anterior.
+O administrador usa Visão geral, Financeiro, Investimentos, Agenda, Projetos e Ideias. A equipe tem Agenda privada, Projetos e Ideias compartilhados. Veja [Projetos e equipe](PROJETOS.md) para processos, acessos e permissões; o [mapa da arquitetura](ARQUITETURA.md) descreve a organização atual dos arquivos.
 
-A central evolui o frontend existente (HTML, JavaScript global, Vite e Tailwind),
-mantendo Supabase Auth, recuperação de senha, RLS por `auth.uid() = user_id`,
-tabela `app_state`, Realtime, clientes, mensalidades, projetos, marketing,
-equipe e contratos. Não foram criados usuários, dados de exemplo ou registros
-financeiros na conta de produção durante a implementação.
+A central usa HTML, JavaScript global, Vite, Tailwind, Supabase Auth e recuperação
+de senha. O estado administrativo permanece em `app_state`, com dados legados
+preservados. Projetos, modelos e credenciais usam tabelas e funções específicas.
+O JARVIS opera apenas os módulos descritos em seu [guia](JARVIS.md).
 
 ## Como usar
 
@@ -69,7 +68,9 @@ criadas centenas de tarefas repetidas. Valores do financeiro mantêm `valor`
 assinado por compatibilidade, com cálculos e novos registros em centavos
 inteiros. Cancelados ficam fora dos totais.
 
-Não é necessária migração SQL para esta versão. **Não execute o antigo
+As alterações financeiras descritas neste guia usam o JSON de `app_state`.
+Projetos, equipe, JARVIS e notificações exigem as migrations de seus respectivos
+guias. **Não execute o antigo
 `database/supabase-setup.sql` em um projeto com dados: ele contém DROP TABLE.**
 Continue usando a tabela e as políticas já instaladas. A coluna `updated_at`
 e o gatilho existentes são usados para rejeitar sobrescritas concorrentes.

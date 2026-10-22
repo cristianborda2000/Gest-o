@@ -227,13 +227,16 @@
     return element;
   }
   async function submitMutation(form, mutate, message) {
+    const sourceDialog = form.closest('dialog');
+    if (!form.isConnected || !sourceDialog?.open || sourceDialog !== activeDialog) return;
     const error = form.querySelector("[data-error]");
     const button = form.querySelector('[type="submit"]');
     error.textContent = ""; button.disabled = true;
     try {
       const saved = await ceoCommit(mutate, message);
       if (saved === false) throw new Error("Não foi possível salvar. Confira sua conexão e tente novamente.");
-      closeDialog();
+      // A slow save can finish after the user has already opened another task.
+      if (activeDialog === sourceDialog) closeDialog();
     } catch (failure) { error.textContent = failure.message || "Não foi possível salvar a alteração."; }
     finally { button.disabled = false; }
   }

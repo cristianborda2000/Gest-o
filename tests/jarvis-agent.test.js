@@ -141,12 +141,40 @@ test('orquestrador limita chamadas mesmo se o provedor insistir em tools após o
   assert.equal(ai.requests.length, 5);
   assert.equal(ai.requests.at(-1).tool_choice, 'none');
 });
-async function request(handler, url, method = 'GET', body, token = 'userA') {
-  const req = Readable.from(body === undefined ? [] : [JSON.stringify(body)]);
+async function request(handler, url, method = 'GET', body, token = 'userA', options = {}) {
+  const req = Readable.from(options.chunks || (body === undefined ? [] : [JSON.stringify(body)]));
+  if (Object.hasOwn(options, 'parsedBody')) req.body = options.parsedBody;
   req.url = `/api/jarvis${url}`; req.method = method; req.headers = { host: 'localhost:5174', origin: 'http://localhost:5174', ...(token ? { authorization: `Bearer ${token}` } : {}), 'content-type': 'application/json' };
   let value; const res = { headers: {}, statusCode: 200, setHeader(k, v) { this.headers[k] = v; }, end(text) { value = JSON.parse(text); } };
   await handler(req, res); return { status: res.statusCode, body: value, headers: res.headers };
 }
+test('HTTP preserves accented text and emoji across byte chunks and pre-parsed bodies', async () => {
+  const messages = [], repo = memoryRepository();
+  const handler = createHandler({ config, authenticate: async () => ({ data: { user: { id: 'A' } } }), repositoryFactory: () => repo,
+    agentFactory: () => ({ send: async input => { messages.push(input); return { accepted: true }; } }) });
+  const body = { message: 'Reunião para criação 🚀', request_id: randomUUID() };
+  const raw = Buffer.from(JSON.stringify(body));
+  // One-byte chunks split both two-byte accents and the four-byte emoji.
+  const chunks = Array.from(raw, byte => Buffer.from([byte]));
+  assert.equal((await request(handler, '/message', 'POST', undefined, 'userA', { chunks })).status, 200);
+  for (const parsedBody of [body, JSON.stringify(body), raw]) {
+    assert.equal((await request(handler, '/message', 'POST', undefined, 'userA', { parsedBody })).status, 200);
+  }
+  assert.equal(messages.length, 4);
+  messages.forEach(input => assert.deepEqual(input, body));
+});
+test('HTTP rejects invalid JSON and oversized byte bodies before sending a message', async () => {
+  const repo = memoryRepository();
+  const handler = createHandler({ config, authenticate: async () => ({ data: { user: { id: 'A' } } }), repositoryFactory: () => repo,
+    agentFactory: () => ({ send: async () => assert.fail('invalid body reached the agent') }) });
+  const raw = Buffer.from(JSON.stringify({ message: 'é'.repeat(10001), request_id: randomUUID() }));
+  for (const options of [{ chunks: [raw.subarray(0, 10000), raw.subarray(10000)] }, { parsedBody: raw }]) {
+    assert.equal((await request(handler, '/message', 'POST', undefined, 'userA', options)).status, 413);
+  }
+  for (const options of [{ chunks: [Buffer.from('{')] }, { parsedBody: '{' }]) {
+    assert.equal((await request(handler, '/message', 'POST', undefined, 'userA', options)).status, 400);
+  }
+});
 test('HTTP deriva conta do JWT validado, rejeita user_id e confirmação ambígua, protege todos endpoints', async () => {
   const repos = { userA: memoryRepository('A'), userB: memoryRepository('B') };
   const handler = createHandler({ config, authenticate: async token => ({ data: { user: repos[token] ? { id: token } : null } }), repositoryFactory: id => repos[id], agentFactory: repo => createAgent({ repository: repo, config, clock, provider: provider([]) }) });

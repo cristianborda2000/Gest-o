@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "npm install",
-  "buildCommand": "npm run build:css",
+  "buildCommand": "npm run build",
   "outputDirectory": "app",
   "cleanUrls": true,
   "functions": { "api/jarvis.js": { "maxDuration": 180 }, "api/reminder-cron.js": { "maxDuration": 60 }, "api/project-access.js": { "maxDuration": 60 } },

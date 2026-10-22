@@ -550,19 +550,16 @@
     detailBackdrop.addEventListener("click", closeDetailPanel);
     onboardingForm.addEventListener("submit", async (event) => {
       event.preventDefault();
-      state.companyProfile = {
-        ...state.companyProfile,
-        ...Object.fromEntries(new FormData(onboardingForm).entries())
-      };
-      state.setupDone = true;
-      if (!await persist()) return;
+      const profile = Object.fromEntries(new FormData(onboardingForm).entries());
+      if (!await ceoCommit(draft => {
+        Object.assign(draft.companyProfile, profile);
+        draft.setupDone = true;
+      }, "Dados da empresa salvos")) return;
       fillCompanyForm();
       hideOnboarding();
-      render();
     });
     skipOnboardingBtn.addEventListener("click", async () => {
-      state.setupDone = true;
-      if (!await persist()) return;
+      if (!await ceoCommit(draft => { draft.setupDone = true; }, "Configuração inicial concluída")) return;
       hideOnboarding();
     });
     document.addEventListener("keydown", (event) => {
@@ -589,29 +586,32 @@
       });
       if (!confirmed || generation !== sessionGeneration) return;
 
-      state = createInitialState();
-      if (!await persist()) return;
+      if (!await ceoCommit(draft => {
+        Object.keys(draft).forEach(key => { delete draft[key]; });
+        Object.assign(draft, createInitialState());
+      }, "Dados apagados")) return;
       editingId = null;
-      render();
-      showToast("Dados apagados", "O sistema voltou ao estado inicial.");
+      fillCompanyForm();
     });
 
     loadExamplesBtn.addEventListener("click", async () => {
+      const generation = sessionGeneration;
       const confirmed = await requestConfirmation({
         eyebrow: "Substituir dados",
         title: "Carregar dados de exemplo?",
         message: "Isso substitui os dados atuais por exemplos para demonstração.",
         confirmText: "EXEMPLO"
       });
-      if (!confirmed) return;
+      if (!confirmed || generation !== sessionGeneration) return;
 
-      state = createExampleState();
-      if (!await persist()) return;
+      if (!await ceoCommit(draft => {
+        Object.keys(draft).forEach(key => { delete draft[key]; });
+        Object.assign(draft, createExampleState());
+      }, "Exemplos carregados")) return;
       editingId = null;
       formPanelOpen = false;
       closeSettings();
-      render();
-      showToast("Exemplos carregados", "Os dados de demonstração foram aplicados.");
+      fillCompanyForm();
     });
 
     document.getElementById("exportBtn").addEventListener("click", () => {
@@ -656,14 +656,10 @@
         return;
       }
 
-      state.companyProfile = {
-        ...state.companyProfile,
-        ...profile
-      };
-      if (!await persist()) return;
+      if (!await ceoCommit(draft => {
+        Object.assign(draft.companyProfile, profile);
+      }, "Dados salvos")) return;
       fillCompanyForm();
-      render();
-      showToast("Dados salvos", "As informações da empresa foram atualizadas.");
     });
 
     importBtn.addEventListener("click", () => {

@@ -16,6 +16,7 @@ async function setup(page,options={}) {
 }
 async function open(page) {
   await card(page).getByRole('button',{name:'Abrir projeto Projeto interno Aurora',exact:true}).click();
+  await dialog(page).getByRole('tab',{name:'Processos',exact:true}).click();
 }
 async function edit(page) {
   await open(page);
@@ -29,6 +30,7 @@ async function expand(page) {
 }
 async function save(page) {
   await dialog(page).getByRole('button',{name:'Salvar alterações',exact:true}).click();
+  await dialog(page).getByRole('tab',{name:'Processos',exact:true}).click();
   await expect(dialog(page).locator('.ceo-project-detail-track').first()).toBeVisible();
 }
 async function expectSafeLink(scope,label,url) {

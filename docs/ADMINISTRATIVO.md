@@ -51,7 +51,7 @@ Os testes `mobile-layout.spec.js`, `mobile-settings.spec.js`, `mobile-forms.spec
 ```powershell
 npm.cmd test
 npm.cmd run test:browser
-npm.cmd run build:css
+npm.cmd run build
 ```
 
 Os testes usam contas, banco PostgreSQL WASM e APIs simulados; não alteram produção nem enviam notificações reais. Antes de ativar equipe ou push em produção, confira as migrações, permissões e configuração da hospedagem. Os arquivos SQL são reaplicáveis e preservam a tabela existente.

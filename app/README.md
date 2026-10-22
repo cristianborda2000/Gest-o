@@ -19,9 +19,11 @@ OpenAI nem a service-role do Supabase em assets/js/env.js.
 
 Clientes, mensalidades, Marketing e RH legados continuam preservados no estado
 e nos backups. A área de Projetos usa tabelas separadas, listas de produção
-criadas manualmente, credenciais protegidas e acesso por responsável. Veja
+criadas manualmente, processos internos e acesso compartilhado com a equipe.
+A consulta de senhas é reservada ao administrador e ao responsável autorizado. Veja
 [instalação e uso de Projetos](../docs/PROJETOS.md).
 
 Nunca execute database/supabase-setup.sql em um banco com dados existentes:
-o script legado contem DROP TABLE. Use apenas a migration aditiva descrita
-no guia do JARVIS.
+o script legado contém DROP TABLE. Use as migrations aditivas descritas no guia
+do módulo que deseja ativar. O [mapa da arquitetura](../docs/ARQUITETURA.md) explica
+as responsabilidades dos arquivos e o fluxo de gravação.
