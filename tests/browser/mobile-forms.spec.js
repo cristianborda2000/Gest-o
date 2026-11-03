@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { mock, seed } = require('./mock-supabase');
+const { openFinanceRowActions } = require('./finance-ui-helpers');
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/@vite/client', route => route.fulfill({ contentType: 'application/javascript', body: '' }));
@@ -83,6 +84,7 @@ test('closing a phone editor restores the page scroll and resizing restores desk
   data.financeiro.push(...Array.from({ length: 8 }, (_, index) => ({ id: `extra-${index}`, nome: `Movimentação ${index}`, tipo: 'Entrada', valor: 20, prazo: '2026-09-29', status: 'Pendente' })));
   await mock(page, data);
   await navigate(page, 'financeiro');
+  await openFinanceRowActions(page, 'Movimentação 7');
   const edit = page.getByRole('button', { name: 'Editar Movimentação 7', exact: true });
   await edit.scrollIntoViewIfNeeded();
   await edit.evaluate(el => el.addEventListener('click', () => { window.testEditorScroll = window.scrollY; }, { capture: true, once: true }));

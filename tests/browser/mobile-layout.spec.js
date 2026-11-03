@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { mock, seed } = require('./mock-supabase');
+const { selectFinanceTab, openFinanceFilters, openFinanceRowActions } = require('./finance-ui-helpers');
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/@vite/client', route => route.fulfill({ contentType: 'application/javascript', body: '' }));
@@ -60,15 +61,20 @@ test('mobile finance exposes readable cards, dates and actions without sideways 
   data.financeiro[0].nome = 'Descrição longa de uma receita que deve continuar legível no celular';
   data.gastosFixos = [{ id: 'fixed', nome: 'Assinatura de ferramentas e serviços da empresa', valor: -125.5, dia: 5, status: 'Ativo' }];
   await mock(page, data, companyOptions); await navigate(page, 'financeiro');
+  await selectFinanceTab(page, 'Lançamentos');
   const table = page.locator('.ceo-finance-table');
   expect(await table.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
   const row = table.locator('tbody tr').filter({ hasText: data.financeiro[0].nome });
+  await expect(row.locator('.ceo-finance-row-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await openFinanceRowActions(page, data.financeiro[0].nome);
+  await expect(row.locator('.ceo-finance-row-toggle')).toHaveAttribute('aria-expanded', 'true');
   await withinViewport(row, 320);
   expect(await row.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
   for (const button of await row.locator('button').all()) {
     expect((await button.boundingBox()).height).toBeGreaterThanOrEqual(44);
     await withinViewport(button, 320);
   }
+  await openFinanceFilters(page);
   expect((await page.locator('[data-filter="from"]').boundingBox()).width).toBeGreaterThan(200);
   await page.screenshot({ path: info.outputPath('finance.png'), fullPage: true });
   await row.getByRole('button', { name: `Editar ${data.financeiro[0].nome}`, exact: true }).click();

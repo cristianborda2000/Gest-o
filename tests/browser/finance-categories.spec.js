@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { mock, seed } = require('./mock-supabase');
+const { selectFinanceTab, openFinanceFilters, openFinanceRowActions } = require('./finance-ui-helpers');
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/@vite/client', route => route.fulfill({ contentType: 'application/javascript', body: '' }));
@@ -83,6 +84,7 @@ test('category charts distinguish paid and pending money, exclude cancellations 
   ];
   await mock(page, data);
   await navigate(page);
+  await selectFinanceTab(page, 'Análises');
   await expect(chart(page, 'expense').locator('.ceo-category-total')).toContainText('400,00');
   await expect(chart(page, 'income').locator('.ceo-category-total')).toContainText('1.000,00');
   await expect(categoryBar(page, 'Alimentação')).toContainText('25%');
@@ -100,6 +102,7 @@ test('category charts distinguish paid and pending money, exclude cancellations 
   await expect(categoryBar(page, 'Vendas', 'Entrada')).toContainText('60%');
 
   await page.getByRole('button', { name: 'Pagos e recebidos', exact: true }).click();
+  await openFinanceFilters(page);
   await page.getByLabel('Até', { exact: true }).fill('2026-09-10');
   await page.getByLabel('Até', { exact: true }).blur();
   await expect(chart(page, 'expense').locator('.ceo-category-total')).toContainText('100,00');
@@ -115,6 +118,7 @@ test('saving a movement creates a reusable category and its chart drills into th
   const form = await fillPaidExpense(page, 'Peça para manutenção', 'Peças de reposição');
   await form.getByRole('button', { name: 'Salvar movimentação', exact: true }).click();
   await expect(form).not.toBeVisible();
+  await selectFinanceTab(page, 'Análises');
   await expect(chart(page, 'expense').locator('.ceo-category-total')).toContainText('525,92');
   await expect(categoryBar(page, 'Peças de reposição')).toContainText('45,67');
   await expect(categoryBar(page, 'Peças de reposição')).toContainText('8,7%');
@@ -125,6 +129,7 @@ test('saving a movement creates a reusable category and its chart drills into th
   await expect(page.getByLabel('Categoria', { exact: true })).toHaveValue('Peças de reposição');
   await expect(page.getByLabel('Tipo', { exact: true })).toHaveValue('Saída');
   await expect(page.getByLabel('Situação', { exact: true })).toHaveValue('Liquidado');
+  await selectFinanceTab(page, 'Análises');
   await expect(categoryBar(page, 'Peças de reposição')).toContainText('100%');
 
   await page.reload();
@@ -149,16 +154,20 @@ test('category chart drilldown finds legacy rows with blank categories and fallb
   await mock(page, data);
   await navigate(page);
 
+  await selectFinanceTab(page, 'Análises');
   await expect(categoryBar(page, 'Aluguel da sala')).toContainText('30,00');
   await categoryBar(page, 'Aluguel da sala').click();
   await expect(ledgerRows(page)).toHaveCount(2);
   await expect(ledgerRows(page).filter({ hasText: 'Aluguel legado' })).toHaveCount(1);
   await expect(ledgerRows(page).filter({ hasText: 'Complemento do aluguel' })).toHaveCount(1);
   await expect(page.getByLabel('Categoria', { exact: true })).toHaveValue('Aluguel da sala');
+  await selectFinanceTab(page, 'Análises');
   await expect(categoryBar(page, 'Aluguel da sala')).toContainText('100%');
   await expect(chart(page, 'expense').locator('.ceo-category-total')).toContainText('30,00');
 
+  await openFinanceFilters(page);
   await page.getByRole('button', { name: 'Limpar filtros', exact: true }).click();
+  await selectFinanceTab(page, 'Análises');
   await categoryBar(page, 'Outro').click();
   await expect(ledgerRows(page)).toHaveCount(1);
   await expect(ledgerRows(page)).toContainText('Despesa sem categoria');
@@ -248,6 +257,7 @@ test('editing a legacy category keeps the equivalent saved category when switchi
   data.financeiro = [{ id: 'legacy-rent', nome: 'Aluguel legado', categoria: 'ALUGUEL', tipo: 'Saída', valor: -150, status: 'Pago', data: '2026-09-29', prazo: '2026-09-29', pagoEm: '2026-09-29' }];
   await mock(page, data);
   await navigate(page);
+  await openFinanceRowActions(page, 'Aluguel legado');
   await page.getByRole('button', { name: 'Editar Aluguel legado', exact: true }).click();
   const form = page.getByRole('dialog');
   const select = form.getByLabel('Categoria', { exact: true });
@@ -276,6 +286,7 @@ test('switching directions uses the canonical fallback category from legacy labe
   await expect(form.getByLabel('Categoria', { exact: true })).toHaveValue('OUTRO');
   await form.getByRole('button', { name: 'Cancelar', exact: true }).click();
 
+  await openFinanceRowActions(page, 'Sistema pago');
   await page.getByRole('button', { name: 'Editar Sistema pago', exact: true }).click();
   form = page.getByRole('dialog');
   await form.getByLabel('Tipo', { exact: true }).selectOption('Entrada');
@@ -290,6 +301,7 @@ test('long category charts and the category form fit a phone viewport', async ({
   await mock(page, data);
   await page.locator('#ceoMenuBtn').click();
   await navigate(page);
+  await selectFinanceTab(page, 'Análises');
   await expect(categoryBar(page, longName)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
   expect(await chart(page, 'expense').evaluate(element => element.scrollWidth <= element.clientWidth)).toBeTruthy();

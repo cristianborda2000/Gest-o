@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { mock, seed } = require('./mock-supabase');
+const { selectFinanceTab, openFinanceFilters } = require('./finance-ui-helpers');
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/@vite/client', route => route.fulfill({ contentType: 'application/javascript', body: '' }));
@@ -7,7 +8,10 @@ test.beforeEach(async ({ page }) => {
 
 const chart = (page, type) => page.locator(`[data-category-chart="${type}"]`);
 const categoryLink = (page, name, type = 'Saída') => page.getByRole('button', { name: `Ver lançamentos de ${name} (${type})`, exact: true });
-const navigate = page => page.locator('.nav [data-module="financeiro"]').click();
+async function navigate(page) {
+  await page.locator('.nav [data-module="financeiro"]').click();
+  await selectFinanceTab(page, 'Análises');
+}
 
 function chartData() {
   const data = structuredClone(seed);
@@ -42,6 +46,7 @@ test('bars and circles share totals, date filters and paid or pending categories
   await expect(chart(page, 'income').locator('.ceo-category-total')).toContainText('1.000,00');
   await page.locator('.ceo-category-analysis').screenshot({ path: testInfo.outputPath('finance-circle-desktop.png') });
 
+  await openFinanceFilters(page);
   await page.getByLabel('Até', { exact: true }).fill('2026-09-10');
   await page.getByLabel('Até', { exact: true }).blur();
   await expect(chart(page, 'income').locator('.ceo-category-total')).toContainText('600,00');
@@ -70,6 +75,7 @@ test('circle legends open matching ledger rows and empty circles show no fabrica
   await expect(rows).toContainText('Almoço pago');
   await expect(page.getByLabel('Categoria', { exact: true })).toHaveValue('Alimentação');
   await expect(page.getByLabel('Situação', { exact: true })).toHaveValue('Liquidado');
+  await selectFinanceTab(page, 'Análises');
   await expect(chart(page, 'expense')).toHaveAttribute('data-chart-view', 'circle');
   await expect(chart(page, 'expense').locator('[data-chart-segment]')).toHaveAttribute('stroke-dasharray', '100 0');
   await expect(categoryLink(page, 'Alimentação')).toContainText('100%');

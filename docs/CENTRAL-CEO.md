@@ -9,6 +9,8 @@ O JARVIS opera apenas os módulos descritos em seu [guia](JARVIS.md).
 
 ## Como usar
 
+O [padrão visual da interface](INTERFACE.md) unifica botões, campos, listas e estados em todas as telas. No Financeiro, use **Resumo**, **Lançamentos** e **Análises** para alternar a visão mantendo os mesmos filtros.
+
 - **Visão geral:** escolha o mês para ver entradas recebidas, saídas pagas,
   saldo e investimentos realizados. Tarefas usam a data atual de São Paulo;
   ideias mostram as capturas mais recentes. Marque a tarefa para concluir ou

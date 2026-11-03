@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { mock, seed } = require('./mock-supabase');
+const { selectFinanceTab, openFinanceRowActions } = require('./finance-ui-helpers');
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/@vite/client', route => route.fulfill({ contentType: 'application/javascript', body: '' }));
@@ -22,6 +23,7 @@ for (const legacy of [
     await mock(page, data);
     await navigate(page, 'financeiro');
     const summary = await page.locator('.ceo-finance-summary').innerText();
+    await openFinanceRowActions(page, 'Registro antigo');
     await page.getByRole('button', { name: 'Editar Registro antigo', exact: true }).click();
     const form = page.getByRole('dialog');
     await expect(form.getByLabel('Tipo', { exact: true })).toHaveValue(legacy.tipo);
@@ -40,6 +42,7 @@ for (const legacy of [
     expect(saved).toMatchObject({ id: 'legacy', tipo: legacy.tipo, status: savedStatus, categoria: legacy.categoria, valorCentavos: 48025, valor: legacy.tipo === 'Saída' ? -480.25 : 480.25, prazo: '2026-09-05', pagoEm: paidOn });
     await page.reload();
     await navigate(page, 'financeiro');
+    await selectFinanceTab(page, 'Resumo');
     await expect(page.locator('.ceo-finance-summary')).toHaveText(summary, { useInnerText: true });
   });
 }
@@ -69,6 +72,7 @@ for (const [status, investmentStatus, date] of [
     await expect(form).not.toBeVisible();
     await page.reload();
     await navigate(page, 'financeiro');
+    await selectFinanceTab(page, 'Resumo');
     await expect(page.locator('.ceo-finance-summary')).toHaveText(summary, { useInnerText: true });
     const saved = await cloud(page);
     expect(saved.financeiro).toHaveLength(seed.financeiro.length);

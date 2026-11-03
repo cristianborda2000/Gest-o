@@ -3,7 +3,8 @@
 (function (global) {
   "use strict";
   const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-  const settings = { finance: null, investments: null, fixedMonth: "", chartMode: "realized", chartStyle: "bars" };
+  const settings = { finance: null, investments: null, fixedMonth: "", chartMode: "realized", chartStyle: "bars", financeTab: "summary", financeFiltersOpen: false };
+  const expandedMovements = new Set();
   const categoryTools = () => global.ZamaFinanceCategories || require("./finance-categories.js");
   const categoryAdapter = () => ({ direction, amountCents, isSettled, isCancelled });
   const categoryKey = value => word(value).trim().replace(/\s+/g, " ");
@@ -291,7 +292,7 @@
     const overdue = !isSettled(row) && !isCancelled(row) && row.prazo && row.prazo < today();
     return `<span class="ceo-badge ${isSettled(row) ? "green" : isCancelled(row) ? "muted" : overdue ? "red" : "amber"}">${safe(isSettled(row) ? direction(row) === "Entrada" ? "Recebido" : "Pago" : overdue ? "Atrasado" : row.status || "Pendente")}</span>`;
   }
-  function filterMarkup(filters, rows, investment) {
+  function filterMarkup(filters, rows, investment, compact = false) {
     const names = new Map();
     rows.forEach(row => { if (!names.has(categoryKey(category(row)))) names.set(categoryKey(category(row)), category(row)); });
     const categories = [...names.values()].sort((a, b) => a.localeCompare(b, "pt-BR"));
@@ -305,7 +306,7 @@
       ${field("Categoria", `<select data-filter="category">${options(categories, filters.category, "Todas")}</select>`)}
       ${!investment ? field("Tipo", `<select data-filter="type">${options(["Entrada", "Saída"], filters.type, "Todos")}</select>`) : ""}
       ${field("Situação", `<select data-filter="status">${options(investment ? ["Planejado", "Realizado", "Cancelado"] : ["Pendente", "Liquidado", "Agendado", "Atrasado", "Cancelado"], filters.status, "Todas")}</select>`)}
-      ${field("Pesquisar", `<input type="search" data-filter="query" value="${safe(filters.query)}" placeholder="Descrição ou observação">`)}
+      ${compact ? "" : field("Pesquisar", `<input type="search" data-filter="query" value="${safe(filters.query)}" placeholder="Descrição ou observação">`)}
       <button class="ceo-button" type="button" data-clear>Limpar filtros</button>
     </div>`;
   }
@@ -340,15 +341,16 @@
   function overdueBefore(target, before) {
     return (target.financeiro || []).filter(row => !isSettled(row) && !isCancelled(row) && row.prazo && row.prazo < today() && (!before || row.prazo < before));
   }
-  function metric(label, value, tone = "") { return `<article class="ceo-card ceo-finance-metric"><span>${label}</span><strong class="${tone}">${formatMoney(value)}</strong></article>`; }
+  function metric(label, value, tone = "", extra = "") { return `<article class="ceo-card ceo-finance-metric ${extra}"><span>${label}</span><strong class="${tone}">${formatMoney(value)}</strong></article>`; }
   function wireFilters(container, filters, renderFn) {
     container.querySelectorAll("[data-filter]").forEach(control => control.addEventListener("change", () => {
+      const proposed = { ...filters, [control.dataset.filter]: control.value };
+      if (proposed.from && proposed.to && proposed.from > proposed.to) { control.setCustomValidity("O início do período deve ser anterior ao fim."); control.reportValidity(); return; }
       filters[control.dataset.filter] = control.value;
       if (renderFn === renderFinance && control.dataset.filter === "status") {
         if (["Pendente", "Agendado", "Atrasado"].includes(control.value)) settings.chartMode = "pending";
         if (control.value === "Liquidado") settings.chartMode = "realized";
       }
-      if (filters.from && filters.to && filters.from > filters.to) { control.setCustomValidity("O início do período deve ser anterior ao fim."); control.reportValidity(); return; }
       container.querySelectorAll("[data-filter]").forEach(element => element.setCustomValidity(""));
       renderFn(container);
     }));
@@ -424,7 +426,7 @@
     const title = outgoing ? "Para onde vai o dinheiro" : "De onde vem o dinheiro";
     const label = outgoing ? pending ? "Total a pagar" : "Total pago" : pending ? "Total a receber" : "Total recebido";
     const percent = value => `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(value)}%`;
-    const colors = ["#171717", "#777777", "#b6b6b6", "#424242", "#959595", "#d2d2d2", "#606060", "#a6a6a6"];
+    const colors = ["#9fcdb7", "#a9c4e8", "#d2bae4", "#ead092", "#e4b9b6", "#afd4d7", "#c2c4df", "#c8d4a5"];
     let offset = 0;
     const donut = circular ? `<div class="ceo-category-donut-wrap"><svg class="ceo-category-donut" viewBox="0 0 200 200" role="img" aria-label="${group.categories.length ? `Distribuição de ${outgoing ? "saídas" : "entradas"} em ${group.categories.length} ${group.categories.length === 1 ? "categoria" : "categorias"}. Valores na legenda.` : "Nenhum valor para distribuir"}"><circle class="ceo-category-donut-base" cx="100" cy="100" r="78" fill="none" stroke-width="28"></circle>${group.categories.map((item, index) => {
       const share = Math.max(0, Math.min(100, item.percentage)), start = offset;
@@ -442,21 +444,116 @@
     const mode = settings.chartMode, groups = categoryTools().summarize(rows, categoryAdapter(), mode);
     return `<section class="ceo-category-analysis" aria-label="Gráficos por categoria"><div class="ceo-category-analysis-head"><div><h2>Seu dinheiro, por categoria</h2><p>Valores e percentuais conforme os filtros selecionados. Cancelados ficam fora dos gráficos.</p></div><div class="ceo-chart-controls"><div class="ceo-chart-modes" role="group" aria-label="Valores dos gráficos"><button type="button" data-chart-mode="realized" aria-pressed="${mode === "realized"}">Pagos e recebidos</button><button type="button" data-chart-mode="pending" aria-pressed="${mode === "pending"}">A pagar e receber</button></div><div class="ceo-chart-modes ceo-chart-styles" role="group" aria-label="Formato dos gráficos"><button type="button" data-chart-style="bars" aria-pressed="${settings.chartStyle === "bars"}">Barras</button><button type="button" data-chart-style="circle" aria-pressed="${settings.chartStyle === "circle"}">Círculo</button></div></div></div><div class="ceo-category-chart-grid">${categoryChart(groups.expense, "Saída", mode)}${categoryChart(groups.income, "Entrada", mode)}</div></section>`;
   }
+  function financePeriod(preset) {
+    const date = today(), month = new Date(Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - (preset === "previous" ? 2 : 1), 1));
+    const year = month.getUTCFullYear(), number = month.getUTCMonth() + 1;
+    const prefix = `${year}-${String(number).padStart(2, "0")}`;
+    return { from: `${prefix}-01`, to: `${prefix}-${new Date(Date.UTC(year, number, 0)).getUTCDate()}` };
+  }
+  function periodLabel(filters) {
+    if (!filters.from && !filters.to) return "Todo o período";
+    if (!filters.from) return `Até ${dateLabel(filters.to)}`;
+    if (!filters.to) return `A partir de ${dateLabel(filters.from)}`;
+    return `${dateLabel(filters.from)} a ${dateLabel(filters.to)}`;
+  }
+  function financeFilters(filters, target) {
+    const labels = { category: "Categoria", type: "Tipo", status: "Situação", query: "Pesquisa" };
+    const active = Object.entries(labels).filter(([key]) => filters[key]);
+    return `<section class="ceo-card ceo-finance-filter-bar" aria-label="Filtros financeiros">
+      <div class="ceo-finance-search">${field("Pesquisar", `<input type="search" data-filter="query" value="${safe(filters.query)}" placeholder="Descrição ou observação">`)}</div>
+      <details class="ceo-finance-more-filters" ${settings.financeFiltersOpen ? "open" : ""}><summary>Mais filtros${active.length ? ` (${active.length})` : ""}</summary>${filterMarkup(filters, target.financeiro, false, true)}<p class="ceo-muted">Pagos e recebidos usam a data da baixa; pendências usam o vencimento. Os filtros valem para todas as abas.</p></details>
+      ${active.length ? `<div class="ceo-finance-active-filters" aria-label="Filtros aplicados">${active.map(([key, label]) => `<button type="button" data-remove-filter="${key}" aria-label="Remover filtro ${label}: ${safe(filters[key])}">${label}: ${safe(filters[key])} <span aria-hidden="true">×</span></button>`).join("")}</div>` : ""}
+    </section>`;
+  }
+  function movementDue(row) {
+    if (isSettled(row)) return `${direction(row) === "Entrada" ? "Recebido" : "Pago"} em ${dateLabel(effectiveDate(row))}`;
+    return row.prazo ? `Vence ${dateLabel(row.prazo)}` : "Sem vencimento";
+  }
+  function pendingSummary(rows) {
+    const pending = rows.filter(row => !isSettled(row) && !isCancelled(row)).sort((a, b) => (a.prazo || "9999").localeCompare(b.prazo || "9999"));
+    return `<section class="ceo-card ceo-finance-pending"><div class="ceo-toolbar"><div><h2>Pendências do período</h2><p>Vencimentos mais próximos, conforme os filtros.</p></div><button type="button" class="ceo-button" data-view-ledger>Ver lançamentos</button></div>
+      ${pending.length ? `<ul class="ceo-finance-pending-list">${pending.slice(0, 4).map(row => `<li><button type="button" class="ceo-finance-pending-item" data-summary-entry="${safe(row.id)}" aria-label="Ver lançamento ${safe(row.nome)}"><span class="ceo-finance-pending-copy"><strong>${safe(row.nome)}</strong><small>${movementDue(row)}</small></span><span class="ceo-finance-pending-value"><strong>${direction(row) === "Entrada" ? "+" : "−"} ${formatMoney(amountCents(row))}</strong>${badge(row)}</span></button></li>`).join("")}</ul>` : '<div class="ceo-empty"><strong>Nenhuma pendência neste período</strong><p>Consulte seus registros na aba Lançamentos.</p></div>'}</section>`;
+  }
+  function movementRow(row, index) {
+    const expanded = expandedMovements.has(row.id), incoming = direction(row) === "Entrada";
+    const action = incoming ? "Registrar recebimento" : "Registrar pagamento";
+    const prefix = `finance-row-${index}`;
+    return `<tr data-finance-row="${safe(row.id)}" class="${expanded ? "is-expanded" : ""}">
+      <td class="finance-description"><strong>${safe(row.nome || "Sem descrição")}</strong><br><small>${safe(category(row))}${row.investmentId ? " · Investimento vinculado" : row.monthlyId ? " · Mensalidade vinculada" : row.fixedExpenseId ? ` · Gasto fixo · ${monthLabel(row.competencia)}` : ""}</small><small class="ceo-finance-row-due">${movementDue(row)}</small>
+      <button type="button" class="ceo-finance-row-toggle" data-finance-toggle="${safe(row.id)}" aria-label="${expanded ? "Recolher" : "Mostrar"} detalhes de ${safe(row.nome)}" aria-expanded="${expanded}" aria-controls="${prefix}-type ${prefix}-dates ${prefix}-actions"><span>${expanded ? "Recolher detalhes" : "Ver detalhes"}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></td>
+      <td class="finance-type" id="${prefix}-type">${safe(direction(row))}</td><td class="finance-dates" id="${prefix}-dates">${dateLabel(row.data || row.prazo)}<br><small>Vence ${dateLabel(row.prazo)}${isSettled(row) ? `<br>Liquidado ${dateLabel(effectiveDate(row))}` : ""}</small></td>
+      <td class="finance-status">${badge(row)}</td><td class="finance-value ${incoming ? "money-positive" : "money-negative"}">${incoming ? "+" : "−"} ${formatMoney(amountCents(row))}</td>
+      <td class="finance-actions" id="${prefix}-actions"><div class="ceo-row-actions">${!isSettled(row) && !isCancelled(row) && !row.investmentId && !row.monthlyId ? `<button type="button" class="ceo-button primary" data-settle="${safe(row.id)}" aria-label="${action} de ${safe(row.nome)}">${action}</button>` : ""}
+      <details class="ceo-finance-row-menu"><summary aria-label="Mais ações de ${safe(row.nome)}">Mais ações</summary><div class="ceo-finance-row-menu-items"><button type="button" class="ceo-button" data-edit="${safe(row.id)}" aria-label="Editar ${safe(row.nome)}">Editar</button><button type="button" class="ceo-button" data-delete="${safe(row.id)}" aria-label="${row.fixedExpenseId ? "Cancelar parcela de" : "Excluir"} ${safe(row.nome)}">${row.fixedExpenseId ? "Cancelar parcela" : "Excluir"}</button></div></details></div></td></tr>`;
+  }
+  function selectFinanceTab(container, name, focus = false) {
+    const tabs = [...container.querySelectorAll("[data-finance-tab]")];
+    const selected = tabs.find(tab => tab.dataset.financeTab === name);
+    if (!selected) return;
+    settings.financeTab = name;
+    tabs.forEach(tab => {
+      const active = tab === selected;
+      tab.setAttribute("aria-selected", String(active)); tab.tabIndex = active ? 0 : -1;
+      container.querySelector(`#${tab.getAttribute("aria-controls")}`).hidden = !active;
+    });
+    if (focus) selected.focus({ preventScroll: true });
+  }
+  function setMovementExpanded(row, expanded) {
+    if (!row) return;
+    const button = row.querySelector("[data-finance-toggle]");
+    if (expanded) expandedMovements.add(row.dataset.financeRow); else expandedMovements.delete(row.dataset.financeRow);
+    row.classList.toggle("is-expanded", expanded);
+    button.setAttribute("aria-expanded", String(expanded));
+    button.setAttribute("aria-label", `${expanded ? "Recolher" : "Mostrar"} detalhes de ${row.querySelector(".finance-description > strong").textContent}`);
+    button.querySelector("span").textContent = expanded ? "Recolher detalhes" : "Ver detalhes";
+  }
   function renderFinance(container) {
     const target = current(); normalize(target);
     const filters = settings.finance ||= defaultFilters();
     const sum = totals(target, filters), rows = financeRows(target, filters);
     const older = filters.from ? overdueBefore(target, filters.from) : [];
-    container.innerHTML = `<div class="ceo-toolbar"><div><h2>Movimentações financeiras</h2><p>Entradas, saídas e compromissos da ZAMA.</p></div><div class="ceo-row-actions"><button class="ceo-button" data-categories>Categorias</button><button class="ceo-button" data-fixed>Gastos fixos</button><button class="ceo-button primary" data-new>＋ Nova movimentação</button></div></div>
-      <div class="ceo-grid ceo-finance-summary">${metric("Entradas recebidas", sum.incomeCents, "money-positive")}${metric("Saídas pagas", sum.expenseCents, "money-negative")}${metric("Saldo do período", sum.balanceCents)}${metric("A receber", sum.receivableCents)}${metric("A pagar", sum.payableCents)}</div>
-      ${older.length ? `<section class="ceo-card ceo-toolbar"><div><strong>${older.length} ${older.length === 1 ? "pendência vencida anterior" : "pendências vencidas anteriores"} ao período</strong><p>${formatMoney(older.filter(row => direction(row) === "Saída").reduce((sum, row) => sum + amountCents(row), 0))} a pagar · ${formatMoney(older.filter(row => direction(row) === "Entrada").reduce((sum, row) => sum + amountCents(row), 0))} a receber</p></div><button class="ceo-button" data-overdue>Ver todas as vencidas</button></section>` : ""}
-      <section class="ceo-card"><div class="ceo-toolbar"><button class="ceo-button" data-account="all" aria-pressed="${!filters.type && !filters.status}">Todas as movimentações</button><button class="ceo-button" data-account="payable" aria-pressed="${filters.type === "Saída" && filters.status === "Pendente"}">Contas a pagar</button><button class="ceo-button" data-account="receivable" aria-pressed="${filters.type === "Entrada" && filters.status === "Pendente"}">Contas a receber</button></div>
-      ${filterMarkup(filters, target.financeiro, false)}<p class="ceo-muted">Os indicadores e gráficos acompanham estes filtros. Valores pagos ou recebidos usam a data da baixa; pendências usam o vencimento.</p></section>
-      ${categoryCharts(rows)}
-      <section class="ceo-card" data-finance-ledger><div class="ceo-toolbar"><div><h2>Lançamentos</h2><p>${rows.length} ${rows.length === 1 ? "movimentação encontrada" : "movimentações encontradas"}.</p></div></div>
-      ${rows.length ? `<div class="ceo-table-wrap ceo-table-scroll"><table class="ceo-table"><thead><tr><th>Descrição / categoria</th><th>Tipo</th><th>Data / vencimento</th><th>Situação</th><th>Valor</th><th>Ações</th></tr></thead><tbody>${rows.map(row => `<tr><td><strong>${safe(row.nome || "Sem descrição")}</strong><br><small>${safe(category(row))}${row.investmentId ? " · Investimento vinculado" : row.monthlyId ? " \u00b7 Mensalidade vinculada" : row.fixedExpenseId ? ` \u00b7 Gasto fixo \u00b7 ${monthLabel(row.competencia)}` : ""}</small></td><td>${safe(direction(row))}</td><td>${dateLabel(row.data || row.prazo)}<br><small>Vence ${dateLabel(row.prazo)}${isSettled(row) ? `<br>Liquidado ${dateLabel(effectiveDate(row))}` : ""}</small></td><td>${badge(row)}</td><td class="${direction(row) === "Entrada" ? "money-positive" : "money-negative"}">${direction(row) === "Entrada" ? "+" : "−"} ${formatMoney(amountCents(row))}</td><td><div class="ceo-row-actions">${!isSettled(row) && !isCancelled(row) && !row.investmentId && !row.monthlyId ? `<button class="ceo-button" data-settle="${safe(row.id)}" aria-label="Registrar baixa de ${safe(row.nome)}">Registrar baixa</button>` : ""}<button class="ceo-button" data-edit="${safe(row.id)}" aria-label="Editar ${safe(row.nome)}">Editar</button><button class="ceo-button" data-delete="${safe(row.id)}" aria-label="${row.fixedExpenseId ? "Cancelar parcela de" : "Excluir"} ${safe(row.nome)}">${row.fixedExpenseId ? "Cancelar parcela" : "Excluir"}</button></div></td></tr>`).join("")}</tbody></table></div>` : '<div class="ceo-empty"><strong>Nenhuma movimentação neste período</strong><p>Cadastre uma entrada ou saída, ou ajuste os filtros.</p></div>'}</section>`;
+    const tabs = [["summary", "Resumo"], ["ledger", "Lançamentos"], ["analysis", "Análises"]];
+    const panel = name => `class="ceo-finance-panel" role="tabpanel" id="finance-panel-${name}" aria-labelledby="finance-tab-${name}" tabindex="0" ${settings.financeTab === name ? "" : "hidden"}`;
+    const focusAttributes = ["data-filter", "data-period", "data-account", "data-chart-mode", "data-chart-style", "data-remove-filter"];
+    const focused = document.activeElement;
+    const focusKey = container.contains(focused) && focusAttributes.find(key => focused.hasAttribute(key));
+    const focusValue = focusKey ? focused.getAttribute(focusKey) : null;
+    container.innerHTML = `<div class="ceo-finance-workspace" data-finance-workspace><div class="ceo-toolbar ceo-finance-header"><div><h2>Movimentações financeiras</h2><p>Entradas, saídas e compromissos da ZAMA.</p></div><div class="ceo-row-actions"><button class="ceo-button" data-categories>Categorias</button><button class="ceo-button" data-fixed>Gastos fixos</button><button class="ceo-button primary" data-new>＋ Nova movimentação</button></div></div>
+      <div class="ceo-finance-period"><div class="ceo-finance-period-label"><span>Período selecionado</span><strong>${periodLabel(filters)}</strong></div><div class="ceo-finance-period-presets" role="group" aria-label="Atalhos de período">${[["current", "Este mês"], ["previous", "Mês anterior"]].map(([key, label]) => { const range = financePeriod(key); return `<button type="button" class="ceo-button" data-period="${key}" aria-pressed="${range.from === filters.from && range.to === filters.to}">${label}</button>`; }).join("")}</div></div>
+      <div class="ceo-finance-tabs" role="tablist" aria-label="Áreas do financeiro">${tabs.map(([name, label]) => `<button type="button" class="ceo-finance-tab" role="tab" id="finance-tab-${name}" data-finance-tab="${name}" aria-controls="finance-panel-${name}" aria-selected="${settings.financeTab === name}" tabindex="${settings.financeTab === name ? 0 : -1}">${label}</button>`).join("")}</div>
+      ${financeFilters(filters, target)}
+      ${older.length ? `<section class="ceo-card ceo-toolbar ceo-finance-overdue"><div><strong>${older.length} ${older.length === 1 ? "pendência vencida anterior" : "pendências vencidas anteriores"} ao período</strong><p>${formatMoney(older.filter(row => direction(row) === "Saída").reduce((sum, row) => sum + amountCents(row), 0))} a pagar · ${formatMoney(older.filter(row => direction(row) === "Entrada").reduce((sum, row) => sum + amountCents(row), 0))} a receber</p></div><button class="ceo-button" data-overdue>Ver todas as vencidas</button></section>` : ""}
+      <section ${panel("summary")}><div class="ceo-grid ceo-finance-summary">${metric("Saldo do período", sum.balanceCents, sum.balanceCents < 0 ? "money-negative" : "", "is-balance")}${metric("Entradas recebidas", sum.incomeCents, "money-positive", "is-income")}${metric("Saídas pagas", sum.expenseCents, "money-negative", "is-expense")}${metric("A receber", sum.receivableCents, "", "is-receivable")}${metric("A pagar", sum.payableCents, "", "is-payable")}</div>${pendingSummary(rows)}</section>
+      <section ${panel("ledger")}><section class="ceo-card" data-finance-ledger><div class="ceo-toolbar"><div><h2>Lançamentos</h2><p>${rows.length} ${rows.length === 1 ? "movimentação encontrada" : "movimentações encontradas"}.</p></div></div>
+      <div class="ceo-toolbar ceo-finance-accounts"><button class="ceo-button" data-account="all" aria-pressed="${!filters.type && !filters.status}">Todas as movimentações</button><button class="ceo-button" data-account="payable" aria-pressed="${filters.type === "Saída" && filters.status === "Pendente"}">Contas a pagar</button><button class="ceo-button" data-account="receivable" aria-pressed="${filters.type === "Entrada" && filters.status === "Pendente"}">Contas a receber</button></div>
+      ${rows.length ? `<div class="ceo-table-wrap ceo-table-scroll"><table class="ceo-table ceo-finance-ledger-table"><thead><tr><th>Descrição / categoria</th><th>Tipo</th><th>Data / vencimento</th><th>Situação</th><th>Valor</th><th>Ações</th></tr></thead><tbody>${rows.map(movementRow).join("")}</tbody></table></div>` : '<div class="ceo-empty"><strong>Nenhuma movimentação neste período</strong><p>Cadastre uma entrada ou saída, ou ajuste os filtros.</p></div>'}</section></section>
+      <section ${panel("analysis")}>${categoryCharts(rows)}</section></div>`;
     prepareMobileTable(container);
     wireFilters(container, filters, renderFinance);
+    const moreFilters = container.querySelector(".ceo-finance-more-filters");
+    moreFilters.querySelector("summary").onclick = event => {
+      event.preventDefault();
+      moreFilters.open = !moreFilters.open;
+      settings.financeFiltersOpen = moreFilters.open;
+    };
+    const tabButtons = [...container.querySelectorAll("[data-finance-tab]")];
+    tabButtons.forEach((button, index) => {
+      button.onclick = () => selectFinanceTab(container, button.dataset.financeTab);
+      button.onkeydown = event => {
+        const keys = ["ArrowRight", "ArrowLeft", "Home", "End"];
+        if (!keys.includes(event.key)) return;
+        const next = event.key === "Home" ? 0 : event.key === "End" ? tabButtons.length - 1 : (index + (event.key === "ArrowRight" ? 1 : tabButtons.length - 1)) % tabButtons.length;
+        event.preventDefault(); selectFinanceTab(container, tabButtons[next].dataset.financeTab, true);
+      };
+    });
+    container.querySelectorAll("[data-period]").forEach(button => button.onclick = () => { Object.assign(filters, financePeriod(button.dataset.period)); renderFinance(container); });
+    container.querySelectorAll("[data-remove-filter]").forEach(button => button.onclick = () => { filters[button.dataset.removeFilter] = ""; renderFinance(container); });
+    container.querySelectorAll("[data-finance-toggle]").forEach(button => button.onclick = () => setMovementExpanded(button.closest("tr"), button.getAttribute("aria-expanded") !== "true"));
+    container.querySelector("[data-view-ledger]").onclick = () => selectFinanceTab(container, "ledger", true);
+    container.querySelectorAll("[data-summary-entry]").forEach(button => button.onclick = () => {
+      const row = [...container.querySelectorAll("[data-finance-row]")].find(node => node.dataset.financeRow === button.dataset.summaryEntry);
+      selectFinanceTab(container, "ledger", true); setMovementExpanded(row, true); row?.scrollIntoView({ block: "center" });
+    });
     container.querySelector("[data-new]").onclick = () => openMovement();
     container.querySelector("[data-categories]").onclick = () => openCategories();
     container.querySelectorAll("[data-chart-mode]").forEach(button => button.onclick = () => {
@@ -471,15 +568,22 @@
     container.querySelectorAll("[data-chart-category]").forEach(button => button.onclick = () => {
       const status = settings.chartMode === "pending" ? ["Pendente", "Agendado", "Atrasado"].includes(filters.status) ? filters.status : "Pendente" : "Liquidado";
       Object.assign(filters, { category: button.dataset.chartCategory, type: button.dataset.chartType, status });
+      settings.financeTab = "ledger";
       renderFinance(container);
+      selectFinanceTab(container, "ledger", true);
       container.querySelector("[data-finance-ledger]").scrollIntoView({ behavior: "smooth", block: "start" });
     });
     container.querySelector("[data-fixed]").onclick = () => goToModule("financeiro", { financeView: "fixos" });
-    container.querySelector("[data-overdue]")?.addEventListener("click", () => { Object.assign(filters, { from: "", to: "", type: "", category: "", query: "", status: "Atrasado" }); settings.chartMode = "pending"; renderFinance(container); });
+    container.querySelector("[data-overdue]")?.addEventListener("click", () => { Object.assign(filters, { from: "", to: "", type: "", category: "", query: "", status: "Atrasado" }); settings.chartMode = "pending"; settings.financeTab = "ledger"; renderFinance(container); selectFinanceTab(container, "ledger", true); });
     container.querySelectorAll("[data-account]").forEach(button => button.onclick = () => { filters.type = button.dataset.account === "payable" ? "Saída" : button.dataset.account === "receivable" ? "Entrada" : ""; filters.status = button.dataset.account === "all" ? "" : "Pendente"; settings.chartMode = button.dataset.account === "all" ? "realized" : "pending"; renderFinance(container); });
     container.querySelectorAll("[data-edit]").forEach(button => button.onclick = () => openMovement(button.dataset.edit));
     container.querySelectorAll("[data-delete]").forEach(button => button.onclick = () => deleteMovementUI(button.dataset.delete));
     container.querySelectorAll("[data-settle]").forEach(button => button.onclick = () => openSettlement(button.dataset.settle));
+    container.querySelectorAll(".ceo-finance-row-menu").forEach(menu => menu.addEventListener("keydown", event => { if (event.key === "Escape") { event.preventDefault(); menu.open = false; menu.querySelector("summary").focus(); } }));
+    if (focusKey) {
+      const control = [...container.querySelectorAll(`[${focusKey}]`)].find(node => node.getAttribute(focusKey) === focusValue);
+      if (control?.getClientRects().length) control.focus({ preventScroll: true });
+    }
   }
 
   function renderFixedExpenses(container) {
@@ -594,6 +698,7 @@
     // Keep their settlement state when editing unrelated fields.
     if (isSettled(data)) data.status = "Pago";
     else if (isCancelled(data)) data.status = "Cancelado";
+    const originalFilters = settings.finance;
     const element = dialog(row ? "Editar movimentação" : "Nova movimentação", `<div class="ceo-form-grid">
       ${field("Descrição", input("nome", data.nome || "", 'required maxlength="180"'))}
       ${field("Valor (R$)", amountInput(row ? amountCents(row) : 0))}
@@ -603,10 +708,15 @@
       ${field("Vencimento", dateInput("prazo", data.prazo || data.data || today()))}
       ${field("Situação", `<select name="status">${options(["Pendente", "Pago", "Recebido", "Agendado", "Atrasado", "Cancelado"], data.status)}</select>`)}
       ${field("Data do recebimento / pagamento", `<input type="date" name="pagoEm" value="${safe(data.pagoEm || (isSettled(data) ? data.data || data.prazo || today() : today()))}">`)}
-      ${field("Observações", `<textarea name="observacoes" rows="3" maxlength="5000">${safe(data.observacoes || "")}</textarea>`, "ceo-field-wide")}</div>`, "Salvar movimentação", values => {
+      ${field("Observações", `<textarea name="observacoes" rows="3" maxlength="5000">${safe(data.observacoes || "")}</textarea>`, "ceo-field-wide")}</div>`, "Salvar movimentação", async values => {
       const record = { ...values, valorCentavos: cents(values.amount) }; delete record.amount;
       validateMovement(record);
-      return ceoCommit(draft => saveMovement(draft, record, id), "Movimentação salva.");
+      const saved = await ceoCommit(draft => saveMovement(draft, record, id), "Movimentação salva.");
+      if (saved && originalFilters === settings.finance && element.open && element.isConnected) {
+        const container = document.getElementById("ceoWorkspace");
+        if (container?.querySelector("[data-finance-workspace]")) selectFinanceTab(container, "ledger");
+      }
+      return saved;
     });
     const status = element.querySelector('[name="status"]'), paid = element.querySelector('[name="pagoEm"]');
     function updatePaid() { paid.disabled = !isSettled({ status: status.value }); paid.required = !paid.disabled; }
@@ -646,7 +756,7 @@
     return element;
   }
 
-  function reset() { settings.finance = null; settings.investments = null; settings.fixedMonth = ""; settings.chartMode = "realized"; settings.chartStyle = "bars"; }
+  function reset() { settings.finance = null; settings.investments = null; settings.fixedMonth = ""; settings.chartMode = "realized"; settings.chartStyle = "bars"; settings.financeTab = "summary"; settings.financeFiltersOpen = false; expandedMovements.clear(); }
   function reportMonth() { return (settings.finance?.from || settings.finance?.to || today()).slice(0, 7); }
   global.ZamaFinance = { normalize, totals, cents, amountCents, direction, isSettled, isCancelled, isRealized, effectiveDate, formatMoney, validDate, saveMovement, removeMovement, saveInvestment, removeInvestment, syncInvestment, financeRows, renderFinance, renderInvestments, openMovement, openInvestment, saveFixedExpense, generateFixedExpenses, fixedDueDate, fixedMovement, settleMovement, overdueBefore, renderFixedExpenses, openFixedExpense, reset, reportMonth };
   if (typeof module !== "undefined" && module.exports) module.exports = global.ZamaFinance;

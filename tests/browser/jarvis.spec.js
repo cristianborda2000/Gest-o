@@ -82,12 +82,14 @@ test('Jarvis desktop uses real summary contract and preserves the legacy data of
   await expect(page.locator('.jarvis-home-grid')).toContainText('Revisar o financeiro');
   await expect(page.locator('.jarvis-welcome')).toContainText('Boa tarde.');
   await page.screenshot({path:'test-results/jarvis-desktop.png',fullPage:true});
-  for(const name of ['clientes','mensalidades','marketing','rh']){
+  for(const name of ['mensalidades','marketing','rh']){
     await expect(page.locator(`.nav [data-module="${name}"]`)).toHaveCount(0);
     await page.evaluate(name=>goToModule(name),name);
     await expect(page.locator('body')).toHaveAttribute('data-module','dashboard');
     expect(await page.evaluate(name=>JSON.parse(localStorage.getItem('test-cloud')).data[name],name)).toEqual(legacy[name]);
   }
+  await expect(page.locator('.nav [data-module="clientes"]')).toBeVisible();
+  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('test-cloud')).data.clientes)).toEqual(legacy.clientes);
   await expect(page.locator('.nav [data-module="projetos"]')).toBeVisible();
   expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('test-cloud')).data.projetos)).toEqual(legacy.projetos);
   expect(api.requests.every(r=>r.authorization==='Bearer test-access-token')).toBe(true);
@@ -128,7 +130,9 @@ test('financial action waits for explicit confirmation and recovers safely after
   await card.getByRole('button',{name:'Confirmar',exact:true}).click();await expect(card).toContainText('Concluída');
   expect(api.confirmed).toBe(1);expect(api.requests.filter(r=>r.path.endsWith('/confirm')).every(r=>r.body.confirmation===true)).toBe(true);
   expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('test-cloud')).data.financeiro.filter(row=>row.id==='20000000-0000-4000-8000-000000000001').length)).toBe(1);
-  await page.locator('.nav [data-module="financeiro"]').click();await expect(page.locator('#ceoWorkspace')).toContainText('Anúncios de setembro');
+  await page.locator('.nav [data-module="financeiro"]').click();
+  await page.getByRole('tab',{name:'Lançamentos',exact:true}).click();
+  await expect(page.locator('[data-finance-ledger]')).toContainText('Anúncios de setembro');
 });
 
 test('cancelling an action changes no financial records',async({page})=>{

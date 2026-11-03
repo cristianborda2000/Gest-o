@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { mock, seed } = require('./mock-supabase');
+const { selectFinanceTab, openFinanceFilters, openFinanceRowActions } = require('./finance-ui-helpers');
 
 // Parallel contributors can edit files while this suite runs. Disable Vite's
 // development-only reload client so an in-progress form is not replaced.
@@ -37,6 +38,7 @@ test('financial CRUD, payable filter and cent-accurate persistence work through 
   await page.getByRole('button', { name: 'Contas a pagar', exact: true }).click();
   await expect(page.locator('.ceo-table tbody tr')).toHaveCount(1);
   await expect(financeRow(page, 'Compra de equipamento')).toContainText('Pendente');
+  await openFinanceRowActions(page, 'Compra de equipamento');
   await financeRow(page, 'Compra de equipamento').getByRole('button', { name: 'Editar Compra de equipamento', exact: true }).click();
   form = page.getByRole('dialog');
   await form.getByLabel('Valor (R$)', { exact: true }).fill('1250,52');
@@ -44,7 +46,7 @@ test('financial CRUD, payable filter and cent-accurate persistence work through 
   await form.getByLabel('Data do recebimento / pagamento', { exact: true }).fill('2026-09-29');
   await form.getByRole('button', { name: 'Salvar movimentação' }).click();
   await expect(form).not.toBeVisible();
-  await expect(page.locator('.ceo-empty')).toContainText('Nenhuma movimentação');
+  await expect(page.locator('[data-finance-ledger] .ceo-empty')).toContainText('Nenhuma movimentação');
   await page.getByRole('button', { name: 'Todas as movimentações', exact: true }).click();
   await expect(financeRow(page, 'Compra de equipamento')).toContainText('1.250,52');
   await expect(page.locator('.ceo-finance-summary')).toContainText('2.469,23');
@@ -55,12 +57,15 @@ test('financial CRUD, payable filter and cent-accurate persistence work through 
 
   await page.reload();
   await navigate(page, 'financeiro');
+  await selectFinanceTab(page, 'Lançamentos');
   await expect(financeRow(page, 'Compra de equipamento')).toContainText('Pago');
   await expect(page.locator('.ceo-finance-summary')).toContainText('2.469,23');
+  await openFinanceRowActions(page, 'Compra de equipamento');
   await financeRow(page, 'Compra de equipamento').getByRole('button', { name: 'Excluir Compra de equipamento', exact: true }).click();
   await expect(page.getByRole('dialog')).toContainText('indicadores serão recalculados');
   await page.getByRole('dialog').getByRole('button', { name: 'Cancelar', exact: true }).click();
   await expect(financeRow(page, 'Compra de equipamento')).toBeVisible();
+  await openFinanceRowActions(page, 'Compra de equipamento');
   await financeRow(page, 'Compra de equipamento').getByRole('button', { name: 'Excluir Compra de equipamento', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Confirmar exclusão', exact: true }).click();
   await expect(financeRow(page, 'Compra de equipamento')).toHaveCount(0);
@@ -91,8 +96,10 @@ test('a planned investment becomes one paid outgoing movement and stays unique a
   expect(stored.financeiro.find(row => row.id === movementId).status).toBe('Pendente');
 
   await navigate(page, 'financeiro');
+  await selectFinanceTab(page, 'Lançamentos');
   await page.getByRole('button', { name: 'Contas a pagar', exact: true }).click();
   await expect(financeRow(page, 'Campanha de crescimento')).toContainText('8.000,21');
+  await openFinanceRowActions(page, 'Campanha de crescimento');
   await financeRow(page, 'Campanha de crescimento').getByRole('button', { name: 'Editar Campanha de crescimento', exact: true }).click();
   form = page.getByRole('dialog');
   await expect(form).toContainText('Editar investimento');
@@ -177,7 +184,8 @@ test('fixed expenses create a unique monthly payable, preserve its payment, and 
   expect(stored.financeiro.filter(row => row.fixedExpenseId === fixedId)).toHaveLength(1);
 
   await page.getByRole('button', { name: 'Voltar ao financeiro' }).click();
-  await financeRow(page, 'Internet recorrente').getByRole('button', { name: 'Registrar baixa de Internet recorrente' }).click();
+  await selectFinanceTab(page, 'Lançamentos');
+  await financeRow(page, 'Internet recorrente').getByRole('button', { name: 'Registrar pagamento de Internet recorrente' }).click();
   await page.getByRole('dialog').getByLabel('Data do recebimento / pagamento', { exact: true }).fill('2026-09-29');
   await page.getByRole('dialog').getByRole('button', { name: 'Confirmar baixa' }).click();
   await expect(page.getByRole('dialog')).not.toBeVisible();
@@ -241,6 +249,7 @@ test('older overdue liabilities are visible on demand and summary cards follow t
   await mock(page, data);
   await navigate(page, 'financeiro');
   await expect(page.getByText('1 pendência vencida anterior ao período', { exact: true })).toBeVisible();
+  await selectFinanceTab(page, 'Lançamentos');
   await page.getByRole('button', { name: 'Contas a receber', exact: true }).click();
   await expect(page.locator('.ceo-table tbody tr')).toHaveCount(1);
   await expect(page.locator('.ceo-finance-summary')).toContainText('300,00');
@@ -249,6 +258,7 @@ test('older overdue liabilities are visible on demand and summary cards follow t
   await expect(financeRow(page, 'Fornecedor do mês anterior')).toBeVisible();
   await expect(page.locator('.ceo-table tbody tr')).toHaveCount(1);
   await expect(page.locator('.ceo-finance-summary')).toContainText('777,11');
+  await openFinanceFilters(page);
   await expect(page.getByLabel('De', { exact: true })).toHaveValue('');
   await expect(page.getByLabel('Situação', { exact: true })).toHaveValue('Atrasado');
 });
