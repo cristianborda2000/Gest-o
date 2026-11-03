@@ -10,10 +10,15 @@
 .clients-pagination button:disabled { cursor: default; }
 .clients-pending-option { display: flex; align-items: flex-start; gap: 8px; margin: 16px 0; }
 .clients-pending-option input { flex: none; width: 18px; height: 18px; }
-.clients-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 20px; }
-.clients-contact { display: grid; align-content: start; gap: 12px; border: 1px solid var(--line); border-radius: 14px; padding: 20px; min-width: 0; overflow-wrap: anywhere; }
+.clients-list { list-style: none; margin: 20px 0 0; padding: 0; border-top: 1px solid var(--line); }
+.clients-contact { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px 20px; border-bottom: 1px solid var(--line); padding: 14px 0; min-width: 0; overflow-wrap: anywhere; }
 .clients-contact h3, .clients-contact p { margin: 0; }
-.clients-workspace .clients-message-preview { white-space: pre-wrap; padding: 14px; background: var(--surface-2); color: var(--text); border-radius: 10px; }
-.clients-contact .ceo-button { justify-self: start; text-decoration: none; }
+.clients-contact h3 { font-size: 14px; font-weight: 600; line-height: 1.4; }
+.clients-contact p { margin-top: 3px; font-size: 12px; }
+.clients-contact-details { min-width: 0; }
+.clients-contact-actions { display: flex; align-items: center; gap: 8px; }
+.clients-contact form { grid-column: 1 / -1; }
+.clients-contact .ceo-button { text-decoration: none; white-space: nowrap; min-height: 42px; }
+.clients-contact .clients-whatsapp { display: inline-flex; align-items: center; gap: 7px; }
 .clients-contact [aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
-@media (max-width: 720px) { .clients-fields, .clients-list { grid-template-columns: 1fr; } .clients-workspace .ceo-card { padding: 16px; } }
+@media (max-width: 720px) { .clients-fields { grid-template-columns: 1fr; } .clients-workspace .ceo-card { padding: 16px; } .clients-contact { column-gap: 10px; } .clients-contact-actions { flex-direction: column; align-items: stretch; } .clients-contact .ceo-button { padding: 8px 10px; font-size: 12px; justify-content: center; } }

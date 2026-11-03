@@ -66,18 +66,17 @@
       <div class="clients-pagination"><button class="ceo-button" id="clientsPreviousPage" ${previewPage === 0 ? 'disabled' : ''}>Anterior</button><span role="status">Página ${previewPage + 1} de ${pages} · Mostrando ${preview.length ? previewPage * pageSize + 1 : 0}–${Math.min((previewPage + 1) * pageSize, preview.length)} de ${preview.length} contatos</span><button class="ceo-button" id="clientsNextPage" ${previewPage >= pages - 1 ? 'disabled' : ''}>Próxima</button></div>
       <p>O botão abaixo importa todos os contatos prontos da aba selecionada, incluindo os das outras páginas.</p>
       <button class="ceo-button primary" id="clientsImport" ${!valid.length || nameColumn === phoneColumn ? 'disabled' : ''}>Importar ${valid.length} clientes</button> <button class="ceo-button" id="clientsCancel">Cancelar importação</button>` : ''}</section>
-      <section class="ceo-card"><div class="ceo-card-head"><div><h2>Mensagem de contato</h2><p>Use {nome} para inserir o nome de cada pessoa. Confira a prévia antes de abrir a conversa.</p></div></div>
+      <section class="ceo-card"><div class="ceo-card-head"><div><h2>Mensagem de contato</h2><p>Escreva uma vez e use {nome} para inserir o nome de cada pessoa automaticamente.</p></div></div>
       <label class="clients-field">Sua mensagem<textarea id="clientsMessage" rows="4" maxlength="3000">${esc(message)}</textarea></label>
       <p>O WhatsApp abre com o texto preenchido. Você confere e toca em Enviar manualmente.</p></section>
-      <section class="ceo-card"><div class="ceo-card-head"><div><h2>Clientes (${clients.length})</h2><p>Abra uma conversa por vez.</p></div></div>
+      <section class="ceo-card"><div class="ceo-card-head"><div><h2>Clientes (${clients.length})</h2><p>Clique em WhatsApp para abrir a conversa com a mensagem acima personalizada.</p></div></div>
       <label class="clients-field">Buscar cliente<input id="clientsSearch" type="search" value="${esc(search)}" placeholder="Nome ou telefone"></label>
-      <div class="clients-list">${matching.length ? matching.map(row => {
+      <ul class="clients-list" aria-label="Lista de clientes">${matching.length ? matching.map(row => {
         const index = clients.indexOf(row), number = phone(row.telefone);
-        return `<article class="clients-contact"><div><h3>${esc(row.nome)}</h3><p>${esc(row.telefone || 'Sem telefone')}</p></div><p class="clients-message-preview" data-client-preview="${index}">${esc(personalize(message, row.nome))}</p><a class="ceo-button primary" data-client-open="${index}" target="_blank" rel="noopener noreferrer" ${number && message.trim() ? `href="https://wa.me/${number}?text=${encodeURIComponent(personalize(message, row.nome))}"` : 'aria-disabled="true"'}>Abrir WhatsApp</a>${!number ? '<small>Telefone pendente. Adicione ou corrija o número para abrir o WhatsApp.</small><button class="ceo-button" data-client-phone-edit="' + index + '">Corrigir telefone</button>' : ''}</article>`;
-      }).join('') : '<p class="ceo-empty">Nenhum cliente encontrado. Importe uma planilha para começar.</p>'}</div></section></div>`;
+        return `<li class="clients-contact"><div class="clients-contact-details"><h3>${esc(row.nome)}</h3><p>${esc(row.telefone || 'Sem telefone')}${!number && row.telefone ? ' · Telefone pendente' : ''}</p></div><div class="clients-contact-actions"><a class="ceo-button primary clients-whatsapp" aria-label="Abrir WhatsApp" title="${esc(`Abrir WhatsApp de ${row.nome}`)}" data-client-open="${index}" target="_blank" rel="noopener noreferrer" ${number && message.trim() ? `href="https://wa.me/${number}?text=${encodeURIComponent(personalize(message, row.nome))}"` : 'aria-disabled="true"'}><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M21 11.5a9 9 0 0 1-13.4 7.8L3 21l1.7-4.6A9 9 0 1 1 21 11.5Z"></path><path d="M8 7c-2 4 2 8 6 9l2-2-3-2-1 1-2-2 1-1-2-3Z"></path></svg><span>WhatsApp</span></a>${!number ? '<button class="ceo-button" data-client-phone-edit="' + index + '">Corrigir telefone</button>' : ''}</div></li>`;
+      }).join('') : '<li class="ceo-empty">Nenhum cliente encontrado. Importe uma planilha para começar.</li>'}</ul></section></div>`;
     container.querySelector('#clientsMessage').oninput = event => {
       message = event.target.value;
-      container.querySelectorAll('[data-client-preview]').forEach(el => { el.textContent = personalize(message, clients[Number(el.dataset.clientPreview)].nome); });
       container.querySelectorAll('[data-client-open]').forEach(el => {
         const row = clients[Number(el.dataset.clientOpen)], number = phone(row.telefone);
         el.removeAttribute('href'); el.setAttribute('aria-disabled', 'true');
@@ -93,7 +92,8 @@
         const row = clients[Number(button.dataset.clientPhoneEdit)], epoch = cloudEpoch;
         const form = document.createElement('form');
         form.innerHTML = `<label class="clients-field">Telefone de ${esc(row.nome)}<input name="phone" type="tel" value="${esc(row.telefone)}" required placeholder="DDD + telefone"></label><p role="status"></p><button class="ceo-button primary" type="submit">Salvar telefone</button> <button class="ceo-button" type="button">Cancelar</button>`;
-        button.replaceWith(form);
+        button.hidden = true;
+        button.closest('.clients-contact').append(form);
         const input = form.elements.phone, status = form.querySelector('[role="status"]'), submit = form.querySelector('[type="submit"]');
         form.querySelector('[type="button"]').onclick = () => render(container);
         form.onsubmit = async event => {

@@ -6,7 +6,7 @@ function excel() {
   XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([['Pessoa', 'Celular'], ['Ana & João', '11999991234'], ['Ana & João', '+55 11 99999-1234'], ['Inválida', '123']]), 'Contatos');
   return Buffer.from(XLSX.write(book, { type: 'buffer', bookType: 'xlsx' }));
 }
-for (const mobile of [false, true]) test(`Excel import and manual WhatsApp preview ${mobile ? 'mobile' : 'desktop'}`, async ({ page }) => {
+for (const mobile of [false, true]) test(`Excel import and compact WhatsApp list ${mobile ? 'mobile' : 'desktop'}`, async ({ page }) => {
   if (mobile) await page.setViewportSize({ width: 390, height: 844 });
   await mock(page, { ...structuredClone(seed), clientes: [] });
   if (mobile) await page.getByRole('button', { name: 'Abrir menu', exact: true }).click();
@@ -21,6 +21,12 @@ for (const mobile of [false, true]) test(`Excel import and manual WhatsApp previ
   const href = await link.getAttribute('href');
   expect(new URL(href).pathname).toBe('/5511999991234');
   expect(new URL(href).searchParams.get('text')).toBe('Olá, Ana & João!\nVamos conversar? & sim');
+  await expect(page.getByRole('list', { name: 'Lista de clientes' }).getByRole('listitem')).toHaveCount(1);
+  await expect(page.locator('.clients-contact')).not.toContainText('Vamos conversar?');
+  const details = await page.locator('.clients-contact-details').boundingBox();
+  const action = await link.boundingBox();
+  expect(action.x).toBeGreaterThan(details.x + details.width);
+  expect(Math.abs(action.y + action.height / 2 - (details.y + details.height / 2))).toBeLessThan(5);
   await expect(link).toHaveAttribute('target', '_blank');
   const popupPromise = page.waitForEvent('popup');
   await page.context().route('https://wa.me/**', route => route.fulfill({ body: 'WhatsApp manual' }));
@@ -31,6 +37,8 @@ for (const mobile of [false, true]) test(`Excel import and manual WhatsApp previ
   await expect(page.locator('[data-client-open]')).not.toHaveAttribute('href');
   await page.getByLabel('Buscar cliente').fill('Ana');
   await expect(page.locator('.clients-contact')).toHaveCount(1);
+  await page.getByLabel('Sua mensagem').fill('Nova mensagem para {nome}');
+  expect(new URL(await link.getAttribute('href')).searchParams.get('text')).toBe('Nova mensagem para Ana & João');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.reload();
   if (mobile) await page.getByRole('button', { name: 'Abrir menu', exact: true }).click();
