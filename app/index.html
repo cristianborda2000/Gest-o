@@ -22,6 +22,7 @@
   <link rel="stylesheet" href="assets/ceo-projects.css?v=20261021-project-tabs">
   <link rel="stylesheet" href="assets/overview-week.css?v=20261012-mobile">
   <link rel="stylesheet" href="assets/clients.css?v=20261103-client-list">
+  <link rel="stylesheet" href="assets/finance-cash.css?v=20261103-cash">
 </head>
 <body>
 
@@ -157,6 +158,10 @@
         </div>
       </aside>
 
+      <section id="financeCashBalance" class="ceo-cash-balance" aria-labelledby="financeCashTitle" hidden>
+        <div><h2 id="financeCashTitle">Saldo em caixa</h2><p>Recebidos menos pagos até hoje · Todos os períodos</p></div>
+        <output aria-label="Saldo em caixa" aria-live="polite" aria-atomic="true"></output>
+      </section>
       <section id="ceoWorkspace" class="ceo-workspace" hidden></section>
 
       <!-- Indicadores superiores, preenchidos em core.js pela funcao renderStats(). -->
@@ -270,7 +275,7 @@
   <script src="assets/js/jarvis.js?v=20261012-projects"></script>
   <script src="assets/vendor/xlsx.full.min.js?v=0.20.3"></script>
   <script src="assets/js/ceo-clients.js?v=20261103-client-list"></script>
-  <script src="assets/js/ceo-shell.js?v=20261103-clients"></script>
+  <script src="assets/js/ceo-shell.js?v=20261103-cash"></script>
   <script src="assets/js/boot.js?v=20261021-code-review"></script>
   <script src="assets/js/pwa-install.js?v=20261004-admin"></script>
 </body>

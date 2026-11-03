@@ -1,0 +1,9 @@
+.ceo-cash-balance { position: sticky; top: 12px; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 22px; padding: 16px 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 4px 16px #1623380d; }
+.ceo-cash-balance h2 { margin: 0; font-size: 15px; font-weight: 650; }
+.ceo-cash-balance p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+.ceo-cash-balance output { flex-shrink: 0; font-size: clamp(22px, 2.4vw, 30px); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.6px; color: var(--text); }
+.ceo-cash-balance output.is-negative { color: #b43244; }
+@media (max-width: 720px) {
+  .ceo-cash-balance { top: 8px; flex-wrap: wrap; gap: 8px; padding: 12px 14px; }
+  .ceo-cash-balance output { font-size: clamp(19px, 5vw, 25px); max-width: 100%; overflow-wrap: anywhere; }
+}

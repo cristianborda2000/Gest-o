@@ -14,7 +14,11 @@ O JARVIS opera apenas os módulos descritos em seu [guia](JARVIS.md).
   ideias mostram as capturas mais recentes. Marque a tarefa para concluir ou
   clique no título para editar.
 - **Financeiro:** cadastre movimentos, filtre datas, categoria, tipo ou situação,
-  e consulte contas a pagar/receber. A data de liquidação determina o mês do
+  e acompanhe o **Saldo em caixa** fixo no topo, inclusive em Gastos fixos.
+  Ele acumula entradas recebidas menos saídas pagas até hoje, usando a data
+  da baixa, sem depender dos filtros ou do período consultado. Pendências,
+  cancelamentos e baixas futuras não entram nesse saldo.
+  Consulte também contas a pagar/receber. A data de liquidação determina o mês do
   caixa; o vencimento determina o período das pendências. Gastos fixos continuam
   acessíveis. Recebimentos de mensalidades são editados na origem.
   Ao editar registros antigos, situações equivalentes como **Paga**, **Recebida**

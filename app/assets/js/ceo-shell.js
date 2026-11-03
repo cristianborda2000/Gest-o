@@ -32,6 +32,14 @@ function renderCeoModule() {
   workspace.hidden = isCeo;
   document.querySelector('.stats').hidden = isCeo;
   document.body.dataset.module = activeModule;
+  const cashBalance = document.getElementById('financeCashBalance');
+  cashBalance.hidden = activeModule !== 'financeiro';
+  const cashValue = cashBalance.querySelector('output');
+  if (!cashBalance.hidden) {
+    const balance = ZamaFinance.totals(state, { to: ZamaTime.today() }).balanceCents;
+    cashValue.textContent = ZamaFinance.formatMoney(balance);
+    cashValue.classList.toggle('is-negative', balance < 0);
+  } else cashValue.textContent = '';
   if (!isCeo) return false;
   moduleTitle.textContent = modules[activeModule].title;
   moduleSubtitle.textContent = modules[activeModule].subtitle;
