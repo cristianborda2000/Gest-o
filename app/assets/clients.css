@@ -1,0 +1,19 @@
+.clients-workspace { display: grid; gap: 24px; }
+.clients-workspace .ceo-card { padding: 24px; min-width: 0; }
+.clients-workspace p, .clients-workspace small { color: var(--muted, #aaa); }
+.clients-field { display: grid; gap: 8px; margin: 12px 0; font-size: 14px; }
+.clients-field input, .clients-field select, .clients-field textarea { width: 100%; min-width: 0; box-sizing: border-box; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 12px; font: inherit; }
+.clients-field textarea { resize: vertical; }
+.clients-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.clients-import-preview { max-height: 320px; overflow: auto; margin-bottom: 16px; }
+.clients-pagination { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
+.clients-pagination button:disabled { cursor: default; }
+.clients-pending-option { display: flex; align-items: flex-start; gap: 8px; margin: 16px 0; }
+.clients-pending-option input { flex: none; width: 18px; height: 18px; }
+.clients-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 20px; }
+.clients-contact { display: grid; align-content: start; gap: 12px; border: 1px solid var(--line); border-radius: 14px; padding: 20px; min-width: 0; overflow-wrap: anywhere; }
+.clients-contact h3, .clients-contact p { margin: 0; }
+.clients-workspace .clients-message-preview { white-space: pre-wrap; padding: 14px; background: var(--surface-2); color: var(--text); border-radius: 10px; }
+.clients-contact .ceo-button { justify-self: start; text-decoration: none; }
+.clients-contact [aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+@media (max-width: 720px) { .clients-fields, .clients-list { grid-template-columns: 1fr; } .clients-workspace .ceo-card { padding: 16px; } }

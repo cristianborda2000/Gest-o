@@ -1,5 +1,6 @@
 /* CEO workspace: adapters reuse the existing account, state and legacy modules. */
 modules.dashboard.title = 'Visão geral';
+modules.clientes.subtitle = 'Importe contatos e personalize suas mensagens pelo WhatsApp.';
 modules.dashboard.subtitle = 'Finanças, agenda e ideias. Tudo no seu ritmo.';
 modules.financeiro.title = 'Financeiro';
 modules.financeiro.subtitle = 'Clareza sobre cada entrada, saída e próximo compromisso.';
@@ -24,7 +25,7 @@ function ceoIcon(name) {
 function renderCeoModule() {
   ZamaJarvis.navigation();
   if (activeModule !== 'projetos' && typeof ZamaProjects !== 'undefined') ZamaProjects.leave();
-  const isCeo = ['dashboard', 'investimentos', 'agenda', 'ideias', 'jarvis', 'projetos'].includes(activeModule)
+  const isCeo = ['dashboard', 'investimentos', 'agenda', 'ideias', 'jarvis', 'projetos', 'clientes'].includes(activeModule)
     || activeModule === 'financeiro';
   const container = document.getElementById('ceoWorkspace');
   container.hidden = !isCeo;
@@ -44,6 +45,7 @@ function renderCeoModule() {
   if (activeModule === 'agenda') ZamaAgenda.render(container);
   if (activeModule === 'ideias') ZamaIdeas.render(container);
   if (activeModule === 'projetos') ZamaProjects.render(container);
+  if (activeModule === 'clientes') ZamaClients.render(container);
   return true;
 }
 

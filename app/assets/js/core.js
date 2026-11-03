@@ -13,6 +13,7 @@
 
     function resetAccountState() {
       cloudEpoch++;
+      if (typeof ZamaClients !== 'undefined') ZamaClients.reset();
       if (typeof ZamaIdeas !== 'undefined') ZamaIdeas.reset?.();
       cloudUserId = cloudOwnerId = cloudRevision = cloudSnapshot = null;
       cloudWritePending = false;
@@ -313,7 +314,7 @@
 
     // Troca de aba no menu lateral e permite abrir sub-abas como financeiro/fixos.
     function goToModule(module, options = {}) {
-      if (!['dashboard', 'financeiro', 'investimentos', 'agenda', 'ideias', 'jarvis', 'projetos'].includes(module) || module === 'jarvis' && !jarvisVisible) module = 'dashboard';
+      if (!['dashboard', 'financeiro', 'investimentos', 'agenda', 'ideias', 'jarvis', 'projetos', 'clientes'].includes(module) || module === 'jarvis' && !jarvisVisible) module = 'dashboard';
       if (typeof ZamaWorkspace !== "undefined" && ZamaWorkspace.isTeamSpace?.() && !['agenda','projetos','ideias'].includes(module)) module = 'projetos';
       if (module !== 'projetos' && typeof ZamaProjects !== 'undefined') ZamaProjects.leave();
       activeModule = module;
@@ -334,7 +335,7 @@
 
     function render() {
       if (!state) return;
-      if (!['dashboard', 'financeiro', 'investimentos', 'agenda', 'ideias', 'jarvis', 'projetos'].includes(activeModule) || activeModule === 'jarvis' && !jarvisVisible) activeModule = 'dashboard';
+      if (!['dashboard', 'financeiro', 'investimentos', 'agenda', 'ideias', 'jarvis', 'projetos', 'clientes'].includes(activeModule) || activeModule === 'jarvis' && !jarvisVisible) activeModule = 'dashboard';
       if (typeof ZamaWorkspace !== "undefined" && ZamaWorkspace.isTeamSpace?.() && !['agenda','projetos','ideias'].includes(activeModule)) activeModule = 'projetos';
       navButtons.forEach(item => item.classList.toggle('active', item.dataset.module === activeModule));
       if (typeof renderCeoModule === "function") renderCeoModule();
