@@ -68,6 +68,9 @@ function createHandler(deps = {}) {
         const route = url.searchParams.get('path'); url.searchParams.delete('path');
         path = ({resource:'/.well-known/oauth-protected-resource',metadata:'/.well-known/oauth-authorization-server',authorize:'/api/dot-oauth/authorize',consent:'/api/dot-oauth/consent',token:'/api/dot-oauth/token'})[route] || '';
       }
+      // Vercel may retain the public pathname while appending the rewrite's
+      // routing parameter. Remove only the exact internal route selector.
+      if (path === '/api/dot-oauth/authorize' && url.searchParams.getAll('path').length === 1 && url.searchParams.get('path') === 'authorize') url.searchParams.delete('path');
       if (req.method === 'GET' && ['/.well-known/oauth-protected-resource','/.well-known/oauth-protected-resource/api/dot-mcp','/.well-known/oauth-authorization-server'].includes(path)) return send(200,metadata(config,path.includes('oauth-protected-resource')));
       const db = deps.client || createClient(process.env.SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
       // Shared database bucket also covers requests without a session. No

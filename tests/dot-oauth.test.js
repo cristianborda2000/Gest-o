@@ -33,6 +33,8 @@ test('discovery and authorization GET expose no data and issue no code',async()=
  const m=await invoke(h,'/.well-known/oauth-authorization-server');assert.deepEqual(m.body.code_challenge_methods_supported,['S256']);assert.deepEqual(m.body.token_endpoint_auth_methods_supported,['none']);assert.equal(m.body.authorization_response_iss_parameter_supported,true);
  assert.equal((await invoke(h,'/api/dot-oauth?path=resource')).body.resource,resource);
  assert.equal((await invoke(h,'/api/dot-oauth/authorize?'+new URLSearchParams(request))).status,302);assert.equal(db.rows.length,0);
+ const rewritten=await invoke(h,'/api/dot-oauth/authorize?'+new URLSearchParams({...request,path:'authorize'}));
+ assert.equal(rewritten.status,302);assert.equal(new URL(rewritten.headers.Location).searchParams.has('path'),false);
  for(const changes of [{redirect_uri:'https://evil.example/cb'},{resource:'https://evil.example/mcp'},{client_id:'other'},{code_challenge_method:'plain'},{scope:'admin'}]) assert.equal((await invoke(h,'/api/dot-oauth/authorize?'+new URLSearchParams({...request,...changes}))).status,400);
  assert.equal((await invoke(h,'/api/dot-oauth/authorize?'+new URLSearchParams(request)+'&state=second')).status,400);
 });
