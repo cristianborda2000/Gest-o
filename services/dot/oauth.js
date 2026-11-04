@@ -28,7 +28,7 @@ function unique(params) {
   return out;
 }
 function validateAuthorization(input, config) {
-  const request = z.object({ response_type: z.literal('code'), client_id: z.literal(config.clientId), redirect_uri: z.string(), resource: z.literal(config.resource), scope: z.literal(scope).optional().default(scope), state: z.string().min(1).max(2048), code_challenge: z.string().regex(/^[A-Za-z0-9_-]{43}$/), code_challenge_method: z.literal('S256') }).strict().safeParse(input);
+  const request = z.object({ response_type: z.literal('code'), client_id: z.literal(config.clientId), redirect_uri: z.string(), resource: z.literal(config.resource), scope: z.literal(scope).optional().default(scope), state: z.string().min(1).max(2048), code_challenge: z.string().regex(/^[A-Za-z0-9_-]{43}$/), code_challenge_method: z.literal('S256'), ui_locales: z.string().min(1).max(256).regex(/^[A-Za-z0-9-]+(?: [A-Za-z0-9-]+)*$/).optional() }).strict().safeParse(input);
   if (!request.success || !config.redirects.includes(request.data.redirect_uri)) throw problem('invalid_request');
   return request.data;
 }

@@ -38,6 +38,19 @@ test('discovery and authorization GET expose no data and issue no code',async()=
  for(const changes of [{redirect_uri:'https://evil.example/cb'},{resource:'https://evil.example/mcp'},{client_id:'other'},{code_challenge_method:'plain'},{scope:'admin'}]) assert.equal((await invoke(h,'/api/dot-oauth/authorize?'+new URLSearchParams({...request,...changes}))).status,400);
  assert.equal((await invoke(h,'/api/dot-oauth/authorize?'+new URLSearchParams(request)+'&state=second')).status,400);
 });
+test('ChatGPT locale hint passes authorization and consent without changing security bindings',async()=>{
+ const db=stub(),h=createHandler({config,client:db,rate:async()=>{},preRate:async()=>{}});
+ const localized={...request,ui_locales:'pt-BR'};
+ const start=await invoke(h,'/api/dot-oauth/authorize?'+new URLSearchParams({...localized,path:'authorize'}));
+ assert.equal(start.status,302);assert.equal(db.rows.length,0);
+ const forwarded=Object.fromEntries(new URL(start.headers.Location).searchParams);
+ const consent=await invoke(h,'/api/dot-oauth/consent','POST',{request:forwarded,approve:true},{origin,authorization:'Bearer fixture','content-type':'application/json'});
+ assert.equal(consent.status,200);assert.equal(db.rows[0].redirect_uri,redirect);assert.equal(db.rows[0].challenge,challenge);
+ for(const change of [{client_id:'wrong'},{resource:'https://evil.example/mcp'},{redirect_uri:'https://evil.example/cb'},{scope:'admin'},{code_challenge_method:'plain'},{unexpected:'value'},{ui_locales:'x'.repeat(257)}]) {
+  assert.equal((await invoke(h,'/api/dot-oauth/authorize?'+new URLSearchParams({...localized,...change}))).status,400);
+ }
+ assert.equal((await invoke(h,'/api/dot-oauth/authorize?'+new URLSearchParams(localized)+'&ui_locales=en')).status,400);
+});
 test('consent requires same-origin owner session, denial creates no credential',async()=>{
  const db=stub(),h=createHandler({config,client:db,rate:async()=>{},preRate:async()=>{}}),headers={origin,authorization:'Bearer fixture','content-type':'application/json'};
  assert.equal((await invoke(h,'/api/dot-oauth/consent','POST',{request,approve:true},{...headers,origin:'https://evil.example'})).status,403);
