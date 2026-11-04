@@ -12,6 +12,9 @@ try {
 
 const require = createRequire(import.meta.url);
 const routes = [
+  { path: '/api/dot-oauth', subpaths: true, handler: require('../services/dot/oauth').createHandler() },
+  { path: '/.well-known/oauth-protected-resource', subpaths: true, handler: require('../services/dot/oauth').createHandler() },
+  { path: '/.well-known/oauth-authorization-server', handler: require('../services/dot/oauth').createHandler() },
   { path: '/api/dot-mcp', handler: require('../services/dot/private-runtime').createPrivateMcpHandler() },
   { path: '/api/dot', handler: require('../services/dot/http').createHandler() },
   { path: '/api/jarvis', subpaths: true, handler: require('../services/jarvis/http').createHandler() },

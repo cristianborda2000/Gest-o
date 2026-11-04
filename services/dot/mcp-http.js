@@ -52,7 +52,7 @@ function createMcpHandler({ config = {}, authenticate, repositoryFactory, clock 
         return result({ protocolVersion: versions.includes(params.protocolVersion) ? params.protocolVersion : versions[0], capabilities: { tools: {} }, serverInfo: { name: 'zama-private-remote', version: '0.2.1' }, instructions });
       }
       if (message.method === 'ping') return result({});
-      const catalog = definitions().filter(tool => principal.allowedTools.includes(tool.name));
+      const catalog = definitions().filter(tool => principal.allowedTools.includes(tool.name)).map(tool => config.oauthMetadata ? {...tool,securitySchemes:[{type:'oauth2',scopes:['zama:private']}]} : tool);
       if (message.method === 'tools/list') { if (params.cursor !== undefined) return rpcError(200, -32602, 'Cursor not supported'); return result({ tools: catalog }); }
       if (message.method !== 'tools/call') return rpcError(200, -32601, 'Method not found');
       if (!catalog.some(tool => tool.name === params.name) || !object(params.arguments)) return rpcError(200, -32602, 'Tool not permitted or invalid arguments');
@@ -67,7 +67,7 @@ function createMcpHandler({ config = {}, authenticate, repositoryFactory, clock 
         return result({ content: [{ type: 'text', text: JSON.stringify({ code: known ? error.code : 'OUTCOME_UNKNOWN', message: known ? 'Pedido rejeitado. Verifique os argumentos e preserve request_id.' : 'Resultado incerto. Reutilize exatamente o mesmo request_id e argumentos.' }) }], isError: true });
       }
     } catch (error) {
-      if (error.status === 401) res.setHeader('WWW-Authenticate', 'Bearer');
+      if (error.status === 401) res.setHeader('WWW-Authenticate', config.oauthMetadata ? `Bearer resource_metadata="${config.oauthMetadata}", error="invalid_token", error_description="Connect your ZAM4 account"` : 'Bearer');
       return rpcError(error instanceof JarvisError ? error.status : 500, error.code === 'PARSE_ERROR' ? -32700 : -32000, error instanceof JarvisError ? error.message : 'Request failed.');
     }
   };
