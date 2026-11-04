@@ -1,0 +1,22 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "zama-private-remote",
+  "version": "0.2.1",
+  "description": "Integração privada MCP remoto com o ZAMA. Requer endpoint verificado e autenticação configurada no host.",
+  "author": {
+    "name": "ZAMA"
+  },
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "ZAMA privado",
+        "shortDescription": "Agenda e registros no ZAMA",
+        "longDescription": "Tarefas, agenda, ideias e propostas de despesas pela conta autorizada. Despesas exigem confirmação humana no ZAMA. Requer servidor remoto e conexão privada.",
+        "developerName": "ZAMA",
+        "category": "Productivity",
+        "capabilities": [],
+        "defaultPrompt": "Consulte minha agenda no ZAMA."
+      }
+    }
+  }
+}

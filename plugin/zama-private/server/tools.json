@@ -1,0 +1,423 @@
+[
+  {
+    "name": "list_tasks",
+    "description": "Consulte tarefas antes de escolher um ID para editar/concluir. Filtre hoje, próximas ou atrasadas. Nunca invente IDs. Conta pessoal do proprietário. Só escreva mediante pedido explícito. Datas usam America/Sao_Paulo.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "all",
+            "pending",
+            "completed",
+            "overdue"
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "request_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUID único por pedido. Reutilize exatamente o mesmo UUID e argumentos após timeout; nunca gere outro para repetir o mesmo pedido."
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "request_id"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "get_agenda",
+    "description": "Agenda real por intervalo de datas (máximo 366 dias), com horários de São Paulo. Conta pessoal do proprietário. Só escreva mediante pedido explícito. Datas usam America/Sao_Paulo.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "all",
+            "pending",
+            "completed",
+            "overdue"
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "request_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUID único por pedido. Reutilize exatamente o mesmo UUID e argumentos após timeout; nunca gere outro para repetir o mesmo pedido."
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "request_id"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "search_ideas",
+    "description": "Busque ideias reais ativas por título, descrição, categoria e etapa. Conta pessoal do proprietário. Só escreva mediante pedido explícito. Datas usam America/Sao_Paulo.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "category": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "stage": {
+          "type": "string",
+          "enum": [
+            "capturada",
+            "avaliacao",
+            "execucao",
+            "concluida"
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "request_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUID único por pedido. Reutilize exatamente o mesmo UUID e argumentos após timeout; nunca gere outro para repetir o mesmo pedido."
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "request_id"
+      ]
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "create_task",
+    "description": "Crie uma tarefa na agenda. Exige título claro e data; se faltar, pergunte. Data aceita amanhã/sexta/hoje e espanhol. Horário omitido significa sem hora definida. Salve a antecedência solicitada em reminder_minutes. Conta pessoal do proprietário. Só escreva mediante pedido explícito. Datas usam America/Sao_Paulo.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180
+        },
+        "date": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "time": {
+          "type": "string",
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 5000
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "duration_minutes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1440
+        },
+        "reminder_minutes": {
+          "description": "Antecedência do aviso em minutos: 15 para 15 minutos antes, 0 na hora, -1 sem lembrete, null usa a configuração geral. Exige horário para um aviso individual. Não ativa notificações nem permite entrega com aplicativo fechado.",
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": -1,
+              "maximum": 1440
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "recurrence": {
+          "type": "string",
+          "enum": [
+            "none",
+            "daily",
+            "weekdays",
+            "weekly",
+            "monthly"
+          ]
+        },
+        "recurrence_end": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "request_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUID único por pedido. Reutilize exatamente o mesmo UUID e argumentos após timeout; nunca gere outro para repetir o mesmo pedido."
+        }
+      },
+      "required": [
+        "title",
+        "date",
+        "request_id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "create_agenda_event",
+    "description": "Crie compromisso na mesma agenda existente, sem duplicar tarefa. Exige título e data. Use reminder_minutes para o aviso antecipado solicitado. Conta pessoal do proprietário. Só escreva mediante pedido explícito. Datas usam America/Sao_Paulo.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180
+        },
+        "date": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "time": {
+          "type": "string",
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 5000
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "duration_minutes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1440
+        },
+        "reminder_minutes": {
+          "description": "Antecedência do aviso em minutos: 15 para 15 minutos antes, 0 na hora, -1 sem lembrete, null usa a configuração geral. Exige horário para um aviso individual. Não ativa notificações nem permite entrega com aplicativo fechado.",
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": -1,
+              "maximum": 1440
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "recurrence": {
+          "type": "string",
+          "enum": [
+            "none",
+            "daily",
+            "weekdays",
+            "weekly",
+            "monthly"
+          ]
+        },
+        "recurrence_end": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "request_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUID único por pedido. Reutilize exatamente o mesmo UUID e argumentos após timeout; nunca gere outro para repetir o mesmo pedido."
+        }
+      },
+      "required": [
+        "title",
+        "date",
+        "request_id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "save_idea",
+    "description": "Salve uma ideia no banco existente. Projetos não estão integrados a esta ferramenta; não crie vínculo fictício. Conta pessoal do proprietário. Só escreva mediante pedido explícito. Datas usam America/Sao_Paulo.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 5000
+        },
+        "category": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "request_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUID único por pedido. Reutilize exatamente o mesmo UUID e argumentos após timeout; nunca gere outro para repetir o mesmo pedido."
+        }
+      },
+      "required": [
+        "title",
+        "request_id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "prepare_expense",
+    "description": "Prepare despesa para confirmação explícita na interface. Nunca executa sem Confirmar. Valor em reais, até duas casas. Não diga que já foi registrada. Conta pessoal do proprietário. Só escreva mediante pedido explícito. Datas usam America/Sao_Paulo.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "amount": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 9999999999.99
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180
+        },
+        "date": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "due_date": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "paid",
+            "pending"
+          ]
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "request_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "UUID único por pedido. Reutilize exatamente o mesmo UUID e argumentos após timeout; nunca gere outro para repetir o mesmo pedido."
+        }
+      },
+      "required": [
+        "amount",
+        "category",
+        "description",
+        "request_id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  }
+]

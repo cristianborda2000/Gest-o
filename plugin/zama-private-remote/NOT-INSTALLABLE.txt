@@ -1,0 +1,1 @@
+Draft only. mcp.json.template is intentionally not mcp.json: no verified hosted endpoint exists. Do not install/upload this directory. Replace the template only after verifying the deployed endpoint and configure authentication in the host, never in package headers.

@@ -12,6 +12,8 @@ try {
 
 const require = createRequire(import.meta.url);
 const routes = [
+  { path: '/api/dot-mcp', handler: require('../services/dot/private-runtime').createPrivateMcpHandler() },
+  { path: '/api/dot', handler: require('../services/dot/http').createHandler() },
   { path: '/api/jarvis', subpaths: true, handler: require('../services/jarvis/http').createHandler() },
   { path: '/api/reminders', subpaths: true, handler: require('../services/reminders/http').createHandler() },
   { path: '/api/reminder-cron', handler: require('../services/reminders/dispatcher').createHandler() },
