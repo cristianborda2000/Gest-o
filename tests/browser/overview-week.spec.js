@@ -72,25 +72,89 @@ test('overview follows São Paulo Sunday and Monday even when UTC date is alread
   await expect(page.locator('dialog.za-dialog [name="prazo"]')).toHaveValue('2026-10-05');
 });
 
-test('mobile prioritizes the week in visual and reading order and keeps long tasks within the screen', async ({ page }, testInfo) => {
+test('mobile prioritizes today, expands the week on demand and keeps the desktop overview', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const data = sample();
   data.agenda.push({ id: 'long', nome: 'Organizar os compromissos da empresa e conferir os pagamentos programados desta semana', prazo: '2026-09-29', status: 'Pendente' });
   await mock(page, data);
   await expect(page.locator('.ceo-overview-layout > :first-child')).toHaveClass(/ceo-week-overview/);
+  await expect(page.locator('.ceo-today-heading').first()).toHaveText('Hoje');
+  await expect(page.locator('[data-today-task]')).toHaveCount(1);
+  await expect(page.locator('#overviewWeekContent')).not.toBeVisible();
+  await expect(page.locator('[data-overview-week]')).toHaveAttribute('aria-expanded', 'false');
   const week = await page.locator('.ceo-week-overview').boundingBox();
   const metrics = await page.locator('.ceo-metrics').boundingBox();
   expect(week.y).toBeLessThan(metrics.y);
   expect(week.y).toBeLessThan(300);
+  expect(metrics.y).toBeLessThan(650);
+  const dock = await page.locator('.mobile-tabbar').boundingBox();
+  expect(metrics.y + metrics.height).toBeLessThanOrEqual(dock.y);
+  await expect(page.locator('#overviewChart')).not.toBeVisible();
+  await page.locator('[data-overview-chart]').click();
+  await expect(page.locator('#overviewChart')).toBeVisible();
+  await page.locator('[data-overview-chart]').click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: testInfo.outputPath('overview-week-mobile.png'), fullPage: true });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: testInfo.outputPath('overview-today-mobile.png'), fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath('overview-today-phone.png') });
+  await page.locator('[data-overview-week]').click();
+  await expect(page.locator('#overviewWeekContent')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Tarefas da semana', exact: true })).toBeVisible();
+  await expect(page.locator('.ceo-today-focus')).not.toBeVisible();
+  await expect(day(page, '2026-10-01')).toContainText('Reunião transferida');
+  await page.locator('[data-overview-week]').click();
+  await expect(page.locator('[data-overview-week]')).toBeFocused();
   await page.setViewportSize({ width: 320, height: 700 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.setViewportSize({ width: 1440, height: 1000 });
+  await expect(page.locator('#overviewWeekContent')).toBeVisible();
+  await expect(page.locator('#overviewChart')).toBeVisible();
+  await expect(page.locator('.ceo-today-focus')).not.toBeVisible();
   const desktopWeek = await page.locator('.ceo-week-overview').boundingBox();
   const desktopFinancial = await page.locator('.ceo-financial-overview').boundingBox();
   expect(desktopWeek.y).toBe(desktopFinancial.y);
   expect(desktopWeek.x).toBeGreaterThan(desktopFinancial.x);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('overview-week-desktop.png'), fullPage: true });
+});
+
+test('today actions preserve recurring occurrences and only show three pending tasks', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mock(page, { ...seed, agenda: [
+    { id: 'recurring', nome: 'Rotina de hoje', prazo: '2026-09-28', hora: '08:00', recorrencia: 'daily', status: 'Pendente' },
+    ...Array.from({ length: 4 }, (_, index) => ({ id: `task-${index}`, nome: `Compromisso ${index}`, prazo: '2026-09-29', hora: `${10 + index}:00`, status: 'Pendente' })),
+    { id: 'cancelled', nome: 'Cancelada hoje', prazo: '2026-09-29', status: 'Cancelada' }
+  ] });
+  await expect(page.locator('[data-today-task]')).toHaveCount(3);
+  await expect(page.locator('.ceo-today-summary')).toHaveText('5 tarefas pendentes');
+  // Completion removes the row from today's pending list, so assert the result
+  // instead of asking Playwright to re-check a control that no longer exists.
+  await page.locator('.ceo-today-focus').getByRole('checkbox', { name: 'Concluir Rotina de hoje', exact: true }).click();
+  await expect(page.locator('.ceo-today-summary')).toHaveText('4 tarefas pendentes · 1 concluída');
+  await page.reload();
+  await expect(page.locator('.ceo-today-summary')).toHaveText('4 tarefas pendentes · 1 concluída');
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('test-cloud')).data.agenda.find(row => row.id === 'recurring'));
+  expect(saved.status).toBe('Pendente');
+  expect(saved.exceptions['2026-09-29'].status).toBe('Concluído');
+  await page.locator('[data-today-task]').first().click();
+  await expect(page.locator('dialog.za-dialog [name="nome"]')).toHaveValue('Compromisso 0');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Ver todas as 4 tarefas de hoje' }).click();
+  await expect(page.locator('body')).toHaveAttribute('data-module', 'agenda');
+  await expect(page.locator('.za-day-panel')).toContainText('Compromisso 3');
+});
+
+test('a failed completion keeps today pending and allows retry without a false checkmark', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mock(page);
+  await page.evaluate(() => { window.testFailWrite = true; });
+  const task = page.locator('[data-today-complete]').first();
+  await task.click();
+  await expect(page.locator('#ceoSync')).toHaveClass(/error/);
+  await expect(task).not.toBeChecked();
+  await expect(task).toBeEnabled();
+  await expect(page.locator('.ceo-today-summary')).toHaveText('1 tarefa pendente');
+  await page.evaluate(() => { window.testFailWrite = false; });
+  await task.click();
+  await expect(page.locator('.ceo-today-summary')).toHaveText('0 tarefas pendentes · 1 concluída');
 });

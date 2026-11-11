@@ -161,6 +161,8 @@
 
     function clearSessionView({ keepWorkspace = false, resetPush = true } = {}) {
       if (typeof setCeoMenu === "function") setCeoMenu(false, false);
+      if (typeof ZamaMobileNavigation !== "undefined") ZamaMobileNavigation.reset();
+      if (typeof resetCeoOverview === "function") resetCeoOverview();
       sessionGeneration++;
       appLoadPromise = null;
       appLoadUserId = null;

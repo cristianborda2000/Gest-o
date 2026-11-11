@@ -1,4 +1,6 @@
 /* The overview uses the agenda's dated occurrences and actions. */
+.ceo-today-heading,.ceo-today-focus,.ceo-week-toggle,.ceo-overview-chart-toggle{display:none}
+.ceo-overview-mobile-label{display:none}
 .ceo-overview-layout{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);grid-template-areas:"toolbar toolbar" "metrics metrics" "financial week" "invest ideas" "footnote footnote";gap:18px;align-items:start}
 .ceo-overview-layout .ceo-overview-grid{display:contents}
 .ceo-overview-layout .ceo-overview-toolbar{grid-area:toolbar;margin:0}
@@ -41,6 +43,43 @@
 }
 @media(max-width:720px){
   .ceo-overview-layout{grid-template-areas:"week" "toolbar" "metrics" "financial" "invest" "ideas" "footnote"}
+  .ceo-week-heading{display:none}
+  .ceo-today-heading,.ceo-today-focus{display:block}
+  .ceo-week-overview.is-week-expanded .ceo-week-heading{display:block}
+  .ceo-week-overview.is-week-expanded .ceo-today-heading{display:none}
+  .ceo-today-heading:first-letter{text-transform:uppercase}
+  .ceo-week-overview:not(.is-week-expanded) #overviewWeekContent{display:none}
+  .ceo-week-overview.is-week-expanded .ceo-today-focus{display:none}
+  .ceo-week-overview .ceo-week-toggle{display:flex;align-items:center;justify-content:space-between;width:100%;margin-top:14px;background:#f7f8fa;border-color:#e4e7eb}
+  .ceo-week-overview.is-week-expanded .ceo-week-toggle{margin:0 0 16px}
+  .ceo-today-summary{font-size:13px;color:#53606e;margin:0 0 8px}
+  .ceo-today-tasks>.ceo-week-task{border-top:1px solid #eceef1;padding:8px 0}
+  .ceo-today-focus .ceo-week-task-open strong{font-size:15px;font-weight:600}
+  .ceo-today-focus .ceo-week-task-meta{font-size:13px}
+  .ceo-today-empty{padding:12px 0 4px;font-size:15px;line-height:1.5;color:#29323d}
+  .ceo-today-empty small{display:block;font-size:13px;color:#65717f;margin-top:4px}
+  .ceo-today-more{width:100%;margin-top:8px}
+  .ceo-overview-toolbar .ceo-eyebrow{display:block;letter-spacing:0;font-size:14px;font-weight:650;color:var(--text);text-transform:none}
+  .ceo-overview-desktop-label{display:none}
+  .ceo-overview-mobile-label{display:inline}
+  .ceo-overview-toolbar [data-overview-new=financeiro]{display:none}
+  .ceo-overview-toolbar .ceo-toolbar{width:auto;min-width:0;flex-shrink:0}
+  .ceo-overview-toolbar .ceo-period{width:auto;font-size:0;gap:0}
+  .ceo-overview-toolbar .ceo-period input{width:180px;min-width:0;max-width:100%;flex:none;font-size:16px;min-height:44px}
+  .ceo-overview-layout .ceo-overview-toolbar{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:10px;margin:0}
+  .ceo-overview-chart:not(.is-chart-expanded){display:none}
+  .ceo-financial-overview .ceo-overview-chart-toggle{display:flex;width:100%;justify-content:center;margin:0 0 14px}
+  .ceo-financial-overview .ceo-table-scroll{overflow:visible}
+  .ceo-financial-overview .ceo-table,.ceo-financial-overview .ceo-table tbody{display:block;width:100%}
+  .ceo-financial-overview .ceo-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  .ceo-financial-overview .ceo-table tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;padding:14px 0;border-top:1px solid #e7eaef}
+  .ceo-financial-overview .ceo-table td{display:block;width:auto;padding:0;border:0}
+  .ceo-financial-overview .ceo-table td:first-child{grid-row:1;grid-column:1;min-width:0}
+  .ceo-financial-overview .ceo-table td:first-child strong{font-size:14px}
+  .ceo-financial-overview .ceo-table td:first-child small{font-size:12px;line-height:1.5;margin-top:4px}
+  .ceo-financial-overview .ceo-table td:nth-child(2){grid-column:1/-1;grid-row:2}
+  .ceo-financial-overview .ceo-table td:last-child{grid-column:2;grid-row:1;align-self:start;font-size:14px;max-width:135px;overflow-wrap:anywhere}
+  .ceo-financial-overview .ceo-badge{font-size:12px}
   .ceo-week-days{max-height:none;overflow:visible;padding-right:0}
   .ceo-week-overview .ceo-card-head h2{font-size:20px}
   .ceo-week-overview .ceo-card-head .ceo-button{min-height:44px}

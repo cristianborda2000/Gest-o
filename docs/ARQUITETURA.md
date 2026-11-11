@@ -43,6 +43,7 @@ dependências ou resultados locais. Não são a fonte da aplicação.
 | `push-reminders.js` | Inscrição do dispositivo e integração com notificações |
 | `jarvis.js`, `jarvis-voice.js` | Interface do assistente e sessão de voz |
 | `mobile-forms.js`, `pwa-install.js` | Formulários em telas pequenas e instalação do aplicativo |
+| `mobile-navigation.js` | Barra inferior e cadastro rápido no celular; acompanha os acessos da empresa e é limpo ao trocar de sessão |
 | `forms.js`, `records.js`, `table.js`, `dashboard.js`, `contracts.js` | Compatibilidade, renderização e operações dos registros legados |
 
 Os arquivos legados ainda participam da inicialização e preservam clientes,

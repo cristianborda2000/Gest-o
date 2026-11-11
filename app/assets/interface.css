@@ -139,3 +139,39 @@ input[type="file"]::file-selector-button { margin-right: 12px; padding: 7px 12px
   .clients-contact .clients-whatsapp { gap: 6px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+
+/* Phone spacing prioritizes readable values and the current task. */
+@media (max-width: 720px) {
+  .topbar { padding-bottom: 10px; margin-bottom: 14px; border: 0; border-radius: 0; row-gap: 6px; align-items: center; }
+  [data-module=dashboard] .topbar p { display: none; }
+  .topbar .workspace-badge { padding: 4px 9px; line-height: 1.5; }
+  .ceo-overview-layout { gap: 14px; }
+  .ceo-overview-layout .ceo-metrics { gap: 10px; }
+  .ceo-overview-layout .ceo-metric { padding: 14px; gap: 4px; min-width: 0; justify-content: flex-start; box-shadow: none; }
+  .ceo-overview-layout .ceo-metric-icon { display: none; }
+  .ceo-overview-layout .ceo-metric > span { color: #4e5967; font-size: 12px; line-height: 1.45; }
+  .ceo-overview-layout .ceo-metric strong { font-size: clamp(19px, 5.5vw, 24px); line-height: 1.35; letter-spacing: -.5px; font-variant-numeric: tabular-nums; white-space: normal; overflow-wrap: anywhere; }
+  .ceo-overview-layout .ceo-metric small { margin: 0; font-size: 11px; line-height: 1.45; color: #626c79; }
+  .ceo-overview-layout .ceo-metric[data-metric=neutral] { background: #20252c; border-color: #20252c; color: #fff; }
+  .ceo-overview-layout .ceo-metric[data-metric=neutral] > span,
+  .ceo-overview-layout .ceo-metric[data-metric=neutral] small { color: #d4d9e0; }
+  .ceo-overview-layout .ceo-metric[data-metric=neutral] strong { color: #fff; }
+  .ceo-today-overview .ceo-card-head { margin-bottom: 8px; }
+  .ceo-today-focus .ceo-week-task { padding-block: 5px; }
+  .ceo-today-overview .ceo-week-toggle { margin-top: 10px; }
+  .ceo-financial-overview .ceo-card-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+  .ceo-financial-overview .ceo-card-head p { display: none; }
+  .ceo-financial-overview .ceo-card-head h2 { overflow-wrap: anywhere; }
+  .ceo-financial-overview .ceo-card-head .ceo-button { padding-inline: 10px; white-space: nowrap; }
+  .ceo-financial-overview .ceo-table tbody tr { border: 0; border-top: 1px solid var(--line); border-radius: 0; box-shadow: none; background: transparent; margin: 0; padding: 14px 0; }
+  .ceo-financial-overview .ceo-table td { background: transparent; }
+  .ceo-financial-overview .ceo-table td strong { line-height: 1.5; }
+  .ceo-financial-overview .ceo-table td small { color: #626c79; }
+  .ceo-overview-layout .ceo-empty { padding: 18px 12px; font-size: 13px; }
+  .ceo-overview-layout .ceo-empty small { font-size: 12px; }
+  .ceo-overview-layout .ceo-card-head p { line-height: 1.5; }
+}
+@media (max-width: 359px) {
+  .ceo-overview-toolbar .ceo-period input { width: 178px; }
+  .ceo-overview-layout .ceo-metric { padding: 12px; }
+}

@@ -10,4 +10,18 @@ O arquivo `app/assets/interface.css`, carregado depois dos estilos dos módulos,
 - O Financeiro tem Resumo, Lançamentos e Análises, com filtros compartilhados. Lançamentos mostram as ações secundárias em um menu; no celular, os detalhes se expandem por registro. O saldo acumulado continua fixo acima das abas.
 - As transições respeitam a preferência de movimento reduzido.
 
+No celular, a inicial prioriza **Hoje** e mantém a semana e o gráfico mensal
+expansíveis. As movimentações da inicial mostram descrição, valor e situação
+em linhas compactas. A barra inferior dá acesso às áreas frequentes; **Mais**
+abre o menu completo. O botão **Novo**, integrado à barra inferior, abre os atalhos de cadastro
+disponíveis para o perfil conectado, reutilizando os formulários existentes.
+Os controles respeitam a área segura do aparelho e deixam espaço ao fim do
+conteúdo. No computador, a navegação lateral e a visão semanal continuam visíveis.
+
+O resumo financeiro móvel usa cartões compactos, com destaque para o saldo do
+mês; o saldo em caixa do Financeiro mantém sua definição e permanece fixo durante
+a rolagem. Na Agenda, o calendário é seguido pelas tarefas do dia e depois pelas
+preferências de lembretes, também na ordem de leitura acessível. Em Ideias, a
+pesquisa ocupa a largura disponível e os filtros ficam em duas colunas.
+
 Validar mudanças globais com os testes de navegação, formulários e layout de cada módulo. Os testes de navegador usam dados fictícios e não alteram a conta de produção.

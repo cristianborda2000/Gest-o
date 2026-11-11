@@ -11,6 +11,24 @@ modules.ideias = { title: 'Banco de ideias', subtitle: 'Um espaço compartilhado
 modules.projetos = { title: 'Projetos', subtitle: 'Clientes, listas de produção e etapas criadas por você.', fields: [], rows: [] };
 modules.jarvis = { title: 'JARVIS', subtitle: 'Seu assistente pessoal. Conectado à sua rotina.', fields: [], rows: [] };
 let overviewMonth = ZamaTime.today().slice(0, 7);
+let overviewWeekExpanded = false;
+let overviewChartExpanded = false;
+
+function resetCeoOverview() {
+  overviewMonth = ZamaTime.today().slice(0, 7);
+  overviewWeekExpanded = overviewChartExpanded = false;
+}
+
+async function toggleOverviewTask(input, task) {
+  const wasDone = ZamaAgenda.helpers.isDone(task);
+  input.disabled = true;
+  try { await ZamaAgenda.toggle(task); }
+  finally {
+    // Successful saves replace the overview. A remaining control still represents
+    // the confirmed state from before a rejected or failed save.
+    if (input.isConnected) { input.checked = wasDone; input.disabled = false; }
+  }
+}
 
 function ceoIcon(name) {
   const paths = {
@@ -24,6 +42,7 @@ function ceoIcon(name) {
 
 function renderCeoModule() {
   ZamaJarvis.navigation();
+  if (typeof ZamaMobileNavigation !== 'undefined') ZamaMobileNavigation.render();
   if (activeModule !== 'projetos' && typeof ZamaProjects !== 'undefined') ZamaProjects.leave();
   const isCeo = ['dashboard', 'investimentos', 'agenda', 'ideias', 'jarvis', 'projetos', 'clientes'].includes(activeModule)
     || activeModule === 'financeiro';
@@ -80,8 +99,21 @@ function renderCeoWeek(week) {
   const pending = week.tasks.length - done - cancelled;
   const summary = `${pending} ${pending === 1 ? 'pendente' : 'pendentes'} · ${done} ${done === 1 ? 'concluída' : 'concluídas'}${cancelled ? ` · ${cancelled} ${cancelled === 1 ? 'cancelada' : 'canceladas'}` : ''}`;
   const shortDate = date => ZamaTime.label(date, { year: undefined });
-  return `<section class="ceo-card ceo-today-overview ceo-week-overview" aria-labelledby="overviewWeekTitle">
-    <div class="ceo-card-head"><div><h2 id="overviewWeekTitle">Tarefas da semana</h2><p>${shortDate(week.from)} a ${shortDate(week.to)} · Seg a dom</p></div><button class="ceo-button primary" data-overview-new="agenda">+ Tarefa</button></div>
+  const todayRows = week.days.find(day => day.date === week.today).rows;
+  const todayPending = todayRows.filter(({ row }) => !isDone(row) && !isCancelled(row));
+  const todayDone = todayRows.filter(({ row }) => isDone(row)).length;
+  return `<section class="ceo-card ceo-today-overview ceo-week-overview ${overviewWeekExpanded ? 'is-week-expanded' : ''}" aria-labelledby="overviewWeekTitle">
+    <div class="ceo-card-head"><div><h2 id="overviewWeekTitle"><span class="ceo-week-heading">Tarefas da semana</span><span class="ceo-today-heading">Hoje</span></h2><p class="ceo-week-heading">${shortDate(week.from)} a ${shortDate(week.to)} · Seg a dom</p><p class="ceo-today-heading">${ZamaTime.label(week.today, { weekday: 'long', day: 'numeric', month: 'long', year: undefined })}</p></div><button class="ceo-button primary" data-overview-new="agenda">+ Tarefa</button></div>
+    <div class="ceo-today-focus">
+      <p class="ceo-today-summary" role="status">${todayPending.length} ${todayPending.length === 1 ? 'tarefa pendente' : 'tarefas pendentes'}${todayDone ? ` · ${todayDone} ${todayDone === 1 ? 'concluída' : 'concluídas'}` : ''}</p>
+      ${todayPending.length ? `<div class="ceo-today-tasks">${todayPending.slice(0, 3).map(({ row, index }) => `<div class="ceo-week-task">
+        <label class="ceo-week-check"><input type="checkbox" data-today-complete="${index}" aria-label="Concluir ${escapeHtml(row.nome)}"></label>
+        <button class="ceo-week-task-open" data-today-task="${index}" aria-label="Editar ${escapeHtml(row.nome)}"><strong>${escapeHtml(row.nome)}</strong><span class="ceo-week-task-meta"><time>${escapeHtml(row.hora || 'Dia todo')}</time><span class="${taskStatus(row) === 'Atrasada' ? 'is-overdue' : ''}">${escapeHtml(taskStatus(row))}</span></span></button>
+      </div>`).join('')}</div>` : `<p class="ceo-today-empty">${todayDone ? 'Tudo concluído por hoje.' : 'Nenhuma tarefa pendente hoje.'}<small>Sua semana continua disponível logo abaixo.</small></p>`}
+      ${todayPending.length > 3 ? `<button class="ceo-button ceo-today-more" data-today-agenda>Ver todas as ${todayPending.length} tarefas de hoje ↗</button>` : ''}
+    </div>
+    <button class="ceo-button ceo-week-toggle" data-overview-week aria-expanded="${overviewWeekExpanded}" aria-controls="overviewWeekContent">${overviewWeekExpanded ? 'Recolher semana' : 'Ver semana'} <span aria-hidden="true">${overviewWeekExpanded ? '−' : '+'}</span></button>
+    <div id="overviewWeekContent">
     <p class="ceo-week-summary" aria-live="polite">${summary}</p>
     ${!week.tasks.length ? '<div class="ceo-empty ceo-week-empty">Sua semana está livre.<small>Adicione sua próxima tarefa.</small></div>' : ''}
     <div class="ceo-week-days">${week.days.map(day => `<section class="ceo-week-day ${day.date === week.today ? 'is-today' : ''}" data-overview-date="${day.date}">
@@ -92,6 +124,7 @@ function renderCeoWeek(week) {
       </div>`).join('') : '<p class="ceo-week-day-empty">Sem tarefas</p>'}
     </section>`).join('')}</div>
     <button class="ceo-button ceo-full ceo-week-agenda" data-overview-go="agenda">Abrir agenda ↗</button>
+    </div>
   </section>`;
 }
 
@@ -116,14 +149,15 @@ function renderCeoOverview(container) {
   ];
   container.innerHTML = `<div class="ceo-overview-layout">
     ${renderCeoWeek(week)}
-    <div class="ceo-overview-toolbar"><span class="ceo-eyebrow">SEU NEGÓCIO EM PERSPECTIVA</span><div class="ceo-toolbar">
+    <div class="ceo-overview-toolbar"><span class="ceo-eyebrow"><span class="ceo-overview-desktop-label">SEU NEGÓCIO EM PERSPECTIVA</span><span class="ceo-overview-mobile-label">Resumo do mês</span></span><div class="ceo-toolbar">
       <label class="ceo-period">Período <input type="month" id="overviewMonth" value="${overviewMonth}" aria-label="Período da visão geral"></label>
       <button class="ceo-button primary" data-overview-new="financeiro">${ceoIcon('plus')} Nova movimentação</button>
     </div></div>
-    <div class="ceo-metrics">${metrics.map(([label,value,icon,tone,note]) => `<article class="ceo-card ceo-metric"><span class="ceo-metric-icon ${tone}">${ceoIcon(icon)}</span><span>${label}</span><strong>${money(value)}</strong><small>${note}</small></article>`).join('')}</div>
+    <div class="ceo-metrics">${metrics.map(([label,value,icon,tone,note]) => `<article class="ceo-card ceo-metric" data-metric="${tone}"><span class="ceo-metric-icon ${tone}">${ceoIcon(icon)}</span><span>${label}</span><strong>${money(value)}</strong><small>${note}</small></article>`).join('')}</div>
     <div class="ceo-overview-grid">
       <section class="ceo-card ceo-financial-overview"><div class="ceo-card-head"><div><h2>Movimentações</h2><p>O movimento da sua empresa</p></div><button class="ceo-button" data-overview-go="financeiro">Ver todas ↗</button></div>
-        ${renderCeoChart(settled, period)}
+        <button class="ceo-button ceo-overview-chart-toggle" data-overview-chart aria-expanded="${overviewChartExpanded}" aria-controls="overviewChart">${overviewChartExpanded ? 'Ocultar gráfico' : 'Ver gráfico do mês'}</button>
+        <div id="overviewChart" class="ceo-overview-chart ${overviewChartExpanded ? 'is-chart-expanded' : ''}">${renderCeoChart(settled, period)}</div>
         ${latest.length ? `<div class="ceo-table-scroll"><table class="ceo-table"><thead><tr><th>Descrição</th><th>Situação</th><th class="ceo-number">Valor</th></tr></thead><tbody>${latest.map(row => `<tr><td><strong>${escapeHtml(row.nome)}</strong><small>${escapeHtml(row.responsavel || row.categoria || 'Sem categoria')} · ${ZamaTime.label(ZamaFinance.effectiveDate(row))}</small></td><td><span class="ceo-badge ${ZamaFinance.isSettled(row) ? 'green' : 'amber'}">${escapeHtml(row.status)}</span></td><td class="ceo-number ${ZamaFinance.direction(row) === 'Entrada' ? 'ceo-positive' : 'ceo-negative'}">${ZamaFinance.direction(row) === 'Entrada' ? '+' : '−'} ${money(ZamaFinance.amountCents(row))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="ceo-empty">Ainda não há movimentações neste período.<small>Registre uma entrada ou saída para começar.</small></div>'}
       </section>
       <section class="ceo-card ceo-invest-overview"><div class="ceo-card-head"><div><h2>Investimentos</h2><p>Crescimento da ZAMA</p></div><button class="ceo-icon-button" data-overview-go="investimentos" aria-label="Ver investimentos">↗</button></div>
@@ -146,7 +180,25 @@ function renderCeoOverview(container) {
     if (el.dataset.overviewNew === 'ideias') ZamaIdeas.openEditor();
   });
   container.querySelectorAll('[data-overview-task]').forEach(el => el.onclick = () => ZamaAgenda.openTask({ row: tasks[Number(el.dataset.overviewTask)] }));
-  container.querySelectorAll('[data-overview-complete]').forEach(el => el.onchange = () => ZamaAgenda.toggle(tasks[Number(el.dataset.overviewComplete)]));
+  container.querySelectorAll('[data-overview-complete]').forEach(el => el.onchange = () => toggleOverviewTask(el, tasks[Number(el.dataset.overviewComplete)]));
+  container.querySelectorAll('[data-today-task]').forEach(el => el.onclick = () => ZamaAgenda.openTask({ row: tasks[Number(el.dataset.todayTask)] }));
+  container.querySelectorAll('[data-today-complete]').forEach(el => el.onchange = () => toggleOverviewTask(el, tasks[Number(el.dataset.todayComplete)]));
+  container.querySelector('[data-today-agenda]')?.addEventListener('click', () => {
+    goToModule('agenda');
+    ZamaAgenda.selectDay(ZamaTime.today());
+  });
+  container.querySelector('[data-overview-week]').onclick = event => {
+    overviewWeekExpanded = !overviewWeekExpanded;
+    container.querySelector('.ceo-week-overview').classList.toggle('is-week-expanded', overviewWeekExpanded);
+    event.currentTarget.setAttribute('aria-expanded', String(overviewWeekExpanded));
+    event.currentTarget.innerHTML = `${overviewWeekExpanded ? 'Recolher semana' : 'Ver semana'} <span aria-hidden="true">${overviewWeekExpanded ? '−' : '+'}</span>`;
+  };
+  container.querySelector('[data-overview-chart]').onclick = event => {
+    overviewChartExpanded = !overviewChartExpanded;
+    container.querySelector('#overviewChart').classList.toggle('is-chart-expanded', overviewChartExpanded);
+    event.currentTarget.setAttribute('aria-expanded', String(overviewChartExpanded));
+    event.currentTarget.textContent = overviewChartExpanded ? 'Ocultar gráfico' : 'Ver gráfico do mês';
+  };
   container.querySelectorAll('[data-overview-idea]').forEach(el => el.onclick = () => ZamaIdeas.openEditor(el.dataset.overviewIdea));
 }
 
@@ -160,10 +212,12 @@ function renderCeoChart(rows, period) {
   return `<div class="ceo-chart-legend"><span><i class="income"></i> Entradas recebidas</span><span><i class="expense"></i> Saídas pagas</span></div><div class="ceo-cash-chart" role="img" aria-label="Movimentações realizadas por dia no mês selecionado">${days.map(day => `<div title="${ZamaTime.label(day.date)}: entradas ${ZamaFinance.formatMoney(day.income)}, saídas ${ZamaFinance.formatMoney(day.expense)}"><i style="height:${Math.max(day.income ? 5 : 2,day.income/max*100)}%" class="income ${day.income ? '' : 'zero'}"></i><i style="height:${Math.max(day.expense ? 5 : 2,day.expense/max*100)}%" class="expense ${day.expense ? '' : 'zero'}"></i></div>`).join('')}</div><div class="ceo-chart-axis"><span>01</span><span>15</span><span>${period.to.slice(-2)}</span></div>`;
 }
 
+let ceoMenuReturnFocus = null;
 function setCeoMenu(open, restoreFocus = true) {
   const sidebar = document.getElementById('ceoSidebar');
   const button = document.getElementById('ceoMenuBtn');
   open = Boolean(open && window.matchMedia('(max-width: 720px)').matches);
+  if (open && !document.body.classList.contains('menu-open')) ceoMenuReturnFocus = document.activeElement;
   document.body.classList.toggle('menu-open', open);
   document.getElementById('ceoMenuBackdrop').hidden = !open;
   document.querySelector('.main').inert = open;
@@ -175,7 +229,11 @@ function setCeoMenu(open, restoreFocus = true) {
   } else {
     sidebar.removeAttribute('role');
     sidebar.removeAttribute('aria-modal');
-    if (restoreFocus && sidebar.contains(document.activeElement)) button.focus();
+    if (restoreFocus && sidebar.contains(document.activeElement)) {
+      const target = ceoMenuReturnFocus?.isConnected && ceoMenuReturnFocus.getClientRects().length ? ceoMenuReturnFocus : button;
+      target.focus({ preventScroll: true });
+    }
+    ceoMenuReturnFocus = null;
   }
 }
 document.getElementById('ceoMenuBtn').addEventListener('click', () => setCeoMenu(true));

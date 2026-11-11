@@ -110,7 +110,8 @@
   .zama-push-reminders .ceo-toolbar{align-items:stretch}
   .zama-push-reminders button{width:100%}
   .za-financial-dues>div{flex-wrap:wrap;gap:8px}
-  .ceo-idea-filters{grid-template-columns:minmax(0,1fr)}
+  .ceo-idea-filters{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ceo-idea-filters .ceo-idea-search{grid-column:1 / -1}
   .ceo-idea-actions .ceo-button{font-size:13px}
   .settings-panel{inset:0;left:0;right:0;bottom:0;top:0;width:100%;height:100dvh;max-height:100dvh;border-radius:0;overscroll-behavior:contain;scroll-padding-block:100px 20px;background:#fff}
   .settings-head{position:sticky;top:0;z-index:2;background:#fff;padding:calc(16px + env(safe-area-inset-top)) 16px 16px}

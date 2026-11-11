@@ -15,6 +15,11 @@ O [padrão visual da interface](INTERFACE.md) unifica botões, campos, listas e 
   saldo e investimentos realizados. Tarefas usam a data atual de São Paulo;
   ideias mostram as capturas mais recentes. Marque a tarefa para concluir ou
   clique no título para editar.
+  No celular, o bloco **Hoje** mostra até três tarefas pendentes do dia, com
+  edição e conclusão direta. **Ver semana** abre a programação completa;
+  quando há mais tarefas no dia, um atalho abre a agenda na data de hoje.
+  O gráfico mensal fica disponível em **Ver gráfico do mês**. Alterar o mês
+  financeiro não altera a data do bloco Hoje.
 - **Financeiro:** cadastre movimentos, filtre datas, categoria, tipo ou situação,
   e acompanhe o **Saldo em caixa** fixo no topo, inclusive em Gastos fixos.
   Ele acumula entradas recebidas menos saídas pagas até hoje, usando a data

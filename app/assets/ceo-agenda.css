@@ -2,3 +2,14 @@
 @media(min-width:1500px){.za-day{min-height:115px}.za-day-panel{min-height:710px}.za-day-task{font-size:11px}}@media(max-width:1120px){.za-layout{grid-template-columns:minmax(0,1.2fr) minmax(285px,1fr);gap:14px}.za-calendar{padding:12px!important}.za-day-panel{padding:18px!important}.za-month-switch h2{font-size:17px}.za-day{min-height:90px;padding:6px 3px}.za-day-task{font-size:9px}.za-selected-title{font-size:19px!important}.za-month-switch{gap:4px}.za-calendar-toolbar{gap:5px}}@media(max-width:900px){.za-layout{grid-template-columns:1fr}.za-day-panel{min-height:0}.za-day{min-height:90px}.za-day-task{font-size:11px}.za-day-count{font-size:10px}}@media(max-width:480px){.za-calendar-toolbar{align-items:center}.za-month-switch h2{font-size:15px;margin-left:4px}.za-calendar-toolbar .ceo-button{font-size:11px;padding:6px 8px;min-height:32px}.za-month-switch .ceo-button{min-width:28px;font-size:18px;padding:4px}.za-day{min-height:76px;padding:4px 2px}.za-day-number{width:22px;height:22px;font-size:11px}.za-day-task{font-size:8px;padding:2px}.za-day-count{font-size:8px}.za-weekdays span{font-size:9px}.za-day-panel{padding:16px!important}.za-header{gap:10px}.za-zone{font-size:11px}.za-task-form{grid-template-columns:1fr}.za-dialog{padding:18px}.za-reminder-options{gap:9px;font-size:11px}.za-reminder-options>div+div{padding-left:9px}.za-reminders{padding:16px!important}.za-task{grid-template-columns:43px minmax(0,1fr)}}
 .za-financial-dues{border-top:1px solid #e9ecf0;margin-top:16px;padding-top:20px}.za-financial-dues h3{font-size:15px;margin:0}.za-financial-dues>div{display:flex;justify-content:space-between;align-items:center;gap:15px;padding:12px 0;font-size:12px}.za-financial-dues small{display:block;font-size:10px;color:#79828e;margin-top:4px}.za-financial-dues strong{white-space:nowrap;font-size:12px}.za-financial-dues .ceo-button{margin-top:8px}
 .za-dialog form.za-task-form{display:grid;grid-template-columns:1fr 1fr;gap:15px}.za-dialog p.za-error{color:#b23939}.za-dialog .za-form-actions{margin-top:0}@media(max-width:480px){.za-dialog form.za-task-form{grid-template-columns:1fr}}
+
+/* One set of panels, in calendar/task/reminder reading order on every screen. */
+.za-layout{grid-template-areas:"calendar day" "reminders day" "undated day";align-content:start}
+.za-main{display:contents}
+.za-calendar{grid-area:calendar}
+.za-day-panel{grid-area:day}
+.za-reminders{grid-area:reminders}
+.za-undated{grid-area:undated}
+@media(max-width:900px){
+  .za-layout{grid-template-areas:"calendar" "day" "reminders" "undated"}
+}
