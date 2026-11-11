@@ -159,3 +159,4 @@ usado para atualizar uma instalação existente.
 - [Administração, backups, sessão e relatórios](ADMINISTRATIVO.md)
 - [JARVIS: configuração, ferramentas e limites](JARVIS.md)
 - [Lembretes em segundo plano](lembretes-em-segundo-plano.md)
+- [Integração Dot / ZAM4 e verificação de publicação](DOT-INTEGRACAO.md)

@@ -2,7 +2,7 @@
 const { createHash, timingSafeEqual } = require('node:crypto');
 const { definitions } = require('./service');
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const tools = new Set(definitions().map(tool => tool.name));
+const tools = new Set(definitions({includeDirect:true}).map(tool => tool.name));
 // No issuance or refresh API. Provisioning requires a separately approved private workflow.
 // Only opaque 256-bit keys with a public grant UUID are accepted, never account JWTs.
 function createApiKeyAuthenticator({ store, ownerId, clientId, resource, clock = () => new Date() }) {

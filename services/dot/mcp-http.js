@@ -5,7 +5,7 @@ const { createService, definitions } = require('./service');
 const { JarvisError } = require('../jarvis/errors');
 const { readJsonBody } = require('../http/read-json-body');
 const versions = ['2025-11-25', '2025-06-18', '2025-03-26'];
-const instructions = 'Crie registros apenas mediante pedido explícito. Despesas são propostas: entregue confirmation_url e nunca confirme pelo usuário. Preserve request_id após resultado incerto. reminder_minutes:60 não garante entrega. Não solicite credenciais no chat.';
+const instructions = 'Crie registros apenas mediante pedido explícito. record_expense exige status paid/pending explícito; se ausente, pergunte. Não há teto comercial. Repetições usam o mesmo request_id; repeat_of apenas para outra despesa idêntica solicitada. prepare_expense mantém propostas: entregue confirmation_url e nunca confirme pelo usuário. Preserve request_id após resultado incerto. reminder_minutes:60 não garante entrega. Não solicite credenciais no chat.';
 const object = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const fail = (status, code, message) => { throw new JarvisError(message, status, code); };
 function createMcpHandler({ config = {}, authenticate, repositoryFactory, clock = () => new Date() } = {}) {
@@ -49,17 +49,24 @@ function createMcpHandler({ config = {}, authenticate, repositoryFactory, clock 
       const params = message.params || {};
       if (message.method === 'initialize') {
         if (typeof params.protocolVersion !== 'string' || !object(params.capabilities) || !object(params.clientInfo) || typeof params.clientInfo.name !== 'string' || typeof params.clientInfo.version !== 'string') return rpcError(200, -32602, 'Invalid initialization');
-        return result({ protocolVersion: versions.includes(params.protocolVersion) ? params.protocolVersion : versions[0], capabilities: { tools: {} }, serverInfo: { name: 'zama-private-remote', version: '0.2.1' }, instructions });
+        return result({ protocolVersion: versions.includes(params.protocolVersion) ? params.protocolVersion : versions[0], capabilities: { tools: {} }, serverInfo: { name: 'zama-private-remote', version: '0.5.0' }, instructions });
       }
       if (message.method === 'ping') return result({});
-      const catalog = definitions().filter(tool => principal.allowedTools.includes(tool.name)).map(tool => config.oauthMetadata ? {...tool,securitySchemes:[{type:'oauth2',scopes:['zama:private']}]} : tool);
+      const catalog = definitions({includeDirect:config.directExpensesEnabled===true}).filter(tool => principal.allowedTools.includes(tool.name) || (config.oauthMetadata && tool.name === 'record_expense')).map(tool => {
+        if (!config.oauthMetadata) return tool;
+        const securitySchemes = [{type:'oauth2',scopes:tool.name==='record_expense'?['zama:private','zama:expenses:write']:['zama:private']}];
+        return {...tool,securitySchemes,_meta:{securitySchemes}};
+      });
       if (message.method === 'tools/list') { if (params.cursor !== undefined) return rpcError(200, -32602, 'Cursor not supported'); return result({ tools: catalog }); }
       if (message.method !== 'tools/call') return rpcError(200, -32601, 'Method not found');
       if (!catalog.some(tool => tool.name === params.name) || !object(params.arguments)) return rpcError(200, -32602, 'Tool not permitted or invalid arguments');
+      if (!principal.allowedTools.includes(params.name)) {
+        return result({isError:true,content:[{type:'text',text:'Autorize o registro direto de despesas nesta conexão antes de usar esta ferramenta.'}],_meta:{'mcp/www_authenticate':[`Bearer resource_metadata="${config.oauthMetadata}", error="insufficient_scope", error_description="Authorize direct expense recording", scope="zama:private zama:expenses:write"`]}});
+      }
       const { request_id, ...args } = params.arguments;
       try {
         const scopedRepository = repository.withTool ? repository.withTool(params.name) : repository;
-        const service = createService({ repository: scopedRepository, ownerId: config.ownerId, origin: config.appOrigin, clock });
+        const service = createService({ repository: scopedRepository, ownerId: config.ownerId, origin: config.appOrigin, clock, directExpensesEnabled: config.directExpensesEnabled === true, allowedTools: principal.allowedTools });
         const receipt = await service.call({ name: params.name, arguments: args, request_id });
         return result({ content: [{ type: 'text', text: JSON.stringify(receipt) }], structuredContent: receipt, isError: false });
       } catch (error) {

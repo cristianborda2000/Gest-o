@@ -89,7 +89,7 @@
 
   function validateMovement(data) {
     if (!text(data.nome).trim()) throw new Error("Informe a descrição da movimentação.");
-    if (!Number.isSafeInteger(data.valorCentavos) || data.valorCentavos <= 0 || data.valorCentavos > 999999999999) throw new Error("Informe um valor maior que zero, com no máximo dois centavos decimais.");
+    if (!Number.isSafeInteger(data.valorCentavos) || data.valorCentavos <= 0 || cents(data.valorCentavos / 100) !== data.valorCentavos) throw new Error("Informe um valor maior que zero, com no máximo dois centavos decimais.");
     if (!["Entrada", "Saída"].includes(data.tipo)) throw new Error("Selecione o tipo da movimentação.");
     if (!["Pendente", "Pago", "Recebido", "Agendado", "Atrasado", "Cancelado"].includes(data.status)) throw new Error("Selecione uma situação válida.");
     if (!validDate(data.data) || !validDate(data.prazo)) throw new Error("Informe datas válidas para o lançamento e o vencimento.");
