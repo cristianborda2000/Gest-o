@@ -136,7 +136,7 @@ function taskInput(args, context) {
   return { nome: args.title, prazo: resolveDate(args.date, context), hora: args.time || '', duracao: args.duration_minutes ?? 30, prioridade: priorities[args.priority || 'medium'], status: 'Pendente', observacoes: args.description || '', recorrencia: args.recurrence || 'none', recurrenceEnd: args.recurrence_end ? resolveDate(args.recurrence_end, context) : '', reminderMinutes: args.reminder_minutes ?? null, jarvisActionId: context.operationId };
 }
 define('get_today_summary', 'read', 'Resumo REAL de hoje: tarefas, compromissos, atrasos, contas e financeiro. Não contar compromissos duas vezes: são registros da agenda.', z.object({}).strict(), (s, a, c) => daySummary(s, c));
-define('list_tasks', 'read', 'Consulte tarefas antes de escolher um ID para editar/concluir. Filtre hoje, próximas ou atrasadas. Nunca invente IDs.', listSchema, taskList);
+define('list_tasks', 'read', 'Consulte tarefas antes de escolher um ID para editar, concluir ou cancelar. Filtre hoje, próximas ou atrasadas. Nunca invente IDs.', listSchema, taskList);
 define('get_agenda', 'read', 'Agenda real por intervalo de datas (máximo 366 dias), com horários de São Paulo.', listSchema, taskList);
 define('get_financial_summary', 'read', 'Totais reais em centavos e BRL, contas pendentes e maiores categorias. Período custom exige from e to.', periodSchema, (s, a, c) => { if (a.period === 'custom' && (!a.from || !a.to)) throw new JarvisError('Informe início e fim do período.'); return financialSummary(s, a, c); });
 define('create_task', 'write', 'Crie uma tarefa na agenda. Exige título claro e data; se faltar, pergunte. Data aceita amanhã/sexta/hoje e espanhol. Horário omitido significa sem hora definida. Salve a antecedência solicitada em reminder_minutes.', taskSchema, (s, a, c) => taskView(Agenda.saveTask(s, taskInput(a, c)), c, s));
@@ -167,6 +167,56 @@ define('complete_task', 'write', 'Conclua a tarefa real identificada por consult
   Agenda.saveTask(s, { status: 'Concluído', jarvisActionId: c.operationId }, a.id, original);
   const saved = s.agenda.find(t => t.id === a.id);
   return taskView(base.recorrencia && base.recorrencia !== 'none' ? Agenda.helpers.occurrence(saved, original) : saved, c, s);
+});
+const cancelAgendaSchema = z.object({
+  id: str(160).describe('ID retornado por get_agenda ou list_tasks. Não escolher apenas por título.'),
+  occurrence_date: date.optional().describe('Data original da ocorrência retornada pela consulta, mesmo se foi remarcada. Obrigatória para cancelar uma ocorrência recorrente.'),
+  scope: z.enum(['occurrence', 'series']).optional().default('occurrence').describe('Use occurrence por padrão. Use series somente se o usuário pedir explicitamente toda a série; ocorrências concluídas são preservadas.'),
+  reason: opt(1000).describe('Motivo informado pelo usuário, se houver. Não inventar.')
+}).strict();
+define('cancel_agenda_event', 'write', 'Cancele uma tarefa ou compromisso da agenda ZAM4 somente por pedido explícito. Consulte a agenda primeiro e esclareça títulos parecidos. Preserva o registro e o histórico, interrompe seus lembretes e não envia mensagens. Recorrentes exigem occurrence_date para uma ocorrência; toda a série exige scope series explicitamente solicitado. Não cancela ocorrências já concluídas.', cancelAgendaSchema, (s, a, c) => {
+  // Resolve legacy IDs and defaults on a copy before validating, so a rejected
+  // cancellation cannot normalize or otherwise change unrelated records.
+  const normalized = Agenda.normalize(structuredClone(s));
+  const index = normalized.agenda.findIndex(row => row.id === a.id);
+  const base = normalized.agenda[index];
+  if (!base) throw new JarvisError('Registro da agenda não encontrado. Consulte a agenda novamente.', 404, 'AGENDA_NOT_FOUND');
+  const recurring = base.recorrencia !== 'none';
+  if (a.scope === 'series' && !recurring) throw new JarvisError('Este registro não é recorrente. Cancele somente o compromisso informado.', 400, 'AGENDA_NOT_RECURRING');
+  if (recurring && a.scope === 'occurrence' && !a.occurrence_date) throw new JarvisError('Informe a data original da ocorrência que deseja cancelar.', 400, 'AGENDA_OCCURRENCE_REQUIRED');
+  const original = a.occurrence_date ? resolveDate(a.occurrence_date, c) : base.prazo;
+  if (a.scope === 'occurrence' && (!Agenda.helpers.occursOn(base, original) || base.exceptions?.[original]?.deleted)) throw new JarvisError('A ocorrência não está disponível. Consulte a agenda novamente.', 404, 'AGENDA_OCCURRENCE_NOT_FOUND');
+  const current = a.scope === 'series' ? base : recurring ? Agenda.helpers.occurrence(base, original) : base;
+  if (Agenda.helpers.isDone(current)) throw new JarvisError('Este registro já foi concluído. O cancelamento preserva o histórico concluído.', 409, 'AGENDA_ALREADY_COMPLETED');
+  const result = (row, already) => ({ ...taskView(row, c, s), cancellation_scope: a.scope, already_cancelled: already, cancelled_at: row.cancelledAt || null, cancellation_reason: row.cancellationReason || null });
+  const changes = { status: 'Cancelado', cancelledAt: now(c).toISOString(), jarvisActionId: c.operationId, ...(a.reason ? { cancellationReason: a.reason } : {}) };
+  const save = (input, scope = 'occurrence') => {
+    // saveTask normalizes its container. Give it only the selected record so
+    // cancellation does not rewrite defaults on other legacy agenda entries.
+    const selected = { agenda: [base] };
+    Agenda.saveTask(selected, input, a.id, original, scope);
+    s.agenda[index] = selected.agenda[0];
+  };
+  if (a.scope === 'series') {
+    const exceptions = { ...base.exceptions };
+    let changedException = false;
+    for (const [day, patch] of Object.entries(exceptions)) {
+      if (!Agenda.helpers.occursOn(base, day) || patch?.deleted) continue;
+      const occurrence = Agenda.helpers.occurrence(base, day);
+      if (Agenda.helpers.isDone(occurrence) || Agenda.helpers.isCancelled(occurrence)) continue;
+      exceptions[day] = { ...patch, ...changes };
+      changedException = true;
+    }
+    if (Agenda.helpers.isCancelled(base) && !changedException) return result(base, true);
+    // Exceptions may override the base status: cancel active overrides too,
+    // while retaining completed/deleted occurrences and all their details.
+    save({ ...changes, exceptions }, 'series');
+  } else {
+    if (Agenda.helpers.isCancelled(current)) return result(current, true);
+    save(changes);
+  }
+  const saved = s.agenda.find(row => row.id === a.id);
+  return result(recurring && a.scope === 'occurrence' ? Agenda.helpers.occurrence(saved, original) : saved, false);
 });
 define('save_idea', 'write', 'Salve uma ideia no banco existente. Projetos não estão integrados a esta ferramenta; não crie vínculo fictício.', z.object({ title: str(180), description: opt(5000), category: opt(80), priority }).strict(), (s, a, c) => {
   const row = Ideas.upsert(s, { titulo: a.title, descricao: a.description, categoria: a.category || 'Geral', prioridade: priorities[a.priority || 'medium'], etapa: 'capturada', data: today(c) });

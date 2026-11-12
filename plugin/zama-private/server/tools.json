@@ -1,7 +1,7 @@
 [
   {
     "name": "list_tasks",
-    "description": "Consulte tarefas antes de escolher um ID para editar/concluir. Filtre hoje, próximas ou atrasadas. Nunca invente IDs. Conta pessoal do proprietário. Só escreva mediante pedido explícito. Datas usam America/Sao_Paulo.",
+    "description": "Consulte tarefas antes de escolher um ID para editar, concluir ou cancelar. Filtre hoje, próximas ou atrasadas. Nunca invente IDs. Conta pessoal do proprietário. Só escreva mediante pedido explícito. Datas usam America/Sao_Paulo.",
     "inputSchema": {
       "type": "object",
       "properties": {

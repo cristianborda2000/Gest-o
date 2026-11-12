@@ -6,6 +6,10 @@ const { readJsonBody } = require('../http/read-json-body');
 const { createRepository } = require('../jarvis/repository');
 const scope = 'zama:private';
 const directScope = 'zama:expenses:write';
+const agendaCancelScope = 'zama:agenda:cancel';
+const scopeOrder = [scope, directScope, agendaCancelScope];
+const canonicalScope = parts => scopeOrder.filter(value => parts.includes(value)).join(' ');
+const scopeForTools = allowed => canonicalScope([scope, ...(allowed.includes('record_expense') ? [directScope] : []), ...(allowed.includes('cancel_agenda_event') ? [agendaCancelScope] : [])]);
 const refreshPolicy = Object.freeze({ access_expires_in: 3600, idle_expires_in: 604800, absolute_expires_in: 2592000 });
 const refreshPattern = /^zama_refresh_v2\.([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.([A-Za-z0-9_-]{43})$/;
 const tools = ['list_tasks','get_agenda','search_ideas','create_task','create_agenda_event','save_idea','prepare_expense'];
@@ -20,7 +24,7 @@ function configuration(env = process.env) {
     const url = new URL(value);
     if (url.protocol !== 'https:' || url.username || url.password || url.hash || value.includes('*') || url.href !== value) throw problem('server_error', 503);
   }
-  return { refreshV2Enabled: env.DOT_OAUTH_REFRESH_V2_ENABLED === 'true', refreshEnabled: env.DOT_OAUTH_REFRESH_ENABLED === 'true', directExpensesEnabled: env.DOT_DIRECT_EXPENSES_ENABLED === 'true', origin: origin.origin, resource: resource.href, clientId: env.DOT_MCP_CLIENT_ID, ownerId: env.DOT_OWNER_ID, redirects };
+  return { refreshV2Enabled: env.DOT_OAUTH_REFRESH_V2_ENABLED === 'true', refreshEnabled: env.DOT_OAUTH_REFRESH_ENABLED === 'true', directExpensesEnabled: env.DOT_DIRECT_EXPENSES_ENABLED === 'true', agendaCancelEnabled: env.DOT_AGENDA_CANCEL_ENABLED === 'true', origin: origin.origin, resource: resource.href, clientId: env.DOT_MCP_CLIENT_ID, ownerId: env.DOT_OWNER_ID, redirects };
 }
 function unique(params) {
   const out = {};
@@ -34,12 +38,13 @@ function validateAuthorization(input, config) {
   const request = z.object({ response_type: z.literal('code'), client_id: z.literal(config.clientId), redirect_uri: z.string(), resource: z.literal(config.resource), scope: z.string().optional().default(scope), state: z.string().min(1).max(2048), code_challenge: z.string().regex(/^[A-Za-z0-9_-]{43}$/), code_challenge_method: z.literal('S256'), ui_locales: z.string().min(1).max(256).regex(/^[A-Za-z0-9-]+(?: [A-Za-z0-9-]+)*$/).optional() }).strict().safeParse(input);
   if (!request.success || !config.redirects.includes(request.data.redirect_uri)) throw problem('invalid_request');
   const scopes=request.data.scope.split(' ');
-  if (!scopes.includes(scope) || new Set(scopes).size!==scopes.length || scopes.some(s=>s!==scope && !(config.directExpensesEnabled && s===directScope))) throw problem('invalid_request');
-  return {...request.data,scope:[scope,...(scopes.includes(directScope)?[directScope]:[])].join(' ')};
+  if (!scopes.includes(scope) || new Set(scopes).size!==scopes.length || scopes.some(s=>s!==scope && !(config.directExpensesEnabled && s===directScope) && !(config.agendaCancelEnabled && s===agendaCancelScope))) throw problem('invalid_request');
+  return {...request.data,scope:canonicalScope(scopes)};
 }
 function metadata(config, protectedResource) {
-  if (protectedResource) return { resource: config.resource, authorization_servers: [config.origin], scopes_supported: config.directExpensesEnabled ? [scope,directScope] : [scope], bearer_methods_supported: ['header'] };
-  return { issuer: config.origin, authorization_endpoint: `${config.origin}/api/dot-oauth/authorize`, token_endpoint: `${config.origin}/api/dot-oauth/token`, response_types_supported: ['code'], grant_types_supported: (config.refreshEnabled || config.refreshV2Enabled) ? ['authorization_code','refresh_token'] : ['authorization_code'], token_endpoint_auth_methods_supported: ['none'], code_challenge_methods_supported: ['S256'], scopes_supported: config.directExpensesEnabled ? [scope,directScope] : [scope], authorization_response_iss_parameter_supported: true, revocation_endpoint: `${config.origin}/api/dot-oauth/revoke`, revocation_endpoint_auth_methods_supported: ['none'], ...(config.refreshV2Enabled ? { zama_refresh_version: 2, zama_refresh_policy: refreshPolicy } : {}) };
+  const supported = [scope, ...(config.directExpensesEnabled ? [directScope] : []), ...(config.agendaCancelEnabled ? [agendaCancelScope] : [])];
+  if (protectedResource) return { resource: config.resource, authorization_servers: [config.origin], scopes_supported: supported, bearer_methods_supported: ['header'] };
+  return { issuer: config.origin, authorization_endpoint: `${config.origin}/api/dot-oauth/authorize`, token_endpoint: `${config.origin}/api/dot-oauth/token`, response_types_supported: ['code'], grant_types_supported: (config.refreshEnabled || config.refreshV2Enabled) ? ['authorization_code','refresh_token'] : ['authorization_code'], token_endpoint_auth_methods_supported: ['none'], code_challenge_methods_supported: ['S256'], scopes_supported: supported, authorization_response_iss_parameter_supported: true, revocation_endpoint: `${config.origin}/api/dot-oauth/revoke`, revocation_endpoint_auth_methods_supported: ['none'], ...(config.refreshV2Enabled ? { zama_refresh_version: 2, zama_refresh_policy: refreshPolicy } : {}) };
 }
 function tokenPair(grantId) {
   return { accessToken: `zama_dot_v1.${grantId}.${randomBytes(32).toString('base64url')}`, refreshToken: `zama_refresh_v2.${grantId}.${randomBytes(32).toString('base64url')}` };
@@ -50,7 +55,7 @@ function renewalResponse(result, pair) {
   if (data?.error === 'invalid_grant' || data?.error === 'invalid_scope') throw problem(data.error);
   // Reject malformed DB replies rather than returning credentials after a failed RPC.
   if (data?.grant_id !== pair.accessToken.split('.')[1]) throw problem('server_error',503);
-  if (!data || !Number.isInteger(data.expires_in) || data.expires_in < 1 || data.expires_in > refreshPolicy.access_expires_in || !Number.isInteger(data.refresh_token_expires_in) || data.refresh_token_expires_in < 1 || data.refresh_token_expires_in > refreshPolicy.idle_expires_in || ![scope,`${scope} ${directScope}`].includes(data.scope)) throw problem('server_error',503);
+  if (!data || !Number.isInteger(data.expires_in) || data.expires_in < 1 || data.expires_in > refreshPolicy.access_expires_in || !Number.isInteger(data.refresh_token_expires_in) || data.refresh_token_expires_in < 1 || data.refresh_token_expires_in > refreshPolicy.idle_expires_in || typeof data.scope !== 'string' || !data.scope.split(' ').includes(scope) || data.scope !== canonicalScope(data.scope.split(' '))) throw problem('server_error',503);
   return { access_token: pair.accessToken, refresh_token: pair.refreshToken, token_type: 'Bearer', expires_in: data.expires_in, refresh_token_expires_in: data.refresh_token_expires_in, scope: data.scope };
 }
 async function readForm(req) {
@@ -108,16 +113,17 @@ function createHandler(deps = {}) {
         if (error || data?.user?.id !== config.ownerId) throw problem('access_denied',403);
         await (deps.rate ? deps.rate() : createRepository(db,config.ownerId).consumeRate('dot',20,60));
         const body = await readJsonBody(req,{maxBytes:10000,invalidJson:()=>problem('invalid_request'),tooLarge:()=>problem('invalid_request',413)});
-        const parsed = z.object({ request:z.record(z.string(),z.string()), approve:z.boolean(), consent_direct:z.boolean().optional().default(false), allow_refresh:z.boolean().optional() }).strict().safeParse(body);
+        const parsed = z.object({ request:z.record(z.string(),z.string()), approve:z.boolean(), consent_direct:z.boolean().optional().default(false), consent_agenda_cancel:z.boolean().optional().default(false), allow_refresh:z.boolean().optional() }).strict().safeParse(body);
         if (!parsed.success) throw problem('invalid_request');
         if (parsed.data.consent_direct && !config.directExpensesEnabled) throw problem('invalid_request');
+        if (parsed.data.consent_agenda_cancel && !config.agendaCancelEnabled) throw problem('invalid_request');
         const request = validateAuthorization(parsed.data.request,config), target = new URL(request.redirect_uri);
         target.searchParams.set('state',request.state); target.searchParams.set('iss',config.origin);
         if (!parsed.data.approve) { target.searchParams.set('error','access_denied'); return send(200,{redirect:target.href}); }
         // A versioned opaque code prevents policy changes from silently upgrading old consent.
         if (Boolean(parsed.data.allow_refresh) !== Boolean(config.refreshV2Enabled)) throw problem('invalid_request');
         const code = (config.refreshV2Enabled ? 'zama_code_v2.' : '') + randomBytes(32).toString('base64url');
-        const saved = await db.from('dot_oauth_codes').insert({ code_hash:hash(code),owner_id:config.ownerId,client_id:config.clientId,resource:config.resource,redirect_uri:request.redirect_uri,challenge:request.code_challenge, ...(config.refreshV2Enabled ? {allow_refresh_v2:true} : {}), ...(config.directExpensesEnabled ? {allow_direct_expense:request.scope.split(' ').includes(directScope) || parsed.data.consent_direct} : {}) });
+        const saved = await db.from('dot_oauth_codes').insert({ code_hash:hash(code),owner_id:config.ownerId,client_id:config.clientId,resource:config.resource,redirect_uri:request.redirect_uri,challenge:request.code_challenge, ...(config.refreshV2Enabled ? {allow_refresh_v2:true} : {}), ...(config.directExpensesEnabled ? {allow_direct_expense:request.scope.split(' ').includes(directScope) || parsed.data.consent_direct} : {}), ...(config.agendaCancelEnabled ? {allow_agenda_cancel:request.scope.split(' ').includes(agendaCancelScope) || parsed.data.consent_agenda_cancel} : {}) });
         if (saved.error) throw problem('server_error',503);
         target.searchParams.set('code',code);
         return send(200,{redirect:target.href});
@@ -144,14 +150,14 @@ function createHandler(deps = {}) {
           let requestedScope = null;
           if (input.data.scope !== undefined) {
             const parts = input.data.scope.split(' ');
-            if (!parts.includes(scope) || new Set(parts).size !== parts.length || parts.some(item => item !== scope && item !== directScope)) throw problem('invalid_scope');
-            requestedScope = [scope,...(parts.includes(directScope)?[directScope]:[])].join(' ');
+            if (!parts.includes(scope) || new Set(parts).size !== parts.length || parts.some(item => !scopeOrder.includes(item))) throw problem('invalid_scope');
+            requestedScope = canonicalScope(parts);
           }
           const id=randomUUID(),accessToken=`zama_dot_v1.${id}.${randomBytes(32).toString('base64url')}`,refreshToken=`zama_refresh_v1.${randomBytes(32).toString('base64url')}`;
           const rotated=await db.rpc('dot_oauth_refresh',{p_refresh_hash:hash(input.data.refresh_token),p_owner:config.ownerId,p_client:config.clientId,p_resource:config.resource,p_grant:id,p_token_hash:hash(accessToken),p_next_refresh_hash:hash(refreshToken),p_direct_enabled:config.directExpensesEnabled===true,p_scope:requestedScope});
           if (rotated.error) throw problem('server_error',503);
           if (!rotated.data || !Array.isArray(rotated.data.allowed_tools)) throw problem('invalid_grant');
-          const issuedScope=scope+(rotated.data.allowed_tools.includes('record_expense')?' '+directScope:'');
+          const issuedScope=scopeForTools(rotated.data.allowed_tools);
           return send(200,{access_token:accessToken,refresh_token:refreshToken,token_type:'Bearer',expires_in:rotated.data.expires_in,scope:issuedScope});
         }
         const input = z.object({grant_type:z.literal('authorization_code'),client_id:z.literal(config.clientId),code:z.string().regex(/^(?:zama_code_v2\.)?[A-Za-z0-9_-]{43}$/),redirect_uri:z.string(),resource:z.literal(config.resource),code_verifier:z.string().regex(/^[A-Za-z0-9._~-]{43,128}$/)}).strict().safeParse(form);
@@ -168,14 +174,17 @@ function createHandler(deps = {}) {
           const exchanged=await db.rpc('dot_oauth_exchange_refresh',{p_code_hash:hash(v.code),p_owner:config.ownerId,p_client:config.clientId,p_resource:config.resource,p_redirect:v.redirect_uri,p_challenge:createHash('sha256').update(v.code_verifier).digest('base64url'),p_grant:id,p_token_hash:hash(accessToken),p_family:randomUUID(),p_refresh_hash:hash(refreshToken),p_direct_enabled:config.directExpensesEnabled===true});
           if (exchanged.error) throw problem('server_error',503);
           if (!exchanged.data || !Array.isArray(exchanged.data.allowed_tools)) throw problem('invalid_grant');
-          const issuedScope=scope+(exchanged.data.allowed_tools.includes('record_expense')?' '+directScope:'');
+          const issuedScope=scopeForTools(exchanged.data.allowed_tools);
           return send(200,{access_token:accessToken,refresh_token:refreshToken,token_type:'Bearer',expires_in:exchanged.data.expires_in,scope:issuedScope});
         }
         const exchanged = await db.rpc('dot_oauth_exchange',{p_code_hash:hash(v.code),p_owner:config.ownerId,p_client:config.clientId,p_resource:config.resource,p_redirect:v.redirect_uri,p_challenge:createHash('sha256').update(v.code_verifier).digest('base64url'),p_grant:id,p_token_hash:hash(accessToken),...(config.directExpensesEnabled?{p_direct_enabled:true}:{})});
         if (exchanged.error) throw problem('server_error',503);
         if (exchanged.data !== true) throw problem('invalid_grant');
-        let issuedScope=scope;
-        if(config.directExpensesEnabled){const grant=await db.from('dot_api_grants').select('allowed_tools').eq('id',id).maybeSingle();if(grant.error || !grant.data)throw problem('server_error',503);if(grant.data.allowed_tools.includes('record_expense'))issuedScope+=' '+directScope;}
+        // Feature switches may change after consent. Report the grant actually
+        // issued, including previously approved permission that is now disabled.
+        const grant=await db.from('dot_api_grants').select('allowed_tools').eq('id',id).maybeSingle();
+        if(grant.error || !Array.isArray(grant.data?.allowed_tools))throw problem('server_error',503);
+        const issuedScope=scopeForTools(grant.data.allowed_tools);
         return send(200,{access_token:accessToken,token_type:'Bearer',expires_in:3600,scope:issuedScope});
       }
       // Keep revocation available when renewal is switched off, including tokens

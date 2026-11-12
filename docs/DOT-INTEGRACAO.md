@@ -16,6 +16,31 @@ habilita `record_expense` somente quando concedida pelo proprietário e quando a
 flag do servidor está ativa. O status pago/pendente é obrigatório. Propostas
 continuam exigindo confirmação pelo proprietário. Renovar não amplia permissões.
 
+## Cancelamento da agenda
+
+`cancel_agenda_event` exige `DOT_AGENDA_CANCEL_ENABLED=true` e a permissão
+adicional `zama:agenda:cancel`. A página de autorização oferece uma opção
+desmarcada para essa permissão. Conexões existentes continuam com as permissões
+anteriores; renovar ou atualizar o plugin não concede cancelamento.
+
+O Dot deve consultar `get_agenda` antes de escolher o ID. O cancelamento mantém
+o registro e o histórico e interrompe os lembretes daquele item. Uma ocorrência
+recorrente exige a data original `occurrence_date`; `scope: series` só deve ser
+usado quando o usuário pedir toda a série. Ocorrências concluídas são preservadas.
+Repetições usam o mesmo `request_id`. A operação não avisa participantes nem
+envia mensagens por WhatsApp.
+
+A migration `20261112200806_dot_agenda_cancel.sql` adiciona a preferência de
+consentimento e atualiza as funções OAuth sem mudar suas assinaturas, os prazos
+ou os bloqueios de revogação. Não modifica concessões existentes. Aplicar essa
+migration antes de habilitar a flag e publicar o código. Nunca reaplicar no
+banco em que já constar `dot_agenda_cancel` no histórico de migrations.
+
+Exemplos de pedidos: “Cancele minha reunião de amanhã às 14h” ou “Cancele toda a
+série de reuniões semanais com João”. Se houver mais de um resultado possível,
+o Dot deve pedir esclarecimento antes de agir. Cancelar um item concreto exige
+esse pedido; testes usam somente registros fictícios locais.
+
 ## Publicação e regressão de 11/11/2026
 
 Uma publicação pelo Git substituiu código OAuth V2 publicado anteriormente por

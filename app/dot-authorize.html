@@ -3,9 +3,10 @@
 <body><main><p>ZAM4 · Conexão privada</p><h1>Autorizar o dot</h1>
 <p id="permissions">Esta conexão poderá consultar e criar tarefas, compromissos e ideias e preparar propostas de despesas. Propostas exigem sua confirmação no ZAM4.</p>
 <section id="direct-option" hidden><label><input type="checkbox" id="direct-consent"> Permitir registrar despesas diretamente quando eu pedir</label><p>O dot deverá perguntar se está pago ou pendente quando isso não estiver claro. Não efetua pagamentos nem transferências.</p></section>
+<section id="agenda-cancel-option" hidden><label><input type="checkbox" id="agenda-cancel-consent" disabled> Permitir cancelar compromissos e tarefas quando eu pedir</label><p>O cancelamento mantém o histórico. Em compromissos recorrentes, o dot cancela somente a ocorrência escolhida; cancelar toda a série exige seu pedido explícito.</p></section>
 <p id="connection-lifetime">Verificando o prazo de autorização da conexão.</p>
 <p>A conexão não pode excluir registros nem acessar a equipe.</p>
 <p id="account"></p><p id="destination"></p><p id="status" role="status">Verificando sessão…</p>
 <button id="allow" disabled>Autorizar conexão</button><button id="deny" disabled>Recusar</button><button id="reload">Verificar login</button>
 <p><a href="/" target="_blank" rel="noopener noreferrer">Entrar no ZAM4</a> · Após entrar, volte e verifique o login.</p>
-</main><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script><script src="assets/js/env.js"></script><script src="assets/js/dot-authorize.js?v=20261111-dot-repair"></script></body></html>
+</main><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script><script src="assets/js/env.js"></script><script src="assets/js/dot-authorize.js?v=20261112-agenda-cancel"></script></body></html>

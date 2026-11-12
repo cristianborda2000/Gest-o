@@ -3,16 +3,20 @@
   'use strict';
   const el = id => document.getElementById(id), params = new URLSearchParams(location.search);
   const config = window.ZAMA_CONFIG || {};
-  let session = null, busy = false, loading = false, canConsentDirect = false, allowRefreshV2 = false;
+  let session = null, busy = false, loading = false, canConsentDirect = false, canConsentAgendaCancel = false, allowRefreshV2 = false;
   const requestedDirect = (params.get('scope') || '').split(' ').includes('zama:expenses:write');
+  const requestedAgendaCancel = (params.get('scope') || '').split(' ').includes('zama:agenda:cancel');
   const basePermissions = el('permissions').textContent;
   const updatePermissions = () => {
     el('permissions').textContent = requestedDirect || (canConsentDirect && el('direct-consent').checked)
       ? 'Além das permissões básicas, esta conexão poderá registrar diretamente despesas solicitadas por você, sem confirmação por lançamento. Pago ou pendente deve estar explícito; quando não estiver, o dot deverá perguntar. Sem teto comercial de valor. Não efetua pagamentos nem transferências. Propostas continuam exigindo confirmação.'
       : basePermissions;
+    if (requestedAgendaCancel || (canConsentAgendaCancel && el('agenda-cancel-consent').checked)) {
+      el('permissions').textContent += ' Também poderá cancelar compromissos e tarefas quando você pedir, mantendo o histórico. Em recorrências, o cancelamento é somente da ocorrência escolhida; toda a série exige pedido explícito.';
+    }
   };
   updatePermissions();
-  const disable = () => { el('allow').disabled = true; el('deny').disabled = true; el('direct-consent').disabled = true; };
+  const disable = () => { el('allow').disabled = true; el('deny').disabled = true; el('direct-consent').disabled = true; el('agenda-cancel-consent').disabled = true; };
   if (window.top !== window.self || !window.supabase || !config.supabaseUrl || !config.supabaseAnonKey) { el('status').textContent = 'Abra esta página diretamente no ZAM4.'; return; }
   if ([...new Set(params.keys())].some(key => params.getAll(key).length !== 1)) { el('status').textContent='Pedido inválido.'; return; }
   const client = window.supabase.createClient(config.supabaseUrl,config.supabaseAnonKey);
@@ -36,14 +40,18 @@
     }
     const scopes = metadata.scopes_supported;
     if (scopes !== undefined && (!Array.isArray(scopes) || scopes.some(value => typeof value !== 'string') || new Set(scopes).size !== scopes.length)) throw Error('Permissões inválidas.');
+    if (requestedAgendaCancel && scopes?.includes('zama:agenda:cancel') !== true) throw Error('Permissão de cancelamento indisponível.');
     canConsentDirect = !requestedDirect && scopes?.includes('zama:expenses:write') === true;
     el('direct-option').hidden = !canConsentDirect;
     if (!canConsentDirect) el('direct-consent').checked = false;
+    canConsentAgendaCancel = !requestedAgendaCancel && scopes?.includes('zama:agenda:cancel') === true;
+    el('agenda-cancel-option').hidden = !canConsentAgendaCancel;
+    if (!canConsentAgendaCancel) el('agenda-cancel-consent').checked = false;
     updatePermissions();
   }
   async function load() {
     if (busy || loading) return;
-    loading = true; disable(); session = null; allowRefreshV2 = false; canConsentDirect = false; el('reload').disabled = true;
+    loading = true; disable(); session = null; allowRefreshV2 = false; canConsentDirect = false; canConsentAgendaCancel = false; el('reload').disabled = true;
     el('account').textContent = ''; el('connection-lifetime').textContent = 'Verificando o prazo de autorização da conexão.';
     try {
       await loadPolicy();
@@ -51,9 +59,9 @@
       if (error || !data.session) { el('status').textContent='Entre na conta proprietária do ZAM4 e volte a esta página.'; return; }
       session=data.session; el('account').textContent=`Conta: ${session.user.email || ''}`;
       el('status').textContent='Confira as permissões e o prazo antes de autorizar.';
-      el('allow').disabled=false; el('deny').disabled=false; el('direct-consent').disabled=!canConsentDirect;
+      el('allow').disabled=false; el('deny').disabled=false; el('direct-consent').disabled=!canConsentDirect; el('agenda-cancel-consent').disabled=!canConsentAgendaCancel;
     } catch {
-      session = null; allowRefreshV2 = false; canConsentDirect = false; disable();
+      session = null; allowRefreshV2 = false; canConsentDirect = false; canConsentAgendaCancel = false; disable();
       el('status').textContent='Não foi possível verificar o prazo da conexão. Verifique o login para tentar novamente.';
     } finally { loading = false; el('reload').disabled = false; }
   }
@@ -63,7 +71,7 @@
     try {
       const {data,error}=await client.auth.getSession();
       if(error || !data.session || data.session.user.id !== session.user.id) throw Error('Sessão alterada. Verifique o login novamente.');
-      const response=await fetch('/api/dot-oauth/consent',{method:'POST',redirect:'error',cache:'no-store',headers:{'Content-Type':'application/json',Authorization:`Bearer ${data.session.access_token}`},body:JSON.stringify({request:Object.fromEntries(params),approve,consent_direct:approve && canConsentDirect && el('direct-consent').checked,...(approve && allowRefreshV2 ? {allow_refresh:true} : {})})});
+      const response=await fetch('/api/dot-oauth/consent',{method:'POST',redirect:'error',cache:'no-store',headers:{'Content-Type':'application/json',Authorization:`Bearer ${data.session.access_token}`},body:JSON.stringify({request:Object.fromEntries(params),approve,consent_direct:approve && canConsentDirect && el('direct-consent').checked,consent_agenda_cancel:approve && canConsentAgendaCancel && el('agenda-cancel-consent').checked,...(approve && allowRefreshV2 ? {allow_refresh:true} : {})})});
       const body=await response.json();
       if(!response.ok) throw Error('Não foi possível autorizar. Confira a conta proprietária e reinicie a conexão pelo ChatGPT.');
       const target=new URL(body.redirect),expected=new URL(params.get('redirect_uri'));
@@ -72,8 +80,9 @@
     } catch(error) { el('status').textContent=error.message; }
     finally { busy=false; el('reload').disabled=false; }
   }
-  client.auth.onAuthStateChange(()=>{ session=null; allowRefreshV2=false; disable(); });
+  client.auth.onAuthStateChange(()=>{ session=null; allowRefreshV2=false; canConsentAgendaCancel=false; el('agenda-cancel-consent').checked=false; disable(); });
   el('allow').addEventListener('click',()=>decide(true)); el('deny').addEventListener('click',()=>decide(false)); el('reload').addEventListener('click',load);
   el('direct-consent').addEventListener('change',updatePermissions);
+  el('agenda-cancel-consent').addEventListener('change',updatePermissions);
   load();
 })();

@@ -7,21 +7,21 @@ const { JarvisError } = require('../jarvis/errors');
 const allowed = ['list_tasks', 'get_agenda', 'search_ideas', 'create_task', 'create_agenda_event', 'save_idea', 'register_expense'];
 const publicName = name => name === 'register_expense' ? 'prepare_expense' : name;
 const internalName = name => name === 'prepare_expense' ? 'register_expense' : name;
-const envelope = z.object({ name: z.enum([...allowed.map(publicName), 'record_expense']), arguments: z.record(z.string(), z.unknown()), request_id: z.uuid() }).strict();
+const envelope = z.object({ name: z.enum([...allowed.map(publicName), 'record_expense', 'cancel_agenda_event']), arguments: z.record(z.string(), z.unknown()), request_id: z.uuid() }).strict();
 const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
 const digest = value => createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex');
 const fail = (message, status = 400, code = 'DOT_INVALID') => { throw new JarvisError(message, status, code); };
-function definitions({ includeDirect = false } = {}) {
-  const standard = allowed.map(name => {
+function definitions({ includeDirect = false, includeAgendaCancel = false } = {}) {
+  const standard = [...allowed, ...(includeAgendaCancel ? ['cancel_agenda_event'] : [])].map(name => {
     const inputSchema = z.toJSONSchema(registry[name].schema); delete inputSchema.$schema;
     inputSchema.properties.request_id = { type: 'string', format: 'uuid', description: 'UUID único por pedido. Reutilize exatamente o mesmo UUID e argumentos após timeout; nunca gere outro para repetir o mesmo pedido.' };
     inputSchema.required = [...(inputSchema.required || []), 'request_id'];
     return { name: publicName(name), description: registry[name].description + ' Conta pessoal do proprietário. Só escreva mediante pedido explícito. Datas usam America/Sao_Paulo.', inputSchema,
-      annotations: { readOnlyHint: registry[name].risk === 'read', destructiveHint: false, idempotentHint: true, openWorldHint: false } };
+      annotations: { readOnlyHint: registry[name].risk === 'read', destructiveHint: name === 'cancel_agenda_event', idempotentHint: true, openWorldHint: false } };
   });
   return includeDirect ? [...standard, Direct.definition()] : standard;
 }
-function createService({ repository, ownerId, origin, clock = () => new Date(), directExpensesEnabled = false, allowedTools = [] }) {
+function createService({ repository, ownerId, origin, clock = () => new Date(), directExpensesEnabled = false, agendaCancelEnabled = false, allowedTools = [] }) {
   if (!ownerId || repository.userId !== ownerId) fail('Acesso restrito ao proprietário configurado.', 403, 'DOT_OWNER_ONLY');
   const context = id => ({ now: clock(), operationId: id });
   const find = (snapshot, id) => {
@@ -35,6 +35,9 @@ function createService({ repository, ownerId, origin, clock = () => new Date(), 
     const parsed = envelope.safeParse(raw);
     if (!parsed.success) fail('Ferramenta, argumentos ou request_id inválidos.');
     const input = parsed.data, name = internalName(input.name), fingerprint = digest(input);
+    if (input.name === 'cancel_agenda_event' && (!agendaCancelEnabled || !allowedTools.includes(input.name))) {
+      fail('Cancelamento da agenda não autorizado.', 403, 'DOT_AGENDA_CANCEL_FORBIDDEN');
+    }
     if (input.name === 'record_expense') {
       if (!directExpensesEnabled || !allowedTools.includes('record_expense')) fail('Lançamento direto não autorizado.',403,'DOT_DIRECT_FORBIDDEN');
       return Direct.record({repository,ownerId,input,fingerprint,clock,receipt});

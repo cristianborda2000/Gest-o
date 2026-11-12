@@ -74,7 +74,7 @@ test('real SQL exchange is one-use, enforces bindings and revokes on proven repl
  assert.equal((await db.query("select has_function_privilege('authenticated','dot_oauth_exchange(text,uuid,text,text,text,text,uuid,text)','EXECUTE') as allowed")).rows[0].allowed,false);
 });
 test('token HTTP validates PKCE form and delegates atomic exchange; refresh unsupported',async()=>{
- let call;const db={rpc:async(name,args)=>{call={name,args};return {data:true};}};
+ let call;const db={rpc:async(name,args)=>{call={name,args};return {data:true};},from(table){assert.equal(table,'dot_api_grants');return {select:()=>({eq:()=>({maybeSingle:async()=>({data:{allowed_tools:['list_tasks']}})})})};}};
  const h=createHandler({config,client:db,preRate:async()=>{}}),input={grant_type:'authorization_code',client_id:'fixture',code:'A'.repeat(43),redirect_uri:redirect,resource,code_verifier:verifier};
  const headers={'content-type':'application/x-www-form-urlencoded'};
  const ok=await invoke(h,'/api/dot-oauth/token','POST',new URLSearchParams(input).toString(),headers);assert.equal(ok.status,200);assert.equal(ok.body.expires_in,3600);assert.equal(ok.body.refresh_token,undefined);assert.equal(call.args.p_challenge,challenge);assert.equal(call.args.p_token_hash,createHash('sha256').update(ok.body.access_token).digest('hex'));
@@ -88,7 +88,7 @@ test('MCP advertises OAuth discovery without accepting an account session as plu
 
 test('consent to SQL token exchange authenticates the same scoped principal; expired codes fail',async t=>{
  const db=await setup(t);
- const client={auth:{getUser:async()=>({data:{user:{id:owner}}})},from:()=>({insert:async r=>{await db.query('insert into dot_oauth_codes(code_hash,owner_id,client_id,resource,redirect_uri,challenge)values($1,$2,$3,$4,$5,$6)',[r.code_hash,r.owner_id,r.client_id,r.resource,r.redirect_uri,r.challenge]);return {};}}),rpc:async(name,args)=>{assert.equal(name,'dot_oauth_exchange');const {rows}=await db.query('select dot_oauth_exchange($1,$2,$3,$4,$5,$6,$7,$8) as ok',[args.p_code_hash,args.p_owner,args.p_client,args.p_resource,args.p_redirect,args.p_challenge,args.p_grant,args.p_token_hash]);return {data:rows[0].ok};}};
+ const client={auth:{getUser:async()=>({data:{user:{id:owner}}})},from:table=>({insert:async r=>{assert.equal(table,'dot_oauth_codes');await db.query('insert into dot_oauth_codes(code_hash,owner_id,client_id,resource,redirect_uri,challenge)values($1,$2,$3,$4,$5,$6)',[r.code_hash,r.owner_id,r.client_id,r.resource,r.redirect_uri,r.challenge]);return {};},select:()=>({eq:(key,id)=>({maybeSingle:async()=>{assert.equal(table,'dot_api_grants');assert.equal(key,'id');return {data:(await db.query('select allowed_tools from dot_api_grants where id=$1',[id])).rows[0]};}})})}),rpc:async(name,args)=>{assert.equal(name,'dot_oauth_exchange');const {rows}=await db.query('select dot_oauth_exchange($1,$2,$3,$4,$5,$6,$7,$8) as ok',[args.p_code_hash,args.p_owner,args.p_client,args.p_resource,args.p_redirect,args.p_challenge,args.p_grant,args.p_token_hash]);return {data:rows[0].ok};}};
  const h=createHandler({config,client,rate:async()=>{},preRate:async()=>{}});
  const consent=await invoke(h,'/api/dot-oauth/consent','POST',{request,approve:true},{origin,authorization:'Bearer fixture-session','content-type':'application/json'});
  const code=new URL(consent.body.redirect).searchParams.get('code');
